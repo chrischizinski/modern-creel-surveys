@@ -2,127 +2,728 @@
 title: "Effort Estimation"
 ---
 
-## Purpose
-
-Effort is the backbone of many creel estimates.
-
-This chapter shows how counts expand into effort totals with explicit assumptions and linked count data.
-
-Effort is the bridge between what the field crew saw and what the report needs to summarize. If the effort estimate is wrong, every downstream total that uses effort as a denominator or scaling factor becomes harder to trust.
-
-## Key ideas
-
-- Count periods
-- Expansion to the reporting domain
-- Stratified effort totals
-- Variance and precision
-- Relationship between observed counts and estimated effort
-
-## What effort means
-
-In creel work, effort usually means the amount of fishing activity in a domain over a time period. Depending on the design, that can be expressed as:
-
-- angler-hours;
-- boat-hours;
-- trips;
-- or another count-based proxy.
-
-The estimator has to link the sampled count periods to the unsampled periods in the same frame.
-
-That link is what turns a snapshot into a domain-wide quantity. A count at 10:00 a.m. only becomes an estimate of seasonal effort if the sample design says how that moment represents the rest of the reporting period.
-
-## Basic logic
-
-The usual workflow is:
-
-1. observe counts at a subset of site-periods;
-2. weight those counts by the sampling design;
-3. expand them to the full reporting domain;
-4. aggregate by stratum or season if needed;
-5. quantify uncertainty using the sample design.
-
-That logic is straightforward to state but easy to get wrong if the frame or weights are inconsistent.
-
-The key question is always representation: how many unsampled periods or sites does one observed count stand for, and why?
-
-## What can go wrong
-
-The main problems are:
-
-- counts not aligned with the frame;
-- strata defined differently in the count and interview data;
-- missing count periods treated as zeroes without justification;
-- weights not matching the realized sample;
-- effort summarized outside the domain the counts actually cover.
-
-Another common problem is mixing observed counts from one daypart with totals reported for a broader day. If the count schedule did not cover the full pattern of use, the expansion step may be mathematically valid but substantively too narrow.
-
-## Effort types
-
-Different designs turn effort into different target quantities:
-
-- total angler-hours for a domain;
-- total boat-hours for a domain;
-- counts of trips or parties;
-- or stratum-specific effort totals that later roll up to a seasonal number.
-
-The estimator has to match the unit. A boat count should not be silently interpreted as an angler-hour total unless the conversion logic is explicit.
-
-## Reporting effort
-
-Effort estimates are often the first number a manager wants to see, but they should still be reported carefully:
-
-- say what unit was used;
-- say what time period was covered;
-- say whether the estimate is stratified;
-- say how uncertainty was computed.
-
-If the report needs to compare effort across years, the analyst should also say whether the frame, access coverage, or survey schedule changed. A year-over-year comparison can be misleading if the effort domain changed underneath it.
-
-## Worked example
-
 ```{r}
-counts <- data.frame(
-  stratum = c("weekday", "weekday", "weekend", "weekend"),
-  sampled_periods = c(12, 10, 6, 4),
-  total_periods = c(24, 24, 12, 12),
-  anglers = c(18, 24, 30, 26)
-)
+#| label: setup-ch12
+#| include: false
+library(tidycreel)
+library(tidyverse)
+library(lubridate)
+library(here)
 
-counts$weight <- counts$total_periods / counts$sampled_periods
-counts$effort <- counts$anglers * counts$weight
+harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
+harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
+harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
+harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 
-aggregate(effort ~ stratum, data = counts, sum)
-sum(counts$effort)
+# Shift lengths (hours) for each period at Harlan
+shift_hours <- c("1" = 8L, "2" = 6L)
+
+# Pre-compute angler_hours = total_anglers * shift_length
+# and convert period to character so it is not mistaken for a count variable
+harlan_counts_effort <- harlan_counts |>
+  mutate(
+    period        = as.character(period),
+    total_anglers = boat_anglers + bank_anglers,
+    angler_hours  = total_anglers * shift_hours[period]
+  ) |>
+  select(reservoir, date, day_type, period, section, count_time, angler_hours)
+
+# Derive total_harvest per interview for design pipeline
+harvest_by_interview <- harlan_catch |>
+  filter(catch_type == "harvested") |>
+  group_by(interview_id) |>
+  summarise(total_harvest = sum(n_fish), .groups = "drop")
+
+harlan_interviews_with_catch <- harlan_interviews |>
+  left_join(harvest_by_interview, by = "interview_id") |>
+  mutate(total_harvest = if_else(is.na(total_harvest), 0L, as.integer(total_harvest)))
+
+# Full design with effort-preprocessed counts
+suppressMessages({
+  harlan_design_effort <- creel_design(
+    calendar = harlan_schedule,
+    date     = "date",
+    strata   = "day_type"
+  ) |>
+    add_counts(harlan_counts_effort, count_time_col = "count_time") |>
+    add_interviews(
+      interviews     = harlan_interviews_with_catch,
+      catch          = "total_harvest",
+      effort         = "hours_fished",
+      trip_duration  = "hours_fished",
+      trip_status    = "trip_status",
+      n_anglers      = "n_anglers",
+      angler_type    = "angler_type",
+      angler_method  = "angler_method",
+      interview_type = "access"
+    ) |>
+    add_catch(
+      data          = harlan_catch,
+      catch_uid     = "interview_id",
+      interview_uid = "interview_id",
+      species       = "species",
+      count         = "n_fish",
+      catch_type    = "catch_type"
+    )
+})
 ```
 
-The example expands observed counts to the full stratum by multiplying each sampled count by the inverse sampling fraction. In a real analysis, the weights would come from the survey design rather than being entered by hand.
+## Why effort comes first {#sec-effort-why}
 
-The example is intentionally simple, but it shows the core structure of the effort calculation: observed count times representation weight equals expanded effort contribution.
+Every estimate produced by a creel survey is either effort itself or a product
+that uses effort as a scaling factor. Harvest per season equals estimated effort
+times estimated harvest rate per unit effort. Total catch equals estimated effort
+times estimated catch rate. Exploitation rate divides estimated harvest by an
+independently estimated population size — and the harvest estimate required for
+that calculation depends on effort. If effort is wrong, every downstream number
+built on it is also wrong, and the error propagates silently because the
+intermediate quantities look numerically reasonable at each step.
 
-## `tidycreel` support
+Effort estimation therefore sits at the foundation of the creel workflow, not as
+a reporting afterthought but as the primary quantity the count data were designed
+to estimate. The count schedule — which days to sample, how many periods per day,
+how many instantaneous counts per period — is determined by the precision
+requirements for effort, not by the requirements for catch rate or harvest.
+Getting effort right means understanding what the instantaneous count estimator
+actually targets, how stratification turns counts into a season total, and where
+variance comes from.
 
-Implemented:
-- Later chapters show how the package handles effort estimation.
+This chapter works through effort estimation for the Harlan Reservoir 2022
+survey: the formula that converts an instantaneous angler count into an
+angler-hour total, the stratified expansion that converts sampled days into a
+full-season estimate, the variance decomposition that separates between-day
+uncertainty from within-day uncertainty, and the `estimate_effort()` function
+in `tidycreel` that assembles all of these pieces in a single call.
 
-Partially supported:
-- The conceptual structure of effort estimation is introduced here; implementation comes later.
+## What effort means in a creel survey {#sec-effort-units}
 
-Manual or conceptual:
-- Checking that counts represent the sampled domain.
-- Verifying that the count periods match the frame.
-- Deciding what to do with missing count periods.
+Creel surveys measure effort as the amount of fishing activity in a defined
+domain over a defined time period. That statement looks simple but requires three
+explicit choices before any arithmetic can begin.
 
-The package can automate the arithmetic once the design is known, but the analyst still has to decide whether the count record actually supports the requested domain.
+**The unit of effort.** Angler-hours — one angler fishing for one hour — is the
+most common unit in North American inland fisheries [@pollock1994]. It is natural
+for the instantaneous count estimator because an angler count at a point in time,
+multiplied by the length of the fishing period, gives angler-hours directly. Some
+designs count boats rather than individual anglers and report boat-hours, then
+convert to angler-hours using a mean party size from the interview record. Harlan
+records both `boat_anglers` (individual anglers on boats) and `bank_anglers`
+(shore anglers), so the natural unit is total angler-hours from all modes combined.
 
-## Example focus
+**The domain.** The domain specifies what population the estimate covers — which
+water, which species, which access modes, which time of day. The Harlan schedule
+covers a single reservoir section (`section = "0"`) surveyed over two daily
+shifts (morning period 1 and afternoon period 2) from April through October 2022.
+Effort estimated from Harlan counts represents fishing pressure within that
+section-shift-season domain; extrapolation beyond it requires assumptions that the
+data cannot support.
 
-Estimating annual angler-hours from site-period counts in a stratified reservoir survey.
+**The reporting period.** Managers typically want a seasonal or annual total, not
+just effort on sampled days. The stratified estimator expands from sampled days to
+the full calendar. That expansion rests on an assumption: sampled days within a
+stratum are representative of all days in that stratum. The sampling design is
+responsible for making this assumption defensible; stratification by day type
+(weekday vs. weekend) reduces the risk by keeping groups with different effort
+levels in separate strata.
 
-That example is useful because it combines the most common effort ingredients: stratified sampling, count expansion, and a reportable annual total.
+Fishing pressure on a given day-period can also be reported as angler-trips
+rather than angler-hours. An angler-trip counts each party as one unit regardless
+of how long they fish; it answers "how many trips happened" rather than "how much
+fishing time was expended." Angler-hours and angler-trips measure different things
+and can diverge substantially when trip lengths vary — a fishery dominated by long
+overnight trips has fewer trips but more hours than one dominated by quick
+half-day outings. Which unit a manager needs depends on the question being asked.
 
-## Takeaway
+## The instantaneous count estimator {#sec-effort-formula}
 
-Effort estimation is only as good as the link between counts and the frame. If that link is weak, the total may look polished but still be fragile.
+An instantaneous count records the number of anglers active in the survey area at
+a single moment in time. Multiplying by the length of the fishing period converts
+a count to an angler-hour estimate for that period [@pope_chapter]:
 
-The result can be numerically tidy and still rest on a bad coverage story.
+$$\hat{E}_{d,p} = \bar{I}_{d,p} \times T_p$$
+
+where $\hat{E}_{d,p}$ is the estimated angler-hours on day $d$ during period $p$,
+$\bar{I}_{d,p}$ is the mean of the $K_{d,p}$ instantaneous counts taken within
+that period, and $T_p$ is the total length of the period in hours. The mean
+rather than the sum of counts is used because each count estimates the
+instantaneous stock of anglers, not a cumulative total; averaging multiple counts
+within a period reduces the effect of moment-to-moment fluctuation.
+
+At Harlan, morning shifts (period 1) run 8 hours and afternoon shifts (period 2)
+run 6 hours, with two instantaneous counts per shift. For the morning of
+September 2, 2022, the two counts recorded 38 and 45 boat anglers (no bank
+anglers active):
+
+```{r}
+#| label: single-period-example
+#| echo: true
+
+sep2_am <- harlan_counts |>
+  filter(date == as.Date("2022-09-02"), period == 1) |>
+  mutate(total_anglers = boat_anglers + bank_anglers)
+
+sep2_am |>
+  select(count_time, bank_anglers, boat_anglers, total_anglers)
+
+mean_count <- mean(sep2_am$total_anglers)
+angler_hours_sep2_am <- mean_count * shift_hours["1"]
+
+cat(
+  "Mean count:", mean_count, "anglers\n",
+  "Shift length:", shift_hours["1"], "hours\n",
+  "Estimated effort:", angler_hours_sep2_am, "angler-hours\n"
+)
+```
+
+The 332 angler-hours estimated for that single morning shift illustrates the
+scale of the effort signal. A sampled period with 41.5 mean anglers and an 8-hour
+shift contributes more than three person-days of fishing activity to the seasonal
+total.
+
+### Why two counts, not one?
+
+With only one count per period, the daily effort estimate has no within-period
+variance and the analyst cannot assess how much moment-to-moment fluctuation
+exists in angler activity [@mccormick2013]. Two counts allow estimation of
+within-day variance, which is a component of total effort variance. The
+recommendation from @mccormick2013 is to take at least two counts per period,
+spread across the shift, so that the within-day variance can be estimated and
+included in the uncertainty budget.
+
+At Harlan, the two counts per period are separated by approximately two hours,
+providing coverage of both the early-shift and mid-shift activity levels. The
+`add_counts()` call in `tidycreel` records both counts, averages them to a
+single period-day mean, and retains the within-day variance for inclusion in
+`estimate_effort()` output.
+
+## Stratified expansion to the season total {#sec-effort-strat}
+
+Effort on sampled days must be expanded to the full survey period to produce the
+seasonal total managers need. The stratified expansion works by scaling the
+stratum sample mean up to the stratum population size [@rasmussen1998]:
+
+$$\hat{E}_h = N_h \cdot \frac{1}{n_h} \sum_{d \in s_h} \hat{E}_{d,p}$$
+
+where $N_h$ is the number of days available in stratum $h$ (from the sampling
+calendar), $n_h$ is the number of days actually sampled, and the sum runs over
+sampled days $s_h$. The ratio $N_h / n_h$ is the expansion weight: it says "each
+sampled day in this stratum represents $N_h / n_h$ days in the population."
+
+The overall season estimate sums across strata:
+
+$$\hat{E} = \sum_h \hat{E}_h$$
+
+For Harlan, the sampling calendar covers 211 days (April 2 to October 29, 2022),
+divided into weekday ($N_{\text{weekday}} = 150$) and weekend
+($N_{\text{weekend}} = 61$) strata. Of these, 82 weekday period-days and
+34 weekend period-days were sampled. Because Harlan runs two periods per day, the
+count data has 118 sampled period-day records (83 weekday + 35 weekend, combining
+both periods).
+
+```{r}
+#| label: stratum-sizes
+#| echo: true
+
+harlan_schedule |>
+  group_by(day_type) |>
+  summarise(
+    N_h      = n(),
+    n_h      = sum(sampled),
+    f_h      = round(n_h / N_h, 3),
+    .groups  = "drop"
+  )
+```
+
+Weekdays are sampled at a slightly higher rate than weekends (55% vs. 56%), but
+the stratum sizes are very different: 150 weekday days vs. 61 weekend days. The
+weekend stratum is smaller in both total days and sampled days, which matters for
+precision — smaller strata with fewer sampled days produce wider confidence
+intervals even when their sampling fraction is similar.
+
+### The daily estimator versus the stratum estimator
+
+Two estimators for seasonal effort appear in the creel literature, and they
+behave differently in practice. @rasmussen1998 compared them directly using
+simulation on the Escanaba Lake dataset.
+
+The **daily estimator** [@malvestuto1978] first computes a mean daily effort for
+the full sampling period and then multiplies by the total number of days:
+
+$$\hat{E}_{\text{daily}} = N \cdot \frac{1}{n} \sum_{d=1}^{n} \hat{E}_d$$
+
+This estimator ignores stratum membership and treats all sampled days as
+interchangeable. When effort differs systematically between weekdays and weekends
+— as it almost always does — the daily estimator will be biased if sampled days
+are not proportionally distributed across day types. Random variation in day-type
+representation across the sample can produce large positive or negative swings in
+the estimate.
+
+The **stratum estimator** [@rasmussen1998] estimates effort separately within
+each stratum and then sums. It is unbiased regardless of how day-type composition
+varies across the sample, because weekday and weekend days contribute to their
+respective stratum means independently. Rasmussen et al. demonstrated that the
+stratum estimator produced bias ratios near zero across 1,000 simulations, while
+the daily estimator showed substantially larger deviations from census values in
+years with low overall effort. All effort estimates in this chapter use the
+stratum estimator.
+
+## Variance of the effort estimate {#sec-effort-variance}
+
+The variance of a stratified effort estimate has two distinct sources, and
+understanding their magnitudes guides decisions about survey design
+[@mccormick2013].
+
+**Between-day variance** is the variance in daily effort across sampled days
+within a stratum. It reflects genuine day-to-day variation in how many anglers
+fish — driven by weather, season, weekday patterns, and stochastic factors. The
+between-day variance estimator for stratum $h$ is the standard stratified
+sampling result with a finite population correction:
+
+$$\hat{V}_{\text{between}}(\hat{E}_h) = N_h^2 \cdot \frac{s_{E,h}^2}{n_h}
+\left(1 - \frac{n_h}{N_h}\right)$$
+
+where $s_{E,h}^2$ is the sample variance of daily effort estimates across sampled
+days in stratum $h$. This term dominates when days differ widely in angler
+activity — common for weekend strata where a rainy October weekend and a sunny
+June weekend can have an order-of-magnitude difference in effort.
+
+**Within-day variance** is the variance across multiple instantaneous counts
+taken within a single period. It reflects moment-to-moment fluctuation in angler
+presence during the shift: anglers departing for lunch, boats moving between
+sites, brief periods of low activity following a weather event. The within-day
+variance contribution is:
+
+$$\hat{V}_{\text{within}} = \sum_h \sum_{d \in s_h}
+\left(\frac{T_p^2}{K_d}\right) s_{d}^2$$
+
+where $K_d$ is the number of counts on day $d$ and $s_d^2$ is their sample
+variance. With only two counts per period-day, this is just $T_p^2 \cdot
+(c_1 - c_2)^2 / 2$.
+
+The total variance combines both:
+
+$$\hat{V}(\hat{E}) = \hat{V}_{\text{between}} + \hat{V}_{\text{within}}$$
+
+`estimate_effort()` reports both components as `se_between` and `se_within`,
+making it straightforward to determine which source of uncertainty is more
+important. When `se_between` dominates, increasing the number of sampled days
+reduces uncertainty more efficiently than adding more count rounds per day. When
+`se_within` dominates — rare in practice but possible in highly variable systems
+— adding within-day count rounds is the more efficient path [@mccormick2013].
+
+## Preparing count data for effort estimation {#sec-effort-prep}
+
+The `estimate_effort()` function operates on whatever numeric column comes first
+in the design's count data that is not a date, strata, or sampling unit
+identifier. For Harlan, the raw count table records `bank_anglers`,
+`angler_boats`, and `boat_anglers` separately. Passing these columns directly
+would cause `estimate_effort()` to estimate effort in units of bank anglers alone
+— the first numeric column — rather than in total angler-hours.
+
+The correct workflow is to pre-compute `angler_hours` before building the design:
+
+```{r}
+#| label: prep-counts
+#| echo: true
+
+# Shift lengths for each period
+shift_hours <- c("1" = 8L, "2" = 6L)
+
+harlan_counts_effort <- harlan_counts |>
+  mutate(
+    period        = as.character(period),        # prevent period from being treated as a count
+    total_anglers = boat_anglers + bank_anglers,
+    angler_hours  = total_anglers * shift_hours[period]
+  ) |>
+  select(reservoir, date, day_type, period, section, count_time, angler_hours)
+
+harlan_counts_effort |>
+  filter(date == as.Date("2022-09-02")) |>
+  select(date, day_type, period, count_time, angler_hours)
+```
+
+Two things happen here. First, `period` is converted from numeric to character
+so that `estimate_effort()` does not interpret it as a count variable (period
+values of 1 and 2 are identifiers, not observations). Second, `angler_hours`
+is computed as `total_anglers × shift_hours[period]`, encoding the shift-length
+multiplication directly in the data. `add_counts()` then averages the two
+within-period records to a single period-day mean — matching the formula
+$\bar{I}_{d,p} \times T_p$ at the data preparation stage rather than in the
+estimator.
+
+The full design pipeline with effort-preprocessed counts:
+
+```{r}
+#| label: design-effort
+#| message: false
+
+harlan_design_effort <- creel_design(
+  calendar = harlan_schedule,
+  date     = "date",
+  strata   = "day_type"
+) |>
+  add_counts(harlan_counts_effort, count_time_col = "count_time") |>
+  add_interviews(
+    interviews     = harlan_interviews_with_catch,
+    catch          = "total_harvest",
+    effort         = "hours_fished",
+    trip_duration  = "hours_fished",
+    trip_status    = "trip_status",
+    n_anglers      = "n_anglers",
+    angler_type    = "angler_type",
+    angler_method  = "angler_method",
+    interview_type = "access"
+  ) |>
+  add_catch(
+    data          = harlan_catch,
+    catch_uid     = "interview_id",
+    interview_uid = "interview_id",
+    species       = "species",
+    count         = "n_fish",
+    catch_type    = "catch_type"
+  )
+```
+
+The design holds the same survey structure built in Chapter 10 — calendar,
+strata, interviews, catch — but the `counts` slot now carries `angler_hours`
+as its single numeric count variable. This ensures all downstream effort
+estimates are in angler-hours rather than raw angler counts.
+
+## Effort on sampled days {#sec-effort-sampled}
+
+`estimate_effort()` returns effort for the sampled days only when
+`target = "sampled_days"` (the default). This is the design-weighted sum of
+angler-hours actually observed across all sampled period-day combinations,
+without extrapolating to unsampled days.
+
+```{r}
+#| label: effort-sampled
+#| echo: true
+
+eff_sampled <- estimate_effort(harlan_design_effort, target = "sampled_days")
+eff_sampled
+```
+
+The 118 sampled period-days produced `r formatC(round(eff_sampled$estimates$estimate), big.mark=",")` observed angler-hours, with a standard error of
+`r formatC(round(eff_sampled$estimates$se), big.mark=",")` angler-hours (CV =
+`r round(eff_sampled$estimates$se / eff_sampled$estimates$estimate * 100, 1)`%).
+This is not a seasonal estimate — it covers only the periods that were actually
+surveyed — but it benchmarks the observed effort against which the full-season
+expansion can be compared.
+
+The SE decomposes into a between-day component of
+`r formatC(round(eff_sampled$estimates$se_between), big.mark=",")` angler-hours
+and a within-day component of
+`r formatC(round(eff_sampled$estimates$se_within), big.mark=",")` angler-hours.
+Between-day variance accounts for the larger share: day-to-day differences in
+how many anglers visit Harlan are a more important source of uncertainty than
+moment-to-moment fluctuation within a shift. This is the typical pattern for
+reservoir fisheries where weather and seasonality drive large swings in daily
+attendance.
+
+## Full-season effort estimate {#sec-effort-season}
+
+The primary management deliverable is the full-season angler-hour estimate —
+expanded from sampled days to the complete sampling frame using the stratum
+weights $N_h / n_h$. The `target = "stratum_total"` argument applies this
+expansion:
+
+```{r}
+#| label: effort-stratum-total
+#| echo: true
+
+eff_season <- estimate_effort(harlan_design_effort, target = "stratum_total")
+eff_season
+```
+
+Expanding to all 211 calendar days yields an estimated
+`r formatC(round(eff_season$estimates$estimate), big.mark=",")` angler-hours
+for the Harlan 2022 season (April–October), with a 95% confidence interval of
+approximately `r formatC(round(eff_season$estimates$ci_lower), big.mark=",")`
+to `r formatC(round(eff_season$estimates$ci_upper), big.mark=",")` angler-hours.
+The CV of `r round(eff_season$estimates$se / eff_season$estimates$estimate * 100, 1)`%
+satisfies the commonly cited 20% target for management-grade estimates
+[@mccormick2013], though it falls in the range that some agencies consider
+acceptable rather than comfortable.
+
+The ratio of stratum_total to sampled_days reflects the proportion of the season
+that was surveyed. Harlan sampled
+`r round(100 * 116 / 211, 0)`% of available days
+(`r 116` of 211), so the expansion factor is approximately
+`r round(211 / 116, 2)`. The actual expansion differs slightly between strata
+because weekday and weekend days were sampled at slightly different rates.
+
+## Effort by stratum {#sec-effort-by-stratum}
+
+The four-cell breakdown by day type and period reveals how effort is distributed
+across the sampling frame:
+
+```{r}
+#| label: effort-by-stratum
+#| echo: true
+
+eff_strata <- estimate_effort(
+  harlan_design_effort,
+  by     = c(day_type, period),
+  target = "stratum_total"
+)
+eff_strata
+```
+
+Three patterns are immediately visible. First, weekday effort substantially
+exceeds weekend effort in every period — weekday morning effort alone
+(`r formatC(round(eff_strata$estimates$estimate[1]), big.mark=",")` angler-hours)
+is larger than total weekend effort across both periods. This is the reverse of
+the pattern typical for urban-access reservoirs and reflects Harlan's location
+in rural south-central Nebraska, where mid-week fishing by retirees, nearby
+residents, and agricultural workers is common.
+
+Second, morning effort (period 1) exceeds afternoon effort (period 2) for both
+day types. Morning periods are 8 hours long versus 6 hours for afternoons, but
+the count-per-unit-time is also higher in the morning, so the difference reflects
+genuine differences in angler behavior rather than just shift-length arithmetic.
+
+Third, the weekend strata carry wider confidence intervals relative to their
+estimates (higher CV). The weekend stratum has fewer sampled days and more
+variable day-to-day attendance — sunny summer weekends draw large crowds while
+cold autumn weekends can be nearly empty — so the between-day variance is larger
+relative to the mean.
+
+The marginal day-type totals collapse across periods:
+
+```{r}
+#| label: effort-by-daytype
+#| echo: true
+
+eff_daytype <- estimate_effort(
+  harlan_design_effort,
+  by     = day_type,
+  target = "stratum_total"
+)
+eff_daytype
+```
+
+Weekdays account for `r round(100 * eff_daytype$estimates$estimate[1] / sum(eff_daytype$estimates$estimate), 0)`%
+of total estimated angler-hours
+(`r formatC(round(eff_daytype$estimates$estimate[1]), big.mark=",")` AH) against
+`r round(100 * eff_daytype$estimates$estimate[2] / sum(eff_daytype$estimates$estimate), 0)`%
+for weekends
+(`r formatC(round(eff_daytype$estimates$estimate[2]), big.mark=",")` AH). This
+split has direct management implications: a regulation targeting weekend fishing
+pressure would affect a minority of total season effort, while a midweek closure
+would affect the majority.
+
+## Seasonal pattern in effort {#sec-effort-seasonal}
+
+The survey calendar spans April through October. Within that window, effort is
+not evenly distributed — spring and early summer typically see higher fishing
+pressure than late fall. The mean angler-hours per sampled period-day by month
+describes this seasonal arc directly from the observed counts:
+
+```{r}
+#| label: fig-seasonal-effort
+#| echo: true
+#| fig-cap: "Mean angler-hours per sampled period-day by month and day type, Harlan Reservoir 2022. Each bar represents the average of all sampled period-days within a month-day-type combination; error bars show one standard error. The survey covers April through October. Weekday effort (dark) consistently exceeds weekend effort (light) across the season; both peak in May and decline through autumn."
+#| fig-alt: "Grouped bar chart with months on the x-axis and mean angler-hours on the y-axis, bars colored by day type (weekday vs. weekend), error bars showing one SE."
+
+monthly_effort <- harlan_design_effort$counts |>
+  mutate(month = month(date, label = TRUE, abbr = TRUE)) |>
+  group_by(month, day_type) |>
+  summarise(
+    n       = n(),
+    mean_ah = mean(angler_hours, na.rm = TRUE),
+    se_ah   = sd(angler_hours, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+ggplot(monthly_effort, aes(x = month, y = mean_ah, fill = day_type)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = mean_ah - se_ah, ymax = mean_ah + se_ah),
+    position = position_dodge(width = 0.8),
+    width = 0.25
+  ) +
+  scale_fill_manual(
+    values = creel_palette(2),
+    labels = c("weekday" = "Weekday", "weekend" = "Weekend")
+  ) +
+  labs(
+    x    = NULL,
+    y    = "Mean angler-hours per sampled period-day",
+    fill = "Day type"
+  ) +
+  theme_creel() +
+  theme(legend.position = "top")
+```
+
+May records the highest mean effort on sampled period-days for both day types,
+with weekday mornings averaging over 300 angler-hours. This likely reflects the
+opening of the main spring fishing season at Harlan — walleye and white bass are
+highly targeted in May — combined with the long spring days that extend the
+productive morning period. Effort declines through summer and into autumn, with
+October weekday averages roughly one-fifth of the May peak.
+
+The April values are near zero because most April sampled days fell in early
+April before anglers had established regular patterns. This emphasizes a practical
+point: sampled days near the margins of the season carry a disproportionate share
+of the between-day variance (a zero-effort day and a 300-angler-hour day in the
+same stratum drive a large $s_{E,h}^2$). If the calendar boundary is set too
+early or too late relative to when fishing actually occurs, the expansion weights
+amplify this edge-effect noise into the seasonal total.
+
+## Stratum-level effort estimates with confidence intervals {#sec-effort-ci}
+
+The point estimates and uncertainty intervals for the full-season breakdown
+visualize which strata carry the most effort and where estimation uncertainty is
+largest:
+
+```{r}
+#| label: fig-stratum-effort
+#| echo: true
+#| fig-cap: "Estimated full-season angler-hours by day type and period, Harlan Reservoir 2022. Bars show the stratum_total estimate (expanded to all calendar days in each stratum). Error bars show 95% confidence intervals from the Taylor linearization variance estimator. Numbers above bars show the point estimate in angler-hours. Weekday mornings (period 1) dominate; weekend effort in either period is a small fraction of weekday effort."
+#| fig-alt: "Four grouped bars — weekday period 1, weekday period 2, weekend period 1, weekend period 2 — with error bars showing 95% confidence intervals and numeric labels."
+
+eff_4cell <- eff_strata$estimates |>
+  mutate(
+    label = paste0(day_type, "\nPeriod ", period),
+    label = factor(label, levels = c(
+      "weekday\nPeriod 1", "weekday\nPeriod 2",
+      "weekend\nPeriod 1", "weekend\nPeriod 2"
+    ))
+  )
+
+ggplot(eff_4cell, aes(x = label, y = estimate, fill = day_type)) +
+  geom_col(width = 0.6) +
+  geom_errorbar(
+    aes(ymin = ci_lower, ymax = ci_upper),
+    width = 0.2
+  ) +
+  geom_text(
+    aes(label = formatC(round(estimate), big.mark = ",")),
+    vjust = -0.8, size = 3.2
+  ) +
+  scale_fill_manual(
+    values = creel_palette(2),
+    labels = c("weekday" = "Weekday", "weekend" = "Weekend"),
+    guide  = "none"
+  ) +
+  labs(
+    x = NULL,
+    y = "Estimated angler-hours (full season)"
+  ) +
+  theme_creel()
+```
+
+The confidence intervals reveal why survey design decisions matter. The weekday
+period 1 CI spans roughly 14,000 angler-hours — a range large enough to affect
+management conclusions if the estimate were used to compare against a target
+fishing pressure threshold. The weekend period 2 CI is narrower in absolute terms
+but represents a similar proportional uncertainty because weekend effort is
+inherently lower. Reducing these intervals requires increasing the number of
+sampled days, not adding more count rounds per already-sampled day — because
+between-day variance dominates across all strata.
+
+## Precision and reporting {#sec-effort-precision}
+
+The coefficient of variation for the full-season estimate is
+`r round(eff_season$estimates$se / eff_season$estimates$estimate * 100, 1)`%.
+Whether this is adequate depends on how the estimate will be used. For detecting
+year-over-year trends of 20–30%, a CV of 10–15% is generally sufficient because
+the trend signal is larger than the noise. For detecting changes of 10% or less —
+common when managing regulated fisheries close to exploitation targets — a CV
+below 10% is preferable [@mccormick2013].
+
+The standard error decomposes into between-day and within-day components:
+
+```{r}
+#| label: se-decomposition
+#| echo: true
+
+eff_season$estimates |>
+  select(estimate, se, se_between, se_within) |>
+  mutate(
+    pct_between = round(100 * se_between^2 / se^2, 1),
+    pct_within  = round(100 * se_within^2  / se^2, 1)
+  )
+```
+
+Between-day variance accounts for
+`r round(100 * eff_season$estimates$se_between^2 / eff_season$estimates$se^2, 0)`%
+of total variance. Adding a third count round to already-sampled days would
+reduce the within-day component but leave the dominant between-day component
+unchanged. The most efficient way to reduce overall uncertainty is to sample more
+days — either by extending the survey season or by increasing the sampling
+fraction within existing strata.
+
+Survey programs that want explicit precision targets before the season can use the
+variance decomposition from historical data to plan sample sizes. If prior surveys
+show $s_{E,h}^2$ for each stratum and the target CV is 15%, the required $n_h$
+follows directly from the standard stratified sampling formula [@mccormick2013].
+
+## `tidycreel` support {#sec-effort-tidycreel}
+
+**Implemented for instantaneous count designs:**
+
+- `estimate_effort()` — stratified effort estimator with Taylor variance,
+  between/within decomposition, multiple targets (`sampled_days`, `stratum_total`,
+  `period_total`), and grouping via `by`
+- `estimate_effort_grouped()` — called internally by `estimate_effort()` when `by`
+  is specified
+- `add_counts()` with `count_time_col` — averages multiple within-period counts
+  to a single period-day mean and computes within-day variance contribution
+
+**Constraints and workflow notes:**
+
+- The count variable used by `estimate_effort()` is always the first numeric
+  column in the design's count data that is not a date, strata, or PSU column.
+  Pre-compute the target unit (here, `angler_hours`) and drop component columns
+  before calling `add_counts()` to ensure the correct variable is selected.
+- Convert `period` (and any similar integer identifiers) to character before
+  calling `add_counts()` to prevent them from being selected as count variables.
+- The `stratum_total` target requires that the design have a strata column and
+  that the calendar cover the full survey period. Days not in the calendar cannot
+  be expanded to.
+
+**Not in scope for this chapter:**
+
+- Bus-route effort estimation — handled by `estimate_effort_br()`, covered in
+  Chapter 4 context but not demonstrated here
+- Aerial and camera-trap designs — handled by `estimate_effort_aerial()` and
+  `estimate_effort_camera()`, introduced in Chapter 6
+- Sample size planning — requires external calculation using variance estimates
+  from this chapter as inputs; `tidycreel` does not currently provide an
+  `optimal_n()` function (see `TIDYCREEL-WISHLIST.md`)
+
+## Takeaway {#sec-effort-takeaway}
+
+Effort estimation is not a by-product of the creel interview process — it is
+the primary function of the count schedule and the foundation for every harvest
+and catch total the survey produces. Getting it right means three things.
+
+First, the instantaneous count estimator assumes that each count represents the
+instantaneous angler stock during the period. That assumption holds when counts
+are taken at random or representative times within the period. Counts clustered
+at the same time of day — always at 9:00 a.m., always at midday — can produce
+biased effort estimates if angler activity peaks and valleys are systematic.
+
+Second, stratification by day type is not optional decoration. Without it, the
+random day-to-day composition of the sample can produce large swings in the
+estimated total. With it, weekday and weekend effort are estimated from samples of
+their respective populations, and the expansion to the full season is unbiased
+regardless of how any particular week was sampled.
+
+Third, between-day variance almost always dominates. The lesson for survey design
+is that sampling more days per season is more effective than adding count rounds
+to days already sampled. A second or third count round per shift reduces within-day
+noise, but if days vary substantially in effort — as they do at any reservoir
+influenced by weather and season — only more days can reduce the dominant
+between-day component.
+
+The Harlan 2022 season estimate of approximately
+`r formatC(round(eff_season$estimates$estimate), big.mark=",")` angler-hours
+(95% CI `r formatC(round(eff_season$estimates$ci_lower), big.mark=",")`–`r formatC(round(eff_season$estimates$ci_upper), big.mark=",")`) is the
+number that Chapter 13 will use to scale harvest and catch estimates to seasonal
+totals. The confidence intervals on those downstream estimates will be
+correspondingly wide — because effort uncertainty multiplies through the product
+$\hat{E} \times \hat{R}$ — which makes the case for investing in effort precision
+before worrying about sample size for the interview component.
