@@ -2,6 +2,8 @@
 .ai/
 **/.planning/
 **/.ai/
+CLAUDE.md
+memory/
 graphify-out/
 _book/
 _freeze/
