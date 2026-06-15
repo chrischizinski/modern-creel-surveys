@@ -2,107 +2,555 @@
 title: "Building a Creel Design Object"
 ---
 
-## Purpose
+```{r}
+#| label: setup-ch10
+#| include: false
+library(tidycreel)
+library(tidyverse)
 
-Once the frame and strata are known, the analysis needs a design object that holds the sampling logic in one place.
+harlan_schedule   <- readRDS(here::here("data/harlan_schedule.rds"))
+harlan_counts     <- readRDS(here::here("data/harlan_counts.rds"))
+harlan_interviews <- readRDS(here::here("data/harlan_interviews.rds"))
+harlan_catch      <- readRDS(here::here("data/harlan_catch.rds"))
+```
 
-This chapter shows how a design object can encode frame, strata, and inclusion logic. In `tidycreel`, `creel.connect()` brings the linked tables together before the design object is used for estimation.
+## What the design object is for {#sec-design-purpose}
 
-The design object is the handoff point between the data model and the estimator. It is where the analyst says, in a single object, how the sample relates to the frame and what assumptions are already in force.
+The linked tables built in Chapter 9 contain all the raw survey data, but they do
+not encode the sampling design. The schedule table records which days were sampled,
+but it does not specify the sampling units, the strata, or the inclusion
+probabilities that estimation requires. The counts table records observed anglers,
+but it does not say whether those counts came from a stratified sample or a simple
+random sample of days.
 
-## Key ideas
+Effort and catch estimators require this information [@pollock1994]. A stratified
+estimator weights each stratum by its population size. A design-effect calculation
+depends on knowing the primary sampling units. Without a single object that holds
+all of this, the design logic has to be re-stated — and potentially re-stated
+incorrectly — at every estimation step.
 
-- Design metadata
-- Inclusion probabilities
-- Weighting and expansion logic
-- Validation checks
-- Relationship to the underlying frame tables
+`tidycreel` addresses this with the `creel_design` object. The design object
+holds the calendar, the strata, the counts, the interviews, and the species-level
+catch in a single structure. Estimation functions in Chapters 12 through 15 take a
+`creel_design` as their first argument. The design object is the handoff point
+between data preparation and estimation.
 
-## What a design object should store
+This chapter builds a `creel_design` for the Harlan 2022 survey, one step at a
+time, and shows what each step computes and what checks the package runs along the
+way.
 
-A design object should know:
+## Step 1: the base design {#sec-design-base}
 
-- what frame it refers to;
-- what strata exist;
-- how units were selected;
-- what inclusion probabilities apply;
-- how weights or expansion factors are derived;
-- what validation has already been performed.
+`creel_design()` initializes the object from the sampling schedule. It needs three
+things: the schedule table, the name of the date column, and the name of the
+strata column.
 
-The object should make it hard to forget the design when moving from one step of analysis to the next.
+At this step, `creel_design()` constructs a placeholder `survey.design2` object
+from the `survey` package using equal-probability assumptions. The message
+`No weights or probabilities supplied, assuming equal probability` is expected here:
+the schedule alone does not yet carry count observations, so the package has no
+realized sampling fractions to use. The equal-probability assumption is replaced
+when counts are added in Step 2.
 
-That means the object should carry enough context to prevent accidental reuse in the wrong domain. A design built for one waterbody or season should not silently behave like a design for another.
+```{r}
+#| label: design-base
+#| message: false
+harlan_design <- creel_design(
+  calendar = harlan_schedule,
+  date     = "date",
+  strata   = "day_type"
+)
 
-## Why this matters
+harlan_design
+```
 
-Design code often lives in multiple places:
+The printed output shows the core design metadata: survey type, date column,
+strata variable, calendar span, and the number of stratum levels. Nothing about
+counts, interviews, or catch appears yet — those are added in subsequent steps.
 
-- one script builds the frame;
-- another joins counts and interviews;
-- another calculates totals;
-- another produces the report.
+The schedule itself tells the base design how many days were in each stratum and
+how many were sampled:
 
-If the design logic is scattered, future edits become risky. A design object gives the workflow a single anchor.
+```{r}
+#| label: design-strata-sizes
+harlan_schedule |>
+  group_by(day_type) |>
+  summarise(
+    N_h      = n(),
+    n_h      = sum(sampled),
+    f_h      = round(mean(sampled), 3),
+    .groups  = "drop"
+  )
+```
 
-It also gives the analyst a place to attach checks. If a later data correction changes a key field or a stratum label, the design object is the place where that change should surface.
+The Harlan design sampled approximately `r round(100 * mean(harlan_schedule$sampled))`% of
+available days in each stratum — roughly equal sampling fractions in weekday and
+weekend strata. Equal-fraction stratified sampling of this kind is common when
+management interest extends to both stratum types equally.
 
-## `creel.connect()`
+## Step 2: adding count data {#sec-design-counts}
 
-`creel.connect()` is the connection point between the relational data model and the analysis object. It should do the smallest useful amount of work:
+`add_counts()` attaches the count observations and tells the design object which
+column records the exact time of each count. The count time matters because
+instantaneous count estimators weight each observation by its position in the
+counting day: a count taken at 10:00 represents a longer portion of the day than
+one taken at 14:30 if counts are not uniformly spaced.
 
-- confirm that the frame and analysis tables can be matched;
-- carry forward the validated keys and strata;
-- preserve the reporting domain that the later estimators will use;
-- keep the raw tables separate from the derived design object.
+```{r}
+#| label: design-counts
+harlan_design <- add_counts(
+  design         = harlan_design,
+  counts         = harlan_counts,
+  count_time_col = "count_time"
+)
 
-That makes the connection step explicit instead of hiding it inside a later estimator call.
+harlan_design
+```
 
-The usefulness of that boundary is practical. It keeps validation close to the data integration step and keeps the estimator from having to guess whether the frame was assembled correctly.
+The design now records `r nrow(harlan_counts)` count observations, with `date` as
+the primary sampling unit and `count_time` as the within-day variable. It also
+shows that a `survey.design2` object has been constructed — this is the moment at
+which the design moves from equal-probability assumptions to the actual realized
+sampling fractions implied by the schedule and counts combined.
 
-## Validation checks
+`add_counts()` returns a new design object rather than modifying the existing one.
+This immutability means that `harlan_design` at Step 2 is a complete, independent
+object. If the analysis later needs to compare different count configurations, the
+Step 1 base design is still available and can be passed to a different `add_counts()`
+call without conflict.
 
-Before analysis starts, check that:
+## Step 3: adding interview data {#sec-design-interviews}
 
-- the frame rows are unique;
-- strata are defined consistently;
-- every sampled unit can be matched to a frame record;
-- inclusion probabilities are valid;
-- weights are nonzero where they should be.
+`add_interviews()` attaches the party intercept records. The function expects a
+column in the interviews table that records total catch per interview — not the
+species-level table, but a single number per party. This column feeds the catch
+estimator's numerator; the species-level breakdown is added separately in Step 4.
 
-If these checks fail, the estimator may still produce output, but the output should not be trusted.
+The Harlan interviews table does not include a precomputed catch total, so it is
+derived from the catch table first. The join must start from `harlan_interviews`
+(the complete set of 600 parties) and bring in harvest totals where they exist —
+preserving the `r nrow(anti_join(harlan_interviews, harlan_catch, by = "interview_id"))`
+parties that had no harvested catch as zero-row contributions:
 
-In a live project, these checks are often the difference between a manageable correction and a report that later has to be withdrawn or rewritten.
+```{r}
+#| label: harvest-totals
+harvest_by_interview <- harlan_catch |>
+  filter(catch_type == "harvested") |>
+  group_by(interview_id) |>
+  summarise(total_harvest = sum(n_fish), .groups = "drop")
 
-## Example lifecycle
+harlan_interviews_with_catch <- harlan_interviews |>
+  left_join(harvest_by_interview, by = "interview_id") |>
+  mutate(total_harvest = if_else(is.na(total_harvest), 0L, as.integer(total_harvest)))
 
-A design object may start as a simple representation of one season's public-access survey. Later it may be reused to estimate a subset of the same fishery, such as weekend effort or one target species. If the object still reflects the original frame and strata, the analyst can compare those derived estimates without rebuilding the entire workflow.
+# Verify: row count must match the original interviews table
+nrow(harlan_interviews_with_catch) == nrow(harlan_interviews)
 
-That only works if the object is honest about what it contains. If the survey domain changes, the design object should be rebuilt rather than patched over.
+harlan_interviews_with_catch |>
+  select(interview_id, date, hours_fished, trip_status, total_harvest) |>
+  head(5)
+```
 
-## `tidycreel` support
+Starting from `harlan_interviews` with `left_join` is the safest pattern: all
+original rows survive, and `NA` in `total_harvest` after the join can only mean
+the party had no harvested catch — never that the interview itself is missing.
 
-Implemented:
-- `creel.connect()` is the bridge from linked tables to the connected analysis object.
-- The package workflow for building and validating design objects is described later in the book.
+```{r}
+#| label: design-interviews
+harlan_design <- add_interviews(
+  design         = harlan_design,
+  interviews     = harlan_interviews_with_catch,
+  catch          = "total_harvest",
+  effort         = "hours_fished",
+  trip_status    = "trip_status",
+  n_anglers      = "n_anglers",
+  angler_type    = "angler_type",
+  angler_method  = "angler_method",
+  interview_type = "access"
+)
 
-Partially supported:
-- The design-object concept bridges the data model and the estimators.
+harlan_design
+```
 
-Manual or conceptual:
-- Validating the design object against the frame.
-- Checking that the object actually reflects the survey operations.
-- Deciding whether the design object needs to be rebuilt after data corrections.
+The output now shows interview counts broken down by trip completion status:
+`r sum(harlan_interviews$trip_status == "complete")` complete and
+`r sum(harlan_interviews$trip_status == "incomplete")` incomplete.
+The 318 interviews flagged for zero catch are anglers who had not yet landed
+anything when intercepted — a normal outcome in access-point surveys.
 
-The package can keep the design together, but the analyst still has to decide when the design has changed enough to require a new object.
+The `interview_type = "access"` argument tells the design that these are
+access-point interviews: anglers intercepted at fixed locations as they exit the
+fishery. This affects how the estimator handles incomplete trips. An access
+interview of an incomplete trip can be projected to a full-trip equivalent; the
+design needs to know the interview type to apply the correct correction.
 
-## Example focus
+## Step 4: adding species-level catch {#sec-design-catch}
 
-Constructing a design object for one waterbody and one season with weekday and weekend strata.
+The final builder step attaches the species-level catch records. These are the
+rows from `harlan_catch` that link individual species and outcomes back to
+interviews.
 
-That example is deliberately small because the point is the relationship between the data and the sampling logic, not the complexity of the fishery.
+```{r}
+#| label: design-catch
+harlan_design <- add_catch(
+  design        = harlan_design,
+  data          = harlan_catch,
+  catch_uid     = "interview_id",
+  interview_uid = "interview_id",
+  species       = "species",
+  count         = "n_fish",
+  catch_type    = "catch_type"
+)
 
-## Takeaway
+harlan_design
+```
 
-The design object is not just a convenience. It is the record of how the sample connects to the population, and it should be treated as seriously as the raw data.
+The design now reports `r nrow(harlan_catch)` catch rows covering
+`r n_distinct(harlan_catch$species)` species, split between harvested and released
+records. An advisory message notes that harvest totals in the catch table diverge
+from `total_harvest` in the interviews table for some parties. This is expected:
+`total_harvest` counts only harvested fish, while the catch table records both
+harvested and released. The divergence is not an error; it reflects the difference
+between the two representations of catch.
 
-If that object is wrong, everything downstream inherits the mistake.
+The full design object now holds every layer of the survey:
+
+```{r}
+#| label: design-slots
+tibble(
+  slot    = c("calendar", "counts", "interviews", "catch"),
+  n_rows  = c(
+    nrow(harlan_design$calendar),
+    nrow(harlan_design$counts),
+    nrow(harlan_design$interviews),
+    nrow(harlan_design$catch)
+  )
+)
+```
+
+## Inspecting the design {#sec-design-inspect}
+
+### Stratum diagnostics
+
+`audit_strata()` computes the key stratum-level statistics that summarize how well
+the sampling design is performing. For each stratum it returns the population size
+(`N_h`), the realized sample size (`n_h`), the mean angler count per sampled day
+aggregated across count rounds (`ybar_h`), the between-day variance of those
+totals (`s2_h`), the relative standard error of the stratum mean (`RSE`), and the
+design effect (`DEFF`).
+
+```{r}
+#| label: audit-strata
+strata_audit <- audit_strata(harlan_design)
+strata_audit$strata
+```
+
+Both strata meet the default RSE target of
+`r strata_audit$rse_target`. The RSE for the weekday stratum
+(`r round(strata_audit$strata$RSE[strata_audit$strata$stratum == "weekday"], 3)`)
+is lower than for the weekend stratum
+(`r round(strata_audit$strata$RSE[strata_audit$strata$stratum == "weekend"], 3)`),
+primarily because the weekday stratum is larger and therefore has more power to
+detect systematic variation.
+
+The design effects deserve attention. The weekday DEFF of
+`r round(strata_audit$strata$DEFF[strata_audit$strata$stratum == "weekday"], 2)`
+indicates moderate clustering — sampled days within the weekday stratum are more
+similar to one another than a simple random sample of individual counts would be.
+The weekend DEFF of
+`r round(strata_audit$strata$DEFF[strata_audit$strata$stratum == "weekend"], 2)`
+is substantially higher. Weekend fishing activity is more variable: a sunny summer
+weekend draws far more anglers than a cold autumn weekend, and this day-to-day
+clustering inflates variance relative to a simple random sample of the same size.
+When design effects are large, increasing the number of sampled days is more
+effective than increasing the number of count rounds within already-sampled days
+[@mccormick2013].
+
+The overall design effect for the full survey is `r round(strata_audit$deff, 2)` —
+close to one because the two strata have similar sizes and the weekday stratum
+dominates the average.
+
+### Coverage gaps
+
+`check_completeness()` reports which parts of the design lack data.
+
+```{r}
+#| label: check-completeness
+check_completeness(harlan_design)
+```
+
+The report shows a ✖ and flags 95 calendar days with no count data. The ✖ symbol
+means the check found something that requires attention, not necessarily that
+something is broken. In this case, 95 is the number of non-sampled days in the
+schedule — days that were in the frame but not selected for sampling. That is
+expected behavior. If the flag instead identified days that the schedule marks as
+sampled but that have no count records, it would indicate a genuine data gap
+requiring investigation.
+
+The distinction matters when reading `check_completeness()` output: look at what
+the flag says, not just whether a ✖ appears. A flag that reports non-sampled days
+is informational. A flag that reports sampled days with missing data requires action
+before estimation proceeds.
+
+All strata exceed the `n_min = 10` interview threshold, meaning every reporting
+domain has enough interviews to produce a stable estimate. When a stratum falls
+below this threshold, estimation functions will still run, but the variance
+estimate for that stratum will be unreliable.
+
+### Survey calendar
+
+`plot_design()` produces a calendar visualization of which days were sampled, how
+they fall across strata, and where count data exist.
+
+```{r}
+#| label: fig-plot-design
+#| fig-cap: "Survey calendar for the Harlan Reservoir 2022 creel survey. Each point represents a day in the sampling frame. Color distinguishes weekend and weekday strata. Filled points indicate sampled days."
+#| fig-alt: "Calendar dot plot showing sampled and unsampled days across the 2022 season, colored by day type stratum."
+plot_design(harlan_design, title = "Harlan Reservoir 2022 — survey calendar")
+```
+
+The calendar makes sampling density visible. April and early May show high sampling
+coverage; late summer shows gaps where consecutive unsampled days cluster. These
+patterns matter: if the unsampled gaps are not random — if they fell on weeks with
+unusually poor or unusually good conditions — the stratified estimator cannot
+correct for them and the estimates carry unquantified bias.
+
+## Stratum-level sampling summary {#sec-strata-summary}
+
+A compact view of what each stratum contributes makes it easier to catch
+imbalances before moving to estimation.
+
+```{r}
+#| label: fig-strata-summary
+#| fig-cap: "Sample sizes and mean angler counts per stratum for the Harlan 2022 design. Error bars show one standard error of the within-stratum mean count. Numbers above bars show the population (N_h) and sample (n_h) day counts."
+#| fig-alt: "Two-panel bar chart comparing weekday and weekend strata on sample size and mean count per sampled day."
+
+strata_tbl <- strata_audit$strata |>
+  mutate(
+    se_h  = sqrt(s2_h / n_h),
+    label = paste0("N=", N_h, "\nn=", n_h)
+  )
+
+ggplot(strata_tbl, aes(x = stratum, y = ybar_h, fill = stratum)) +
+  geom_col(width = 0.5) +
+  geom_errorbar(
+    aes(ymin = ybar_h - se_h, ymax = ybar_h + se_h),
+    width = 0.15
+  ) +
+  geom_text(aes(label = label, y = 0.05), vjust = 0, size = 3) +
+  scale_fill_manual(values = creel_palette(2), guide = "none") +
+  labs(
+    x     = "Stratum",
+    y     = "Mean angler count per sampled day",
+    title = "Harlan Reservoir 2022 — stratum summary"
+  ) +
+  theme_creel()
+```
+
+The mean count per sampled day is similar across strata —
+`r round(strata_tbl$ybar_h[strata_tbl$stratum == "weekday"], 2)` for weekdays and
+`r round(strata_tbl$ybar_h[strata_tbl$stratum == "weekend"], 2)` for weekends.
+Similar means across strata suggest that post-stratification by day type recovers
+little variance in this survey — the main value of the weekday/weekend distinction
+may be as a design guarantee that both day types are represented, not as a
+variance-reduction mechanism.
+
+## Design immutability {#sec-design-immutable}
+
+Each `add_*` function returns a new `creel_design` object rather than modifying
+its argument. This design choice prevents accidental overwriting and makes it safe
+to branch from any intermediate state.
+
+```{r}
+#| label: design-immutability
+#| message: false
+# Build a counts-only design
+design_counts_only <- creel_design(
+  calendar = harlan_schedule,
+  date     = "date",
+  strata   = "day_type"
+) |>
+  add_counts(counts = harlan_counts, count_time_col = "count_time")
+
+# Build a full design branching from the same intermediate object
+design_full <- add_interviews(
+  design         = design_counts_only,
+  interviews     = harlan_interviews_with_catch,
+  catch          = "total_harvest",
+  effort         = "hours_fished",
+  trip_status    = "trip_status",
+  n_anglers      = "n_anglers",
+  angler_type    = "angler_type",
+  angler_method  = "angler_method",
+  interview_type = "access"
+)
+
+# design_counts_only is unchanged — interviews were added to design_full, not to it
+is.null(design_counts_only$interviews)
+```
+
+Immutability means the counts-only design survives the interview-addition step
+intact. This matters when the same count data feed multiple analysis branches —
+for example, effort estimation over all species (counts only) alongside harvest
+estimation for a target species (counts + interviews + catch). Both branches share
+the same intermediate object as a starting point rather than each rebuilding from
+scratch.
+
+## The design object as the estimation handoff {#sec-design-handoff}
+
+Every estimation function in Chapters 12 through 15 takes a `creel_design` as its
+first argument. The design carries the information those functions need without
+requiring the analyst to re-specify it at each call:
+
+- Which days were sampled and in which strata (`calendar`)
+- The realized count observations and their timing (`counts`)
+- Trip-level effort and catch totals (`interviews`)
+- Species-level catch by outcome (`catch`)
+- The underlying `survey.design2` with correct strata weights
+
+The functions that were held as `eval: false` placeholders in Chapter 5 —
+`estimate_catch_rate()`, `validate_incomplete_trips()`, and `summarize_trips()` —
+all require a `creel_design` object of this form. The design built in this chapter
+is the prerequisite for running those functions with real output.
+
+The step-by-step build earlier in this chapter printed each intermediate state for
+teaching purposes. In production code, the same pipeline is written as a single
+pipe chain that silently passes each intermediate object to the next builder:
+
+```{r}
+#| label: full-pipeline
+#| message: false
+harlan_design_final <- creel_design(
+  calendar = harlan_schedule,
+  date     = "date",
+  strata   = "day_type"
+) |>
+  add_counts(
+    counts         = harlan_counts,
+    count_time_col = "count_time"
+  ) |>
+  add_interviews(
+    interviews     = harlan_interviews_with_catch,
+    catch          = "total_harvest",
+    effort         = "hours_fished",
+    trip_status    = "trip_status",
+    n_anglers      = "n_anglers",
+    angler_type    = "angler_type",
+    angler_method  = "angler_method",
+    interview_type = "access"
+  ) |>
+  add_catch(
+    data          = harlan_catch,
+    catch_uid     = "interview_id",
+    interview_uid = "interview_id",
+    species       = "species",
+    count         = "n_fish",
+    catch_type    = "catch_type"
+  )
+
+harlan_design_final
+```
+
+The pipe chain is the production form. Each step adds one layer. The result is a
+single named object that summarizes the entire survey and can be passed to any
+estimation function in the book.
+
+## What the design object stores {#sec-design-slots}
+
+The `creel_design` object is a named list. Understanding which slot holds which
+information makes it possible to extract or inspect any piece of the survey without
+re-running estimation.
+
+```{r}
+#| label: design-internal
+tibble(
+  slot     = c("calendar", "counts", "interviews", "catch",
+               "survey", "interview_survey",
+               "strata_cols", "date_col", "design_type"),
+  n_rows   = c(
+    nrow(harlan_design_final$calendar),
+    nrow(harlan_design_final$counts),
+    nrow(harlan_design_final$interviews),
+    nrow(harlan_design_final$catch),
+    NA_integer_, NA_integer_, NA_integer_, NA_integer_, NA_integer_
+  ),
+  contents = c(
+    "sampling schedule with sampled flag",
+    "count observations from all rounds",
+    "party-level interview records",
+    "species-level catch records",
+    "survey.design2 for count-based effort estimation",
+    "survey.design2 for interview-based estimation",
+    "stratum variable name(s)",
+    "date column name",
+    "survey design type (instantaneous, bus_route, ...)"
+  )
+)
+```
+
+The two `survey.design2` objects — `design$survey` and `design$interview_survey`
+— are the most important internal slots. The former carries the probability
+structure for estimating effort from counts; the latter carries the structure for
+estimating catch rates from interviews. Estimation functions pull from the
+appropriate slot depending on what they are estimating. Direct access to these
+slots is rarely needed; the estimation functions handle it internally.
+
+## When to rebuild the design {#sec-design-rebuild}
+
+Because the design object is immutable, any change to the underlying data
+requires rebuilding from the affected step forward. This is deliberate: it
+prevents a situation where the design object reflects one version of the data and
+the raw tables reflect another.
+
+The most common triggers for a rebuild are:
+
+**A correction to the sampling schedule.** If a day's `day_type` is corrected or
+a day is added or removed from the sampled set, the base design must be rebuilt. A
+partial fix — editing the schedule but passing the old design object to estimation
+— will silently use the incorrect strata sizes for the N_h weights.
+
+**A catch data correction.** If species totals in the catch table are revised after
+the design was built, `add_catch()` must be called again on the updated data. The
+species-level records inside the design object are a snapshot of the catch table at
+the time `add_catch()` was called; they do not update automatically.
+
+**An interview exclusion.** Chapter 11 covers data cleaning decisions that remove
+or adjust specific interviews. Any such exclusion should be made on the raw
+interview table before the design is built, not by operating on the design object
+after the fact. The correct workflow is:
+
+```
+raw tables → clean → derive total_harvest → creel_design pipeline → estimate
+```
+
+not:
+
+```
+creel_design pipeline → estimate → discover problem → patch design object
+```
+
+The `harlan_design_final` object built in @sec-design-handoff represents the
+end of the data preparation phase for the Harlan 2022 survey. When the next
+chapter's cleaning decisions are applied, a fresh design object should be built
+from the cleaned tables using the same four-step pipeline.
+
+## Takeaway {#sec-design-takeaway}
+
+The `creel_design` object collects everything an estimator needs to produce a
+design-consistent result: the sampling frame, the strata, the realized sample
+counts, the party-level effort and catch, and the species-level records. Building
+it in four explicit steps makes the design choices visible and verifiable at each
+stage.
+
+`audit_strata()`, `check_completeness()`, and `plot_design()` provide immediate
+feedback on whether the assembled design is consistent and complete before any
+estimates are computed. Problems surfaced at this stage — a stratum below the
+minimum interview count, count dates outside the schedule, strata with very high
+design effects — are far easier to diagnose here than after an estimation function
+has already processed them.
+
+The next chapter addresses data cleaning decisions that can change estimates: how
+to identify and handle extreme catch values, implausible trip durations, and
+interviews that do not pass internal consistency checks. Cleaning is done on the
+raw tables before building the design object; the design object should be
+constructed from data that has already passed the checks in Chapter 11.
