@@ -1,0 +1,25 @@
+---
+title: "Notation and Symbols"
+---
+
+## Purpose
+
+This appendix collects the shorthand used across the book so readers do not have to infer the meaning of the same terms from context alone.
+
+## Common notation
+
+- `frame` or sampling frame: the set of units that could have been sampled
+- `stratum`: a design group used for sampling and reporting
+- `count`: an observed count of anglers, boats, or similar units
+- `interview`: a trip, party, or completed interaction with anglers
+- `weight`: the factor that expands a sampled unit to the target domain
+- `estimate`: the expanded quantity reported for the population
+
+## Unit reminders
+
+When reading the book, keep an eye on the unit that a number refers to. The same symbol may not mean the same thing in every chapter if the estimand changes.
+
+## Reading rule
+
+If a formula, table, or code example seems ambiguous, check the chapter’s purpose and the “Key ideas” section first. The book is written to keep the design and the estimator aligned.
+

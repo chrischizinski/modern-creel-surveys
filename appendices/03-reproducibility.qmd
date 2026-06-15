@@ -1,0 +1,22 @@
+---
+title: "Reproducibility and Session Info"
+---
+
+## Purpose
+
+This appendix explains how the book should stay reproducible over time.
+
+## Reproducibility rules
+
+- Keep source data and cleaned analysis data distinct.
+- Render the book from the same source files used to write it.
+- Record the assumptions behind each major estimate.
+- Keep examples small enough to rerun without special setup.
+
+## Session information
+
+When the book grows into a more complete manuscript, this page can hold the software session information used for the rendered examples and any package version notes that matter for reproducibility.
+
+## Workflow reminder
+
+The code examples in the book are meant to be understandable first and optimized second. That makes the examples easier to review, audit, and adapt.

@@ -1,0 +1,104 @@
+---
+title: "Access-Point Creel Surveys"
+---
+
+## Purpose
+
+Access-point creel surveys are one of the clearest ways to see the logic of a creel design.
+
+They work well when anglers must pass through a known set of access points, the survey frame covers those access points, and interviews can be linked to count periods that describe effort in the same domain.
+
+Because the frame is visible, the main design mistakes are also visible. That makes access-point surveys a good teaching example for coverage, weighting, and completed-trip logic.
+
+## Key ideas
+
+- Public access coverage
+- Completed-trip interviews
+- Site-period sampling
+- Access-point frame construction
+- Common assumptions and failure modes
+
+## How access-point surveys work
+
+An access-point survey observes anglers as they enter or leave a fishery through a known access network. In the common completed-trip setting, interviewers speak with anglers after a trip has ended or near the end of a trip, then combine those trip records with count data to estimate effort and catch for the larger domain.
+
+The field workflow is direct:
+
+- count anglers or boats at the access point;
+- interview a subset of completed trips;
+- link interviews to the time and place they represent;
+- expand the sampled information to the full domain.
+
+In a healthy design, the count data and the interview data answer different but compatible questions. Counts describe how many people or boats were present at a given time. Interviews describe what those people did on the trip, what they caught, and how long they fished. The estimation step joins those two views into one reportable quantity.
+
+## What has to be true
+
+An access-point design is only defensible if:
+
+- the access network covers the fishery well enough for the study purpose;
+- the sampled access points and times are representative of the reporting domain;
+- anglers can be linked to the correct site and period;
+- completed-trip interviews are recorded consistently;
+- the count and interview records are aligned to the same frame.
+
+These conditions sound obvious, but they are where many real projects break down. A ramp can look like a complete frame until private docks, shoreline access, or informal launches are considered. A survey can look balanced until the count schedule is compared to the actual pattern of use.
+
+If private access, shoreline-only use, or another unobserved entry path is common, the access-point frame may underrepresent the fishery.
+
+## Common failure modes
+
+The biggest problems are usually coverage problems, not algebra problems.
+
+Examples include:
+
+- missing access points in the frame;
+- sampling more often at popular ramps than at low-use ramps without proper weighting;
+- interviewing only certain types of anglers;
+- mixing completed-trip and incomplete-trip logic in the same workflow;
+- recording count periods and interview periods at different levels of aggregation.
+
+Another failure mode is assuming that a good access network automatically means a good sample. Access coverage helps, but it does not remove the need for the right temporal coverage, the right weighting, and the right trip classification.
+
+## When access-point surveys fit best
+
+Access-point surveys are strongest when the fishery has:
+
+- a limited number of entry and exit points;
+- reasonably complete public-access coverage;
+- trips that are easy to identify as completed;
+- and a schedule that can be sampled consistently over time.
+
+They are weaker when anglers can avoid the access network, when trips are routinely incomplete at contact time, or when the field schedule misses predictable use patterns such as evenings, weekends, or holidays.
+
+## Reporting implications
+
+Access-point estimates often support annual totals and species summaries, but they should be reported only for the covered access network and time domain. If the estimate is intended to stand in for a broader fishery, the report should say how the broader domain is justified.
+
+That explanation matters because readers tend to assume access surveys are more complete than they are. The report should make the boundary visible instead of leaving it implicit.
+
+## `tidycreel` support
+
+Implemented:
+- Later chapters show how the package handles this design.
+
+Partially supported:
+- The conceptual workflow is fully described here; the software surface comes later.
+
+Manual or conceptual:
+- Framing the management question.
+- Checking access coverage.
+- Confirming that the frame matches the reporting domain.
+
+The design object can later hold the access logic, but the analyst still has to decide whether the access network is actually the right representation of the fishery.
+
+## Example focus
+
+A weekend access-point survey at a reservoir ramp with separate weekday and weekend strata.
+
+The weekend stratum may carry most of the use, while the weekday stratum may reveal different trip lengths or species composition. That kind of pattern is exactly why access-point designs are useful: the counts and interviews can be tied back to a visible entry network, but the stratification still has to reflect how the fishery is actually used.
+
+## Takeaway
+
+Access-point surveys are strong when the entry network is well defined and the frame is honest. They are weak when the access network is treated as if it covered more of the fishery than it actually does.
+
+The design succeeds because the boundary is explicit, not because the fishery is simple.

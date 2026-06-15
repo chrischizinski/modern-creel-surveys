@@ -1,0 +1,66 @@
+---
+title: "Modern Creel Survey Analysis in R"
+subtitle: "Design, estimation, diagnostics, and reporting with tidycreel"
+toc: false
+---
+
+::: {.book-hero}
+## A methods-first book for creel survey analysis
+
+This book guides readers through modern creel survey analysis in R. It is designed as a companion to `tidycreel`, but it is broader than a package manual.
+
+The emphasis is on design-based reasoning, clear estimands, data structure, uncertainty, and interpretation that stays within the covered domain.
+
+::: {.book-pill-row}
+<span class="book-pill">Quarto book</span>
+<span class="book-pill">Design-based inference</span>
+<span class="book-pill">Editorial but practical</span>
+<span class="book-pill">Companion to tidycreel</span>
+:::
+
+<a class="book-cta" href="preface.html">Start with the Preface</a>
+:::
+
+## What to expect
+
+::: {.book-grid}
+::: {.book-card}
+### Front matter
+Orientation pages that explain the book's scope and reading path.
+:::
+
+::: {.book-card}
+### Part-based structure
+Foundations, survey designs, data structures, estimation, and case studies.
+:::
+
+::: {.book-card}
+### Consistent chapter pattern
+Each chapter states its purpose, key ideas, support status, and example focus.
+:::
+
+::: {.book-card}
+### Online-first layout
+The site is structured as a Quarto book, with the cover, parts, and chapter navigation visible in the rendered site.
+:::
+:::
+
+## Start here
+
+Begin with the Preface, then read the Foundations section in order.
+
+If you already know the background, you can move directly to the design chapters that match your survey type.
+
+::: {.book-note}
+The online layout is intentionally Quarto-native. It is designed to feel like a published book site with clear front matter, grouped parts, and a clean reading path.
+:::
+
+## Book layout
+
+This site is organized into these parts:
+
+- Foundations
+- Survey Designs
+- Data Structures and Validation
+- Estimation and Reporting
+- Case Studies

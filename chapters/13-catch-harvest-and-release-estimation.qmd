@@ -1,0 +1,117 @@
+---
+title: "Catch, Harvest, and Release Estimation"
+---
+
+## Purpose
+
+Catch, harvest, and release are related but not identical estimands.
+
+This chapter shows how trip-linked interviews expand into species-level or season-level outcomes.
+
+These quantities are often reported in the same table, but they answer different questions. The analyst needs to keep the numerator and the reporting meaning aligned.
+
+## Key ideas
+
+- Catch versus harvest versus release
+- Trip-linked interviews
+- Species-level summaries
+- Estimation by stratum
+- Completed-trip versus partial-trip logic
+
+## Core distinctions
+
+- Catch is the number of fish taken from the water, regardless of whether they were kept.
+- Harvest is the subset retained by anglers.
+- Release is the subset returned to the water.
+
+Those categories are related, but the estimate can differ depending on whether the reporting target is a total, a rate, or a species-specific summary.
+
+The distinction matters because a trip can contribute to more than one outcome at once. An angler may harvest one fish, release two more, and report a catch total that is larger than the harvest total. Those records belong to the same trip but not to the same outcome.
+
+## Trip linkage
+
+Catch and harvest estimates usually come from interview records linked to trips or parties. The analyst has to make sure the catch record is tied to the right trip, the right species, and the right stratum.
+
+Common questions include:
+
+- Is the trip complete?
+- Is the species code consistent?
+- Are harvest and release totals mutually consistent?
+- Are multiple species reported on the same trip?
+
+Trip linkage is where many harvest estimates become fragile. If the interview is not linked to the correct trip or party, the species total can shift without any obvious error message.
+
+## Stratified totals
+
+The same interview data can support:
+
+- a total harvest estimate;
+- a species-specific harvest estimate;
+- a harvest rate;
+- or a catch-and-release summary.
+
+The key is that the estimator and denominator match the target estimand.
+
+For example, a species-specific harvest total may need the trip count within a stratum, while a catch rate may need a different denominator such as party-hours or completed trips. The same source records can support both, but only if the workflow keeps the definitions separate.
+
+## Common reporting choices
+
+In practice, managers often want one of four summaries:
+
+- total harvest for a reporting domain;
+- species-specific harvest;
+- release totals for a target species or group;
+- or a catch-and-release summary that shows both together.
+
+Each of those summaries needs a clear sentence explaining what the numerator counts and what the denominator represents.
+
+## Worked example
+
+```{r}
+interviews <- data.frame(
+  stratum = c("weekday", "weekday", "weekend", "weekend"),
+  sampled_trips = c(8, 8, 4, 4),
+  total_trips = c(40, 40, 20, 20),
+  bass_harvest = c(3, 2, 4, 5),
+  bass_release = c(1, 0, 2, 1)
+)
+
+interviews$weight <- interviews$total_trips / interviews$sampled_trips
+interviews$harvest_est <- interviews$bass_harvest * interviews$weight
+interviews$release_est <- interviews$bass_release * interviews$weight
+
+aggregate(cbind(harvest_est, release_est) ~ stratum, data = interviews, sum)
+sum(interviews$harvest_est)
+sum(interviews$release_est)
+```
+
+This example uses a direct expansion from sampled trips to total harvest and release. The structure is deliberately minimal: in a real survey, the interview table would need to be linked to the frame and validated against species and trip structure.
+
+The point of the example is not that the arithmetic is hard. It is that the arithmetic only means something if the trip records and species codes are trustworthy.
+
+## `tidycreel` support
+
+Implemented:
+- Later chapters show how the package handles catch, harvest, and release.
+
+Partially supported:
+- The conceptual mapping from interviews to outcomes is established here.
+
+Manual or conceptual:
+- Aligning interview records and catch records.
+- Validating species codes and trip structure.
+- Deciding how to represent incomplete trips.
+
+The package can support the expansion once the linkage is valid, but it cannot tell you whether a fish was actually retained or released.
+
+## Example focus
+
+Species-specific harvest estimation from trip interviews in a reservoir survey.
+
+That is a common real-world ask because species-specific totals are often what managers need first, especially when harvest rules or stock concerns differ by species.
+
+## Takeaway
+
+Catch, harvest, and release are often reported together, but they do not all come from the same denominator or interpretation. The workflow has to keep that distinction visible.
+
+If the report collapses them too early, the reader may walk away with a clean number and the wrong interpretation.

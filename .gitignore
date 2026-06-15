@@ -1,0 +1,12 @@
+.planning/
+.ai/
+**/.planning/
+**/.ai/
+graphify-out/
+_book/
+_freeze/
+.quarto/
+.playwright-cli/
+
+/.quarto/
+**/*.quarto_ipynb

@@ -1,0 +1,112 @@
+---
+title: "Bias and Failure Modes"
+---
+
+## Purpose
+
+Not every creel problem is an estimator problem.
+
+This chapter names the most common ways survey estimates go wrong so they can be diagnosed, reported, and avoided in future designs.
+
+The goal is not to make the analysis sound defensive. It is to give the analyst a vocabulary for saying what went wrong, where it went wrong, and whether the problem belongs in field operations, frame construction, or reporting.
+
+## Key ideas
+
+- Avidity bias
+- Nonresponse
+- Private-access exclusion
+- Temporal and spatial coverage bias
+- Species misidentification
+- Operational failures that change the effective frame
+
+## Where bias comes from
+
+Bias in creel work usually enters through the design or through the way the design is carried out.
+
+Examples include:
+
+- sampling only the busiest access points;
+- missing anglers who use private launches or shoreline access;
+- interviewing more cooperative anglers than noncooperative ones;
+- missing weekend or holiday periods;
+- undercounting because of weather, darkness, or staffing problems;
+- misclassifying species or harvest status.
+
+Many of these problems are not subtle. They are often visible in the field record if the analyst looks for them early. The risk is that they become invisible once the data are collapsed into a single total and the original coverage gaps are forgotten.
+
+## Why some problems are not fixable in analysis
+
+Some bias sources are statistical; others are structural.
+
+- A small amount of random error can be quantified.
+- A missing part of the frame cannot be recovered just by changing the estimator.
+- A bad assumption about coverage cannot be fixed by a more complicated formula.
+
+That is why the report has to distinguish between:
+
+- what the data support;
+- what the design can claim;
+- and what should be treated as a limitation.
+
+The practical implication is simple: an elegant estimator cannot recover information that was never observed. If the frame omitted a user group, the analyst may still be able to describe the sample, but not the excluded population.
+
+## Structural versus operational problems
+
+It helps to separate problems that are baked into the design from problems that arise because the design was not implemented well.
+
+- Structural problems include missing access modes, incomplete frame coverage, and unsupported reporting domains.
+- Operational problems include missed shifts, recording errors, temporary outages, and inconsistent application of the protocol.
+
+Both matter, but they are not the same. Operational problems may be fixable in the next field cycle; structural problems usually require a redesign.
+
+## Diagnostic questions
+
+When reviewing a creel estimate, ask:
+
+- Did the sample cover the whole intended domain?
+- Were some access points, times, or user groups missing?
+- Did field operations alter the effective selection process?
+- Did data cleaning remove or recode records in a way that changes the estimand?
+- Are the results being reported only within the supported domain?
+
+If the answer to several of those questions is yes, the analyst should be cautious about presenting the result as a clean population estimate. It may still be a useful summary, but the uncertainty and bias story needs to be explicit.
+
+## Reporting bias honestly
+
+Not every limitation can be corrected. But every limitation that affects interpretation should be named.
+
+Clear reporting should state:
+
+- what was covered;
+- what may have been undercovered;
+- which assumptions were necessary;
+- and how those issues affect confidence in the estimate.
+
+That language should be specific enough that a reader can tell whether the problem was a small glitch or a major coverage failure. “Some records were missing” is not enough if the missing records changed the domain or the denominator.
+
+## `tidycreel` support
+
+Implemented:
+- The package cannot eliminate structural bias; later chapters show which diagnostics it can help organize.
+
+Partially supported:
+- The chapter sets up the diagnostics that the package workflow can support later.
+
+Manual or conceptual:
+- Limitation statements and diagnostics.
+- Deciding whether an issue is a cleanable error or a design limitation.
+- Distinguishing uncertainty from bias.
+
+The package can help organize the evidence, but the judgment call about bias still belongs to the analyst.
+
+## Example focus
+
+A seasonal closure that invalidates part of the frame and forces a narrow reporting domain.
+
+That kind of example matters because it shows how a policy change can alter the claim itself. If the closure changes which days or waters are legally in scope, the estimate should be reframed rather than stretched to cover the old domain.
+
+## Takeaway
+
+The biggest creel failures often happen before estimation starts. If the frame, sampling process, or field operations are wrong, the estimator may be precise but still wrong in a meaningful way.
+
+This chapter is the reminder to treat limitations as part of the method, not as an appendix note.

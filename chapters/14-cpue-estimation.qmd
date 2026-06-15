@@ -1,0 +1,118 @@
+---
+title: "CPUE Estimation"
+---
+
+## Purpose
+
+Catch-per-unit-effort is one of the most familiar creel summaries, but it is also one of the easiest to overinterpret.
+
+This chapter shows how CPUE is derived and where interpretation can fail.
+
+CPUE is attractive because it compresses a lot of information into one ratio. That same compression is why the estimate has to be labeled carefully.
+
+## Key ideas
+
+- CPUE as a ratio
+- Angler-hour and boat-hour denominators
+- Completed-trip versus incomplete-trip logic
+- When CPUE is and is not comparable
+- Why ratio estimates need explicit context
+
+## What CPUE is
+
+CPUE is catch per unit effort. The unit may be:
+
+- catch per angler-hour;
+- catch per boat-hour;
+- catch per trip;
+- or another ratio defined by the survey design.
+
+The ratio is only meaningful if the numerator and denominator refer to the same reporting domain and the same time window.
+
+That condition sounds obvious, but it is often violated when people compare one stratum to another, or one survey year to another, without checking whether the denominator really means the same thing.
+
+## Comparison problems
+
+CPUE is often compared across:
+
+- seasons;
+- strata;
+- species;
+- access types;
+- or years.
+
+Those comparisons are only sensible if the sampling design and denominator are comparable. A weekend CPUE and a seasonal CPUE are not the same thing, even if they use the same units.
+
+The analyst should say whether the ratio is being used as a descriptive snapshot, a management indicator, or a basis for comparison. Those uses are not interchangeable.
+
+## Completed versus incomplete trips
+
+For completed trips, the denominator is usually straightforward.
+
+For incomplete trips, the denominator may be partial, censored, or still evolving. In that setting, a naive CPUE comparison can be misleading if it treats a mid-trip observation as if it were a final trip summary.
+
+This is especially important for roving surveys and any design where interviews occur before trips are finished. The numerator may still change after contact, so the ratio is only a temporary view of the fishing experience.
+
+## Why ratios feel stronger than they are
+
+Ratios look precise because they are compact. A single CPUE value can hide differences in trip length, effort mix, access coverage, or trip completeness.
+
+That is not a reason to avoid CPUE. It is a reason to report it as a ratio with context, not as a universal property of the fishery.
+
+## Reporting CPUE honestly
+
+When CPUE is reported, the analyst should say:
+
+- what the numerator is;
+- what the denominator is;
+- whether trips were completed;
+- what strata or periods were included;
+- and whether the comparison is intended to be descriptive or inferential.
+
+If the audience is likely to overread the ratio, the report should say what CPUE does not imply. For example, a higher CPUE does not necessarily mean the fishery is healthier, only that the observed catch relative to effort was higher under the reported design.
+
+## Worked example
+
+```{r}
+cpue <- data.frame(
+  stratum = c("weekday", "weekend"),
+  catch = c(140, 96),
+  effort_hours = c(420, 180)
+)
+
+cpue$cpue <- cpue$catch / cpue$effort_hours
+cpue
+
+sum(cpue$catch) / sum(cpue$effort_hours)
+```
+
+This example shows two common outputs: a stratum-specific ratio and a pooled ratio across strata. They answer different questions, so they should not be reported as if they were identical.
+
+The stratum-specific value is useful for within-group comparisons. The pooled value is useful for the overall domain. The two numbers should not be mixed unless the weights and design support the combination.
+
+## `tidycreel` support
+
+Implemented:
+- Later chapters show how the package handles CPUE.
+
+Partially supported:
+- The ratio logic is established here; implementation comes later.
+
+Manual or conceptual:
+- Choosing the right denominator and domain.
+- Avoiding false comparisons across incompatible ratios.
+- Treating incomplete-trip CPUE with caution.
+
+The package can calculate the ratio, but the analyst has to decide whether the ratio is actually the right summary.
+
+## Example focus
+
+Comparing CPUE across strata without overinterpreting the ratio as a universal fishery condition.
+
+That framing keeps the ratio useful without pretending it says more than it does.
+
+## Takeaway
+
+CPUE is useful, but only if the denominator is meaningful. A ratio can be compact and still be misleading if the sampling context is not the same.
+
+Whenever CPUE appears in a report, the reader should know what was being divided by what.

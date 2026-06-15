@@ -1,0 +1,112 @@
+---
+title: "Creel Data as Linked Tables"
+---
+
+## Purpose
+
+Creel analysis works better when the data are organized as linked tables instead of a single oversized spreadsheet.
+
+This chapter sets out a relational data model that keeps the sampling frame, counts, interviews, catch records, and metadata connected without forcing them into one flat file.
+
+The point is not elegance for its own sake. The point is that different creel records have different lifecycles, different keys, and different validation rules, and a single sheet is a poor container for all of that.
+
+## Key ideas
+
+- Sampling frame table
+- Assignment table
+- Count table
+- Interview table
+- Catch table
+- Metadata tables
+- Stable keys and join discipline
+
+## Why linked tables help
+
+Different creel records answer different questions:
+
+- the frame tells you what could have been sampled;
+- assignments tell you what was planned or staffed;
+- counts tell you what was observed for effort;
+- interviews tell you what anglers reported;
+- catch tables break trip information out by species or outcome;
+- metadata tables describe sites, waterbodies, and regulation context.
+
+When those records are kept in linked tables, it is easier to:
+
+- preserve the meaning of each record type;
+- avoid duplicated columns and inconsistent edits;
+- validate joins explicitly;
+- and update one table without accidentally rewriting everything else.
+
+A relational structure also makes the workflow auditable. If a catch record looks wrong, the analyst can inspect the catch table directly rather than hunting through unrelated columns in a merged spreadsheet.
+
+## Keys and joins
+
+The key technical habit is to define stable identifiers.
+
+Examples include:
+
+- site IDs;
+- waterbody IDs;
+- date and period keys;
+- interview IDs;
+- trip or party IDs;
+- stratum codes.
+
+The joins should be explicit and testable. If a table cannot be joined cleanly, that is usually a data quality issue, not just a coding inconvenience.
+
+Stable keys are especially important when the same site or trip appears in more than one context. The identifier has to survive cleaning, joining, and aggregation so the original record can still be traced back when a report is questioned.
+
+## Minimal relational shape
+
+A minimal analysis-ready design often includes:
+
+- `sampling_frame`
+- `assignments`
+- `counts`
+- `interviews`
+- `catch`
+- `site_metadata`
+- `waterbody_metadata`
+
+That structure is enough to support most of the core estimation workflow while keeping the source records understandable.
+
+It is also intentionally modular. A project can add more tables later without changing the basic principle that frame, effort, interview, and catch data should be held separately until the analysis step needs them together.
+
+## Common mistakes
+
+When projects move too quickly into a flattened file, a few problems show up repeatedly:
+
+- duplicate rows created by many-to-many joins;
+- silent loss of unmatched records;
+- accidental overwriting of key fields;
+- and merged tables that can no longer distinguish counts from interviews.
+
+Those problems are not just technical annoyances. They can change the numerator, the denominator, or the set of records used in the estimate.
+
+## `tidycreel` support
+
+Implemented:
+- Later chapters show how the package supports joining and validating these tables.
+
+Partially supported:
+- The data model itself is conceptual here; implementation details come later.
+
+Manual or conceptual:
+- Database-style data organization.
+- Unique identifiers and join validation.
+- Deciding which table owns which fields.
+
+The package can work with relational inputs more safely when the tables already have clear keys and clear ownership of fields.
+
+## Example focus
+
+Building a minimal set of related tables from field records and checking that the joins preserve row counts.
+
+That check is important because a failed join can look like a cleaned dataset even though it is actually a data loss event.
+
+## Takeaway
+
+The relational approach protects the meaning of the data. A flat spreadsheet can be convenient, but it becomes fragile when multiple record types and multiple estimands are involved.
+
+If the tables are not separated well, the analyst spends more time disentangling the data than estimating from it.

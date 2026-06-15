@@ -1,0 +1,94 @@
+---
+title: "Aerial, Camera-Assisted, and Remote Count Designs"
+---
+
+## Purpose
+
+Remote count designs extend creel logic beyond the traditional access-point crew.
+
+They are practical when effort can be observed from the air, from cameras, or from other proxy sensors that cover the fishery more efficiently or more consistently than a manual count alone.
+
+The important shift is not just technological. The observation process changes from a person standing in the fishery to a sensor or remote observer that records a narrower or noisier signal about activity. That changes what counts as evidence and what still needs ground validation.
+
+## Key ideas
+
+- Aerial counts
+- Camera systems
+- Vehicle counters and other proxies
+- Detection limits and downtime
+- Validation against ground truth
+
+## What these designs add
+
+Remote and proxy counts expand coverage, reduce field costs, and enable high-frequency monitoring. These designs also help when weather, staffing, or access limitations make a fully manual count impractical.
+
+The tradeoff is that a sensor or remote observer mediates the count process. This requires the analyst to evaluate what the sensor detects, what is missed during downtime, how false positives and negatives are handled, and how the proxy relates to true effort.
+
+In practice, that means a remote-count design is usually best understood as a measurement system with error, not as a perfect substitute for field observation. The estimate can still be strong, but only if the analyst knows how the sensor behaves across the conditions that matter for the reporting domain.
+
+## Aerial counts
+
+Aerial surveys are often attractive for large waterbodies or dispersed fisheries. They can be excellent for broad coverage, but they can also be sensitive to:
+
+- flight timing;
+- visibility conditions;
+- duplicate or missed observations;
+- matching the aerial count to the correct time window for effort estimation.
+
+Aerial work is especially vulnerable to timing mismatch. A flight may observe a short window that does not line up with the count period used in the final estimator. If the survey domain depends on daypart, weather, or rapid turnover in use, the count has to be aligned carefully with the inference target.
+
+## Camera-assisted counts
+
+Cameras can make counts more repeatable and can create a persistent audit trail. But cameras introduce their own issues:
+
+- occlusion;
+- weather;
+- lighting;
+- power or network outages;
+- ambiguous frames that require human review.
+
+The audit trail is useful because the analyst can inspect the same count again, but repeatability does not automatically mean correctness. If the camera misses activity outside its view or records the same boat twice as it moves through the frame, the count can still be biased even though the image is permanent.
+
+## Remote counts as proxies
+
+Vehicle counters, gate sensors, and other proxies can be helpful when they are strongly related to actual effort. The analyst still needs to ask whether the proxy tracks the fishing activity well enough to support the estimate.
+
+That question is empirical. A gate counter might correlate well with fishing effort on a busy summer weekend and poorly on a cold weekday with very low use. The proxy therefore has to be validated in the same kinds of conditions that the report will cover.
+
+## Validation logic
+
+Validation is what turns a convenient sensor into a defensible part of the workflow.
+
+Useful checks include:
+
+- comparing remote counts to ground counts on a subset of days;
+- checking whether detection changes by weather, light, or traffic;
+- documenting downtime and missing intervals;
+- and confirming that the proxy still performs well in the most important parts of the reporting domain.
+
+Without that step, the analyst may end up reporting a proxy measure as if it were a direct count.
+
+## `tidycreel` support
+
+Implemented:
+- Later chapters describe which proxy and count workflows are supported directly.
+
+Partially supported:
+- The conceptual role of remote counts is covered here; estimator implementation comes later.
+
+Manual or conceptual:
+- Remote count validation and coverage review.
+- Comparing proxy counts against ground-truth samples.
+- Deciding whether a proxy is adequate for the reporting domain.
+
+The package can later organize these data, but it cannot decide whether a sensor should be trusted. That judgment has to come from the field evidence.
+
+## Example focus
+
+A boat-ramp camera used to support effort estimation, with ground counts on a subset of days for validation.
+
+That setup works best when the camera and the ground counts overlap on the same time windows. If the camera is used for daily totals but the validation counts only cover midday, the evidence is thinner than it first looks.
+
+## Takeaway
+
+Remote counts do not remove the need for design logic. They change how effort is observed, not whether the estimate still needs a frame, a domain, and a defensible link to the fishery.

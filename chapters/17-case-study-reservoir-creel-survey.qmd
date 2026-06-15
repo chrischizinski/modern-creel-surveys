@@ -1,0 +1,133 @@
+---
+title: "Case Study: Reservoir Creel Survey"
+---
+
+## Purpose
+
+This chapter brings the earlier chapters together in one reservoir example.
+
+The goal is not to invent a perfect survey. The goal is to show how the design, data model, estimation steps, diagnostics, and report writing fit together in a realistic workflow.
+
+The case study is meant to feel operational: a real fishery, a real reporting need, and a sequence of decisions that have to be made in the right order.
+
+## Key ideas
+
+- Full workflow from frame to report
+- Common operational tradeoffs
+- How the earlier chapters fit together in practice
+- Where the workflow is strongest and where it needs judgment
+
+## Case study frame
+
+Imagine a reservoir with:
+
+- multiple public access points;
+- weekday and weekend demand differences;
+- a seasonal open-water period;
+- separate effort and interview data;
+- and a year-end report that must summarize effort, catch, harvest, and uncertainty.
+
+That setting is rich enough to show the main creel logic without getting lost in edge cases.
+
+It also mirrors the kinds of tradeoffs agencies actually face: limited staff time, mixed access patterns, and a report that has to balance technical accuracy with a short public summary.
+
+## Workflow summary
+
+The case study should walk through:
+
+1. defining the reporting domain;
+2. building the frame and strata;
+3. organizing the data as linked tables;
+4. validating the cleaned analysis data;
+5. estimating effort;
+6. estimating harvest and catch;
+7. checking uncertainty and diagnostics;
+8. writing the report.
+
+Each step depends on the one before it. If the domain is wrong, the effort estimate is wrong. If the tables are not linked well, the harvest estimate is fragile. If the diagnostics are not checked, the report may overstate confidence.
+
+## Operational tradeoffs
+
+Real reservoir work usually involves tradeoffs such as:
+
+- whether to prioritize the busiest ramp or cover more of the network;
+- how much to stratify by day type or season;
+- whether incomplete interviews should be used in a rate calculation;
+- how to handle missing count days;
+- whether a small precision gain is worth more field effort.
+
+The case study shows that these are design decisions, not afterthoughts.
+
+That framing matters because the case study is not trying to hide uncertainty. It is trying to show how the survey gets turned into a defensible public claim despite normal field constraints.
+
+## Step-by-step logic
+
+In a full writeup, the case study would narrate each stage:
+
+- define the public-access open-water domain;
+- split the sample into weekday and weekend strata;
+- record counts and interviews in linked tables;
+- validate the cleaned records before estimation;
+- expand effort and trip-based outcomes separately;
+- compute uncertainty from the design;
+- and write a report that stays inside the covered domain.
+
+That sequence is the same one used throughout the book. The case study simply shows it in one place.
+
+## Worked setup
+
+```{r}
+frame <- data.frame(
+  site_id = c("north_ramp", "south_ramp", "east_shore", "west_ramp"),
+  stratum = c("weekday", "weekday", "weekend", "weekend"),
+  total_periods = c(24, 24, 12, 12),
+  sampled_periods = c(12, 12, 6, 4)
+)
+
+frame$weight <- frame$total_periods / frame$sampled_periods
+frame
+```
+
+This minimal frame is enough to show the full logic:
+
+- the access network is named;
+- the strata are visible;
+- the planned and realized sample differ by site;
+- and the weights are explicit.
+
+From that point, the remaining steps are to attach count data, interview data, and diagnostics in the same domain.
+
+The point of the setup is to show that the design object and the data model are not abstract. They are the mechanism that keeps the reservoir analysis from becoming a pile of disconnected summaries.
+
+## Interpretation
+
+The final interpretation should stay within the covered domain. If the survey covers the public access network during the open-water season, then the report should say exactly that rather than implying coverage of every angler or every day of the year.
+
+The final report should also say what was not measured. That honesty is part of the value of the example.
+
+## `tidycreel` support
+
+Implemented:
+- The case study uses the package workflows introduced earlier in the book.
+
+Partially supported:
+- The end-to-end path is conceptual here until the package sections are expanded.
+
+Manual or conceptual:
+- Filling gaps in the workflow.
+- Deciding what has to be done manually versus through the package.
+- Writing the case study as a model for future projects.
+
+The package can support the workflow, but the case study is where the analyst proves the workflow is being used for a real management question.
+
+## Example focus
+
+A reservoir case study that combines effort, catch, harvest, diagnostics, and interpretation.
+
+The case study is the closest thing this book has to a full rehearsal of the final product.
+
+## Takeaway
+
+The case study is where the book proves it can handle the whole workflow. The estimate should be understandable from design to report, not just reproducible in code.
+
+If a reader cannot trace the logic from the frame to the final sentence, the example is still too thin.

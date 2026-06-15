@@ -1,0 +1,128 @@
+---
+title: "Effort Estimation"
+---
+
+## Purpose
+
+Effort is the backbone of many creel estimates.
+
+This chapter shows how counts expand into effort totals with explicit assumptions and linked count data.
+
+Effort is the bridge between what the field crew saw and what the report needs to summarize. If the effort estimate is wrong, every downstream total that uses effort as a denominator or scaling factor becomes harder to trust.
+
+## Key ideas
+
+- Count periods
+- Expansion to the reporting domain
+- Stratified effort totals
+- Variance and precision
+- Relationship between observed counts and estimated effort
+
+## What effort means
+
+In creel work, effort usually means the amount of fishing activity in a domain over a time period. Depending on the design, that can be expressed as:
+
+- angler-hours;
+- boat-hours;
+- trips;
+- or another count-based proxy.
+
+The estimator has to link the sampled count periods to the unsampled periods in the same frame.
+
+That link is what turns a snapshot into a domain-wide quantity. A count at 10:00 a.m. only becomes an estimate of seasonal effort if the sample design says how that moment represents the rest of the reporting period.
+
+## Basic logic
+
+The usual workflow is:
+
+1. observe counts at a subset of site-periods;
+2. weight those counts by the sampling design;
+3. expand them to the full reporting domain;
+4. aggregate by stratum or season if needed;
+5. quantify uncertainty using the sample design.
+
+That logic is straightforward to state but easy to get wrong if the frame or weights are inconsistent.
+
+The key question is always representation: how many unsampled periods or sites does one observed count stand for, and why?
+
+## What can go wrong
+
+The main problems are:
+
+- counts not aligned with the frame;
+- strata defined differently in the count and interview data;
+- missing count periods treated as zeroes without justification;
+- weights not matching the realized sample;
+- effort summarized outside the domain the counts actually cover.
+
+Another common problem is mixing observed counts from one daypart with totals reported for a broader day. If the count schedule did not cover the full pattern of use, the expansion step may be mathematically valid but substantively too narrow.
+
+## Effort types
+
+Different designs turn effort into different target quantities:
+
+- total angler-hours for a domain;
+- total boat-hours for a domain;
+- counts of trips or parties;
+- or stratum-specific effort totals that later roll up to a seasonal number.
+
+The estimator has to match the unit. A boat count should not be silently interpreted as an angler-hour total unless the conversion logic is explicit.
+
+## Reporting effort
+
+Effort estimates are often the first number a manager wants to see, but they should still be reported carefully:
+
+- say what unit was used;
+- say what time period was covered;
+- say whether the estimate is stratified;
+- say how uncertainty was computed.
+
+If the report needs to compare effort across years, the analyst should also say whether the frame, access coverage, or survey schedule changed. A year-over-year comparison can be misleading if the effort domain changed underneath it.
+
+## Worked example
+
+```{r}
+counts <- data.frame(
+  stratum = c("weekday", "weekday", "weekend", "weekend"),
+  sampled_periods = c(12, 10, 6, 4),
+  total_periods = c(24, 24, 12, 12),
+  anglers = c(18, 24, 30, 26)
+)
+
+counts$weight <- counts$total_periods / counts$sampled_periods
+counts$effort <- counts$anglers * counts$weight
+
+aggregate(effort ~ stratum, data = counts, sum)
+sum(counts$effort)
+```
+
+The example expands observed counts to the full stratum by multiplying each sampled count by the inverse sampling fraction. In a real analysis, the weights would come from the survey design rather than being entered by hand.
+
+The example is intentionally simple, but it shows the core structure of the effort calculation: observed count times representation weight equals expanded effort contribution.
+
+## `tidycreel` support
+
+Implemented:
+- Later chapters show how the package handles effort estimation.
+
+Partially supported:
+- The conceptual structure of effort estimation is introduced here; implementation comes later.
+
+Manual or conceptual:
+- Checking that counts represent the sampled domain.
+- Verifying that the count periods match the frame.
+- Deciding what to do with missing count periods.
+
+The package can automate the arithmetic once the design is known, but the analyst still has to decide whether the count record actually supports the requested domain.
+
+## Example focus
+
+Estimating annual angler-hours from site-period counts in a stratified reservoir survey.
+
+That example is useful because it combines the most common effort ingredients: stratified sampling, count expansion, and a reportable annual total.
+
+## Takeaway
+
+Effort estimation is only as good as the link between counts and the frame. If that link is weak, the total may look polished but still be fragile.
+
+The result can be numerically tidy and still rest on a bad coverage story.

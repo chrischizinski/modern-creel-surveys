@@ -1,0 +1,11 @@
+---
+title: "Acknowledgments"
+---
+
+## Acknowledgments
+
+This page will acknowledge collaborators, reviewers, and the people whose field and analysis work shaped the book.
+
+## Site role
+
+In a polished online book, this kind of page helps create the same front-matter rhythm you see in books like `tmwr`, `Advanced R`, and `R for Data Science`.

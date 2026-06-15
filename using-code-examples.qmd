@@ -1,0 +1,11 @@
+---
+title: "Using Code Examples"
+---
+
+## Draft placeholder
+
+This page describes how to run the examples, what packages are required, and how to read the code blocks in the rendered book.
+
+## Site role
+
+This page shows readers how to use the examples, what the code blocks assume, and where the examples fit in the workflow.

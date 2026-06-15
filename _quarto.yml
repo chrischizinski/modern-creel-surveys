@@ -1,0 +1,86 @@
+project:
+  type: book
+
+book:
+  title: "Modern Creel Survey Analysis in R"
+  subtitle: "Design, estimation, diagnostics, and reporting with tidycreel"
+  author: "TBD"
+  cover-image: images/tidy_creel_cover.png
+  cover-image-alt: "Cover image for Modern Creel Survey Analysis in R, showing a stylized glowing fish on a dark background."
+  favicon: images/tidycreel-favicon.svg
+  chapters:
+    - index.qmd
+    - preface.qmd
+    - acknowledgments.qmd
+    - using-code-examples.qmd
+    - part: Foundations
+      chapters:
+        - chapters/01-why-creel-surveys-matter.qmd
+        - chapters/02-estimands-units-and-domains.qmd
+        - chapters/03-design-based-logic-of-creel-estimation.qmd
+    - part: Survey Designs
+      chapters:
+        - chapters/04-access-point-creel-surveys.qmd
+        - chapters/05-roving-creel-surveys.qmd
+        - chapters/06-aerial-camera-assisted-and-remote-count-designs.qmd
+        - chapters/07-stratification-and-allocation.qmd
+        - chapters/08-bias-and-failure-modes.qmd
+    - part: Data Structures and Validation
+      chapters:
+        - chapters/09-creel-data-as-linked-tables.qmd
+        - chapters/10-building-a-creel-design-object.qmd
+        - chapters/11-cleaning-data-that-changes-estimates.qmd
+    - part: Estimation and Reporting
+      chapters:
+        - chapters/12-effort-estimation.qmd
+        - chapters/13-catch-harvest-and-release-estimation.qmd
+        - chapters/14-cpue-estimation.qmd
+        - chapters/15-uncertainty-diagnostics-and-precision.qmd
+        - chapters/16-reporting-and-interpretation.qmd
+    - part: Case Studies
+      chapters:
+        - chapters/17-case-study-reservoir-creel-survey.qmd
+    - part: Appendices
+      chapters:
+        - appendices/01-notation.qmd
+        - appendices/02-data-notes.qmd
+        - appendices/03-reproducibility.qmd
+
+bibliography: references.bib
+csl: transactions-of-the-american-fisheries-society.csl
+
+format:
+  html:
+    theme:
+      light: lumen
+      dark: slate
+    css: styles.css
+    metadata:
+      image: images/tidy_creel_cover.png
+    toc: true
+    toc-title: "On this page"
+    toc-depth: 3
+    number-depth: 2
+    code-fold: show
+    html-math-method: katex
+    fontsize: 1.05em
+    grid:
+      body-width: 1100px
+      margin-width: 250px
+      gutter-width: 1.5rem
+    page-layout: full
+    smooth-scroll: true
+    anchor-sections: true
+    code-copy: true
+    link-external-newwindow: true
+    highlight-style: arrow
+
+website:
+  open-graph: true
+  twitter-card:
+    image: images/tidy_creel_cover.png
+    title: "Modern Creel Survey Analysis in R"
+    description: "A methods-first Quarto book on design-based creel survey analysis with tidycreel."
+
+execute:
+  freeze: auto

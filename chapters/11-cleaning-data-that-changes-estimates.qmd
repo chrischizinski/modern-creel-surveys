@@ -1,0 +1,107 @@
+---
+title: "Cleaning Data That Changes Estimates"
+---
+
+## Purpose
+
+Data cleaning is part of the analysis in creel work, not just housekeeping.
+
+It can change the estimand, the totals, the rates, and the uncertainty.
+
+That is true because cleaning decisions often change which records remain in scope and how the remaining records are interpreted. In creel analysis, a cleanup rule can be every bit as consequential as a modeling choice.
+
+## Key ideas
+
+- Species codes
+- Trip duration
+- Party size
+- Zero catches
+- Duplicate interviews
+- Impossible values
+- Missing or inconsistent trip boundaries
+
+## Why cleaning is methodological
+
+In creel work, a cleanup step can:
+
+- change whether a record is included;
+- change how a trip is counted;
+- change the denominator used for a rate;
+- change the species classification used in the report;
+- change the uncertainty because the effective sample changes.
+
+That means cleaning is part of the method, not just part of file preparation.
+
+The analyst should think of cleaning as a sequence of methodological decisions:
+
+- what counts as a valid record;
+- what gets recoded versus removed;
+- what can be repaired from the source data;
+- and what should be left untouched because it would alter the original meaning.
+
+If those decisions are made casually, the analysis can drift away from the field record without anyone noticing.
+
+## Common cleanup tasks
+
+Examples include:
+
+- standardizing species codes;
+- checking that trip start and end times are plausible;
+- reconciling party size with angler counts;
+- identifying duplicates;
+- fixing impossible values;
+- deciding how to handle zero-catch and zero-effort records;
+- separating incomplete and completed trips correctly.
+
+Each of these tasks can look mechanical, but each one carries inferential consequences. For example, standardizing species codes sounds clerical until a code merge changes the species-level total in the final report.
+
+## What to document
+
+Cleanup should leave a trail. The analyst should be able to answer:
+
+- which records were changed;
+- which rule was applied;
+- whether the raw record was preserved;
+- and whether the same rule will be used in the next reporting cycle.
+
+That log is part of the analysis record. It protects the estimate from becoming an undocumented sequence of edits.
+
+## A conservative rule
+
+When a cleanup choice changes the estimate, it should be documented the same way a modeling choice would be documented.
+
+That means the analyst should be able to answer:
+
+- what was changed;
+- why it was changed;
+- what the effect on the estimate was;
+- and whether the same choice should be applied in future reports.
+
+When the impact is large, the safest workflow is usually to keep both the raw and cleaned versions and make the transformation explicit rather than irreversible.
+
+## `tidycreel` support
+
+Implemented:
+- Later chapters show which validation and cleaning helpers are available in the package workflow.
+
+Partially supported:
+- The conceptual rule set is introduced here; implementation details come later.
+
+Manual or conceptual:
+- Deciding how cleaning affects the estimand.
+- Writing a cleanup log.
+- Preserving the raw record while creating a cleaned analysis record.
+
+The package can assist with validation and downstream analysis, but it cannot decide which records deserve to be altered. That judgment belongs to the analyst.
+
+## Example focus
+
+How a seemingly minor cleanup changes an annual harvest estimate by altering the denominator and the number of included interviews.
+
+That example matters because it shows why a cleanup rule should be tested like any other methodological choice. If the estimate changes materially, the report should say so.
+
+## Takeaway
+
+Cleaning is part of inference. If a cleanup rule changes the estimate, it deserves to be documented, reviewed, and justified.
+
+In creel work, the boundary between data preparation and analysis is thinner than it looks.

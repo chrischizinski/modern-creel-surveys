@@ -1,0 +1,23 @@
+---
+title: "Data Notes"
+---
+
+## Purpose
+
+This appendix records the practical assumptions that help the examples stay readable and reproducible.
+
+## Example-data principles
+
+- Use small, synthetic examples where possible.
+- Keep the table structure explicit.
+- Prefer names that make the role of each field obvious.
+- Avoid silently dropping missing values.
+
+## Cleaning principle
+
+The examples assume the cleaned analysis dataset is separate from the raw record. That makes it easier to compare the effect of cleanup decisions and to rerun the same workflow later.
+
+## Reuse principle
+
+If the book eventually acquires a standard example dataset, it should be documented here so that the reader knows which chapters rely on it.
+

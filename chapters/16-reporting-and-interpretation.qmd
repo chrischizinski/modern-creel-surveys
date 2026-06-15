@@ -1,0 +1,115 @@
+---
+title: "Reporting and Interpretation"
+---
+
+## Purpose
+
+The final step in a creel workflow is the report. It explains what the estimate means, what it does not mean, and how much confidence the reader should place in it.
+
+This chapter is where the earlier methodological decisions become visible to the people who need the result. A report is not just output formatting; it is the public face of the analysis.
+
+## Key ideas
+
+- Technical versus managerial reporting
+- Tables, figures, and narrative summaries
+- Limitations and caveats
+- Reproducible reporting workflow
+- How to avoid overstating the result
+
+## Different audiences
+
+Creel reports often serve multiple audiences:
+
+- field staff who need operational feedback;
+- managers who need a decision summary;
+- researchers who need methodological detail;
+- stakeholders who need a concise explanation of what happened.
+
+The same estimate may need different levels of detail for each audience, but the underlying claim should stay the same.
+
+That separation matters because audience adaptation should change the presentation, not the substance. If the estimate means one thing to staff and another to managers, the report has already failed.
+
+## Reporting style
+
+A defensible report usually includes:
+
+- a short statement of the question;
+- the reporting domain;
+- the design and unit of analysis;
+- the key estimates;
+- uncertainty and caveats;
+- a short interpretation that avoids overclaiming.
+
+The strongest reports make the domain visible early, use plain language for the target quantity, and keep the interpretation close to the evidence.
+
+## Common mistakes
+
+The most common reporting failures are:
+
+- leaving out the domain;
+- failing to say what the denominator is;
+- presenting a point estimate without uncertainty;
+- mixing stratified and unstratified interpretations;
+- describing a result as general when it only covers a subset of the fishery.
+
+Another common failure is burying the domain in a footnote or appendix. If the boundary of the estimate matters, it should be visible where the result is stated.
+
+## Reproducible outputs
+
+The report should be reproducible from the same analysis pipeline that generated the estimates. That makes it easier to:
+
+- rerun the report when data change;
+- track revisions across years;
+- audit the steps that produced a conclusion.
+
+Reproducibility also protects the report from drifting away from the analysis over time. When a future analyst reruns the workflow, they should get the same structure and ideally the same conclusion unless the data changed.
+
+## Worked example
+
+```{r}
+estimate <- 2345
+se <- 180
+lower <- estimate - 1.96 * se
+upper <- estimate + 1.96 * se
+
+cat(
+  "Estimated annual angler-hours in the public-access domain were",
+  format(estimate, big.mark = ","),
+  "with an approximate 95% interval from",
+  format(round(lower), big.mark = ","),
+  "to",
+  format(round(upper), big.mark = ","),
+  ".\n"
+)
+```
+
+That style works because it tells the reader what was estimated, how uncertain it is, and what domain it applies to without adding unnecessary words.
+
+The wording is compact, but the information content is high. That is the standard the rest of the report should try to meet.
+
+## `tidycreel` support
+
+Implemented:
+- Later chapters show how the package supports report-ready outputs.
+
+Partially supported:
+- The reporting principles are established here; implementation comes later.
+
+Manual or conceptual:
+- Producing a defensible report from the analysis.
+- Writing for different audiences without changing the estimate itself.
+- Keeping the interpretation narrower than the data can support.
+
+The package can help generate report-ready numbers, but the analyst still owns the narrative.
+
+## Example focus
+
+A year-end creel report for agency staff and managers that includes both totals and caveats.
+
+That is where methodological discipline matters most, because the audience is likely to treat the numbers as decision inputs.
+
+## Takeaway
+
+Interpretation is part of analysis. If the report overstates the scope of the estimate, the numerical result is not enough to save it.
+
+The report has to tell the truth about the design, not just about the arithmetic.

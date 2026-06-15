@@ -1,0 +1,72 @@
+---
+title: "Roving Creel Surveys"
+---
+
+## Purpose
+
+Roving surveys are useful when angling activity is spread across a fishery and fixed access points do not capture the full pattern of use. Clerks move through the survey area and encounter anglers while they are still fishing. That makes roving surveys a better fit for river reaches, long shorelines, and other settings where trips do not pass cleanly through one entry and exit point.
+
+The same flexibility makes the design easier to misuse. Because interviews happen mid-trip, the analyst has to separate what was observed during the survey from what the trip will eventually become. A roving interview is often a snapshot, not a completed-trip record.
+
+## Key ideas
+
+- Instantaneous counts record activity at one moment.
+- Progressive counts accumulate observations across a route.
+- Mid-trip interviews capture incomplete-trip information.
+- The estimate has to match the observation process, not the other way around.
+- Observed-in-session rates are not the same as completed-trip rates.
+
+## How roving surveys work
+
+Roving surveys move through the fishery and record what is seen at a sequence of sites or transects. Clerks may record an instantaneous count at a specific time or a progressive count across a route. They may also interview anglers who are still on the water.
+
+The key point is that the count and the interview may describe different parts of the same fishing experience. That is acceptable if the estimand is defined carefully, but it becomes a problem if the output is interpreted as a completed-trip total without justification.
+
+## Why incomplete trips are hard
+
+When the interview happens before the trip ends, the analyst does not yet have a completed-trip record. The observed duration is censored, and the eventual catch or effort can change after the interview. That means the rate measured at interview time may differ from the rate that would be reported at trip end.
+
+This is why the estimand matters. In some cases the target is a mid-trip snapshot or an observed-in-session rate. In other cases the analyst wants a completed-trip total, which roving data may not support directly. If the target and the observation process do not match, ratio logic can become misleading.
+
+## Practical interpretation
+
+The analyst has to decide whether the survey is estimating:
+
+- a completed-trip catch rate;
+- a mid-trip snapshot;
+- a site-level abundance proxy;
+- or a hybrid quantity that should be reported with caution.
+
+If that choice is not made explicitly, roving data can be treated as if they were completed-trip records even when they are not. That is a methodological error, not just a reporting style problem.
+
+## When roving surveys fit best
+
+Roving surveys are especially useful when:
+
+- the fishery has long or diffuse shoreline access;
+- anglers move within the fishery during the day;
+- a fixed entry network would miss a substantial share of use;
+- and the analyst is prepared to report a quantity that matches the observation process.
+
+They are less comfortable when the project needs a clean completed-trip total from every contact. In that setting, the analyst has to be explicit about whether the trip was complete, partial, or still ongoing at contact time.
+
+## `tidycreel` support
+
+Implemented:
+- Later estimation chapters show how `tidycreel` handles roving-style workflows.
+
+Partially supported:
+- The survey logic is described here; estimator details come later.
+
+Manual or conceptual:
+- Diagnosing incomplete-trip bias.
+- Deciding what quantity the incomplete interview represents.
+- Separating observed-in-session rates from completed-trip rates.
+
+## Example focus
+
+A river reach where anglers move throughout the day is a typical roving survey scenario. Clerks interview participants mid-trip, so the record describes only part of the fishing experience. The analyst has to decide whether that record is being used as a snapshot, a rate during the observed interval, or a proxy for some larger estimate.
+
+## Takeaway
+
+Roving surveys help cover fisheries that fixed access-point designs miss, but they require more interpretive discipline. When the interview happens mid-trip, the output is not automatically a completed-trip estimate. The estimator has to match the observation process, and the analyst has to say clearly what quantity is being reported.

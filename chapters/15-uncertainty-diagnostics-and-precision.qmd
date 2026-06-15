@@ -1,0 +1,132 @@
+---
+title: "Uncertainty, Diagnostics, and Precision"
+---
+
+## Purpose
+
+Good creel estimates need both a point estimate and a measure of uncertainty.
+
+This chapter addresses uncertainty, diagnostics, precision reporting, and sensitivity checks.
+
+The core question is not just how big the estimate is, but how much faith the reader should put in it and why.
+
+## Key ideas
+
+- Design-based variance
+- Precision reporting
+- Diagnostics for sample coverage
+- Sensitivity to missingness and bias
+- Distinguishing random error from structural problems
+
+## Uncertainty
+
+Uncertainty answers the question: how much would this estimate change if we repeated the survey under the same design?
+
+That is different from bias, which asks whether the design is centered on the right target in the first place.
+
+In creel work, uncertainty can come from:
+
+- limited sample size;
+- uneven strata;
+- variable response;
+- count variability;
+- incomplete coverage of the frame.
+
+The important distinction is that uncertainty is about variability under the design, while bias is about systematic drift away from the target. A report that confuses those two can make a noisy estimate seem wrong when it is merely imprecise.
+
+## Diagnostics
+
+Diagnostics show whether the design and the data actually support the estimate.
+
+Useful checks include:
+
+- sample coverage by stratum;
+- counts of missing or unmatched records;
+- effect of a small number of high-leverage observations;
+- sensitivity of the estimate to alternate cleaning choices;
+- whether the realized sample resembles the planned sample.
+
+Diagnostics are the bridge between the statistical result and the field reality. They tell the analyst whether the design assumptions still look plausible after cleaning, weighting, and aggregation.
+
+## Diagnostic tiers
+
+It helps to think in tiers:
+
+- data integrity diagnostics, which check for missing, duplicated, or unmatched records;
+- design diagnostics, which check coverage, weighting, and sample balance;
+- and estimate diagnostics, which check whether the final number is overly sensitive to a small number of records or a single rule choice.
+
+That separation makes it easier to say where a problem actually lives.
+
+## Precision reporting
+
+Precision should be communicated in terms that readers can understand:
+
+- standard errors;
+- confidence intervals;
+- relative standard error or coefficient of variation;
+- and practical judgment about whether the estimate is stable enough for the decision at hand.
+
+Precision is not the same thing as correctness. A precise estimate can still be wrong if the frame or assumptions are wrong.
+
+Precision should also be matched to the audience. A technical appendix can carry the full variance details, while the main report may only need a concise interval and a short explanation of what drives it.
+
+## Sensitivity checks
+
+When the estimate could change under plausible alternatives, sensitivity checks should be explicit.
+
+Examples:
+
+- different handling of missing counts;
+- alternate treatment of incomplete trips;
+- different stratification choices;
+- alternative cleanup rules.
+
+Sensitivity checks are most valuable when they test a plausible alternative that would genuinely change the interpretation. A tiny reformatting change is not very informative; a different handling of incomplete trips usually is.
+
+## Worked example
+
+```{r}
+effort <- c(420, 180)
+catch <- c(140, 96)
+
+cpue <- catch / effort
+overall <- sum(catch) / sum(effort)
+
+se_simple <- sd(cpue) / sqrt(length(cpue))
+ci_lower <- overall - 1.96 * se_simple
+ci_upper <- overall + 1.96 * se_simple
+
+c(overall_cpue = overall, se_simple = se_simple, lower = ci_lower, upper = ci_upper)
+```
+
+This is only an illustrative calculation, but it shows the reporting pattern: point estimate, uncertainty, and a quick check that the result is not being treated as more certain than it is. In the real workflow, the variance would come from the survey design rather than from this brief summary.
+
+Even a simple example can be useful if it reminds the analyst to separate the estimate from the uncertainty wrapper around it.
+
+## `tidycreel` support
+
+Implemented:
+- Later chapters show the available diagnostics and uncertainty outputs.
+
+Partially supported:
+- The uncertainty framework is introduced here; implementation comes later.
+
+Manual or conceptual:
+- Interpreting uncertainty in context.
+- Deciding when a precision problem is actually a design problem.
+- Writing sensitivity notes that are honest but concise.
+
+The package can help compute and organize the outputs, but the diagnosis still belongs to the analyst.
+
+## Example focus
+
+A precision summary that informs whether more sampling is needed in the next field season.
+
+That is the most practical use of uncertainty in many agency settings: deciding whether the current design is good enough or whether the next round needs more coverage.
+
+## Takeaway
+
+Uncertainty tells you how noisy the estimate is. Diagnostics show whether the estimate should be trusted at all. The report should include both.
+
+If either piece is missing, the reader has only part of the story.

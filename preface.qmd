@@ -1,0 +1,21 @@
+---
+title: "Preface"
+---
+
+## Why this book exists
+
+Creel analysis often sits between field operations, messy data, and annual reporting deadlines. This book is intended to make that work more explicit, more reproducible, and easier to review.
+
+## What this book is not
+
+It is not a package reference manual, a survey sampling textbook, or a broad fisheries methods handbook. It is a methods-first guide to the creel problems that `tidycreel` is meant to support.
+
+## Working convention
+
+Throughout the book, each chapter distinguishes among:
+
+- conceptual guidance
+- current `tidycreel` support
+- partial support
+- manual workflow steps
+- future development opportunities

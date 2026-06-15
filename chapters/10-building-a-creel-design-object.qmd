@@ -1,0 +1,108 @@
+---
+title: "Building a Creel Design Object"
+---
+
+## Purpose
+
+Once the frame and strata are known, the analysis needs a design object that holds the sampling logic in one place.
+
+This chapter shows how a design object can encode frame, strata, and inclusion logic. In `tidycreel`, `creel.connect()` brings the linked tables together before the design object is used for estimation.
+
+The design object is the handoff point between the data model and the estimator. It is where the analyst says, in a single object, how the sample relates to the frame and what assumptions are already in force.
+
+## Key ideas
+
+- Design metadata
+- Inclusion probabilities
+- Weighting and expansion logic
+- Validation checks
+- Relationship to the underlying frame tables
+
+## What a design object should store
+
+A design object should know:
+
+- what frame it refers to;
+- what strata exist;
+- how units were selected;
+- what inclusion probabilities apply;
+- how weights or expansion factors are derived;
+- what validation has already been performed.
+
+The object should make it hard to forget the design when moving from one step of analysis to the next.
+
+That means the object should carry enough context to prevent accidental reuse in the wrong domain. A design built for one waterbody or season should not silently behave like a design for another.
+
+## Why this matters
+
+Design code often lives in multiple places:
+
+- one script builds the frame;
+- another joins counts and interviews;
+- another calculates totals;
+- another produces the report.
+
+If the design logic is scattered, future edits become risky. A design object gives the workflow a single anchor.
+
+It also gives the analyst a place to attach checks. If a later data correction changes a key field or a stratum label, the design object is the place where that change should surface.
+
+## `creel.connect()`
+
+`creel.connect()` is the connection point between the relational data model and the analysis object. It should do the smallest useful amount of work:
+
+- confirm that the frame and analysis tables can be matched;
+- carry forward the validated keys and strata;
+- preserve the reporting domain that the later estimators will use;
+- keep the raw tables separate from the derived design object.
+
+That makes the connection step explicit instead of hiding it inside a later estimator call.
+
+The usefulness of that boundary is practical. It keeps validation close to the data integration step and keeps the estimator from having to guess whether the frame was assembled correctly.
+
+## Validation checks
+
+Before analysis starts, check that:
+
+- the frame rows are unique;
+- strata are defined consistently;
+- every sampled unit can be matched to a frame record;
+- inclusion probabilities are valid;
+- weights are nonzero where they should be.
+
+If these checks fail, the estimator may still produce output, but the output should not be trusted.
+
+In a live project, these checks are often the difference between a manageable correction and a report that later has to be withdrawn or rewritten.
+
+## Example lifecycle
+
+A design object may start as a simple representation of one season's public-access survey. Later it may be reused to estimate a subset of the same fishery, such as weekend effort or one target species. If the object still reflects the original frame and strata, the analyst can compare those derived estimates without rebuilding the entire workflow.
+
+That only works if the object is honest about what it contains. If the survey domain changes, the design object should be rebuilt rather than patched over.
+
+## `tidycreel` support
+
+Implemented:
+- `creel.connect()` is the bridge from linked tables to the connected analysis object.
+- The package workflow for building and validating design objects is described later in the book.
+
+Partially supported:
+- The design-object concept bridges the data model and the estimators.
+
+Manual or conceptual:
+- Validating the design object against the frame.
+- Checking that the object actually reflects the survey operations.
+- Deciding whether the design object needs to be rebuilt after data corrections.
+
+The package can keep the design together, but the analyst still has to decide when the design has changed enough to require a new object.
+
+## Example focus
+
+Constructing a design object for one waterbody and one season with weekday and weekend strata.
+
+That example is deliberately small because the point is the relationship between the data and the sampling logic, not the complexity of the fishery.
+
+## Takeaway
+
+The design object is not just a convenience. It is the record of how the sample connects to the population, and it should be treated as seriously as the raw data.
+
+If that object is wrong, everything downstream inherits the mistake.
