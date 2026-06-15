@@ -18,6 +18,44 @@ harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
 harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 
 shift_hours <- c("1" = 8, "2" = 6)
+
+# Derive total_harvest per interview for design pipeline (Chapter 10)
+harvest_by_interview <- harlan_catch |>
+  filter(catch_type == "harvested") |>
+  group_by(interview_id) |>
+  summarise(total_harvest = sum(n_fish), .groups = "drop")
+
+harlan_interviews_with_catch <- harlan_interviews |>
+  left_join(harvest_by_interview, by = "interview_id") |>
+  mutate(total_harvest = if_else(is.na(total_harvest), 0L, as.integer(total_harvest)))
+
+suppressMessages({
+  harlan_design_final <- creel_design(
+    calendar = harlan_schedule,
+    date     = "date",
+    strata   = "day_type"
+  ) |>
+    add_counts(counts = harlan_counts, count_time_col = "count_time") |>
+    add_interviews(
+      interviews     = harlan_interviews_with_catch,
+      catch          = "total_harvest",
+      effort         = "hours_fished",
+      trip_duration  = "hours_fished",
+      trip_status    = "trip_status",
+      n_anglers      = "n_anglers",
+      angler_type    = "angler_type",
+      angler_method  = "angler_method",
+      interview_type = "access"
+    ) |>
+    add_catch(
+      data          = harlan_catch,
+      catch_uid     = "interview_id",
+      interview_uid = "interview_id",
+      species       = "species",
+      count         = "n_fish",
+      catch_type    = "catch_type"
+    )
+})
 ```
 
 ## Why roving surveys exist
@@ -403,19 +441,16 @@ Variance can also be estimated using a Taylor-series expansion that accounts for
 ```{r}
 #| label: estimate-catch-rate-mor
 #| echo: true
-#| eval: false
 
-# estimate_catch_rate with MOR for incomplete trips
-# Requires a creel_design object — see Chapter 10 for full pipeline
 est <- estimate_catch_rate(
-  design    = harlan_design,
-  estimator = "mean-of-ratios",
-  truncate_at = 0.5,
-  by        = "species"
+  design      = harlan_design_final,
+  estimator   = "mortr",
+  truncate_at = 0.5
 )
+est
 ```
 
-The `truncate_at` argument applies the 0.5-hour threshold automatically. The `estimator = "mean-of-ratios"` argument selects the Hoenig-recommended MOR formula rather than the ROM default. Chapter 10 covers the full `creel_design()` pipeline required to pass a design object to `estimate_catch_rate()`.
+The `truncate_at` argument applies the 0.5-hour threshold automatically. The `estimator = "mortr"` argument selects the truncated mean-of-ratios formula rather than the ratio-of-means default. The overall CPUE of 0.792 fish/hr from the Taylor-variance estimator is slightly higher than the manually computed MOR of 0.29 fish/hr for Walleye alone, because here it uses the aggregated harvest total across all species rather than Walleye-only counts.
 
 ## Diagnosing incomplete trips with `validate_incomplete_trips`
 
@@ -424,24 +459,19 @@ Before computing catch rates from incomplete interviews, `tidycreel` provides a 
 ```{r}
 #| label: validate-incomplete
 #| echo: true
-#| eval: false
 
-# validate_incomplete_trips checks the roving interview structure
-# Requires creel_design object — illustrative call
 diagnostics <- validate_incomplete_trips(
-  design      = harlan_design,
-  catch       = harlan_catch,
-  effort      = harlan_counts,
+  design      = harlan_design_final,
+  catch       = total_harvest,
+  effort      = hours_fished,
   truncate_at = 0.5
 )
+diagnostics
 ```
 
-The function flags:
+The function runs a two one-sided tests (TOST) equivalence procedure that compares the CPUE of complete and incomplete trips. If the two groups produce catch rates that are statistically indistinguishable within a ±20% equivalence band, the validation passes. If the gap between complete and incomplete trip CPUE falls outside that band, validation fails and the recommendation is to use complete trips only.
 
-- Trips with zero elapsed time (usually data entry errors)
-- Trips below the truncation threshold
-- Trips where reported catch exceeds what is biologically plausible given elapsed duration
-- Imbalanced incomplete-trip fractions across strata (if one stratum has disproportionately many short contacts, the truncation may introduce stratum-level bias)
+At Harlan, validation fails. Incomplete trip CPUE (0.792 fish/hr) exceeds complete trip CPUE (0.585 fish/hr) by more than the 20% equivalence threshold. This pattern is consistent with length-of-stay bias operating in the expected direction: anglers who had already caught fish when contacted were more likely to continue fishing, inflating mid-trip catch rates relative to completed-trip rates. The failed validation does not invalidate the roving data; it confirms that the two trip types capture different moments in the angling process and should not be pooled without appropriate estimator selection.
 
 Running `validate_incomplete_trips()` before computing estimates is especially important in programs that combine access-point and roving contacts in a single dataset, as is common when technicians collect both completed and incomplete interviews on the same day.
 
@@ -515,13 +545,11 @@ When `trip_status = "incomplete"`, downstream functions in `tidycreel` automatic
 ```{r}
 #| label: summarize-trips-call
 #| echo: true
-#| eval: false
 
-# Requires creel_design object; illustrative syntax
-summarize_trips(harlan_design)
+summarize_trips(harlan_design_final)
 ```
 
-The output shows counts of complete and incomplete interviews per stratum, mean elapsed effort hours by status, and the fraction below the truncation threshold — enough to diagnose whether the roving component is adequately sampled before committing to a full seasonal estimate.
+The output reports total interview counts, the complete/incomplete split, and summary statistics for elapsed duration by trip status. The 4.74-hour mean for complete trips and 1.71-hour mean for incomplete trips match the manual calculation from the length-of-stay comparison earlier in this chapter — confirming that the design object carries the same data used in the worked examples and that the trip-status routing is correct before estimation proceeds.
 
 ## When to use roving surveys
 
