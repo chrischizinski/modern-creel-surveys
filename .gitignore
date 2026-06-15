@@ -10,3 +10,15 @@ _freeze/
 
 /.quarto/
 **/*.quarto_ipynb
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Intermediate chapter artifacts (expanded/cleaned versions and rendered HTML)
+chapters/*.expanded*
+chapters/*.expanded.cleaned*
+chapters/*.html
+chapters/*_files/
