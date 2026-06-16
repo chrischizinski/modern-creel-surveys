@@ -2,106 +2,634 @@
 title: "Cleaning Data That Changes Estimates"
 ---
 
-## Purpose
+```{r}
+#| label: setup-ch11
+#| include: false
+library(tidycreel)
+library(tidyverse)
+library(lubridate)
+library(here)
 
-Data cleaning is part of the analysis in creel work, not just housekeeping.
+harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
+harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
+harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
+harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 
-It can change the estimand, the totals, the rates, and the uncertainty.
+shift_hours <- c("1" = 8L, "2" = 6L)
 
-That is true because cleaning decisions often change which records remain in scope and how the remaining records are interpreted. In creel analysis, a cleanup rule can be every bit as consequential as a modeling choice.
+harlan_counts_effort <- harlan_counts |>
+  mutate(
+    period        = as.character(period),
+    total_anglers = boat_anglers + bank_anglers,
+    angler_hours  = total_anglers * shift_hours[period]
+  ) |>
+  select(reservoir, date, day_type, period, section, count_time, angler_hours)
 
-## Key ideas
+harvest_by_interview <- harlan_catch |>
+  filter(catch_type == "harvested") |>
+  group_by(interview_id) |>
+  summarise(total_harvest = sum(n_fish), .groups = "drop")
 
-- Species codes
-- Trip duration
-- Party size
-- Zero catches
-- Duplicate interviews
-- Impossible values
-- Missing or inconsistent trip boundaries
+harlan_interviews_with_catch <- harlan_interviews |>
+  left_join(harvest_by_interview, by = "interview_id") |>
+  mutate(total_harvest = if_else(is.na(total_harvest), 0L, as.integer(total_harvest)))
 
-## Why cleaning is methodological
+build_design <- function(interviews, catch_data) {
+  suppressWarnings(suppressMessages(
+    creel_design(calendar = harlan_schedule, date = "date", strata = "day_type") |>
+      add_counts(harlan_counts_effort, count_time_col = "count_time") |>
+      add_interviews(
+        interviews     = interviews,
+        catch          = "total_harvest",
+        effort         = "hours_fished",
+        trip_duration  = "hours_fished",
+        trip_status    = "trip_status",
+        n_anglers      = "n_anglers",
+        angler_type    = "angler_type",
+        angler_method  = "angler_method",
+        interview_type = "access"
+      ) |>
+      add_catch(
+        data          = catch_data,
+        catch_uid     = "interview_id",
+        interview_uid = "interview_id",
+        species       = "species",
+        count         = "n_fish",
+        catch_type    = "catch_type"
+      )
+  ))
+}
 
-In creel work, a cleanup step can:
+harlan_design_ch11 <- build_design(harlan_interviews_with_catch, harlan_catch)
+```
 
-- change whether a record is included;
-- change how a trip is counted;
-- change the denominator used for a rate;
-- change the species classification used in the report;
-- change the uncertainty because the effective sample changes.
+## Cleaning as part of inference {#sec-cleaning-inference}
 
-That means cleaning is part of the method, not just part of file preparation.
+Every creel analysis involves cleaning. Species names get entered inconsistently.
+Trip durations sometimes fall outside what is physically possible for a survey
+shift. Interview records occasionally contain party sizes that conflict with count
+data. Catch entries arrive with values that seem impossibly large.
 
-The analyst should think of cleaning as a sequence of methodological decisions:
+None of those issues resolves itself. The analyst must make decisions, and those
+decisions are not neutral. A cleanup rule that removes or recodes records changes
+which data enter the estimator — which changes the numerator, the denominator,
+or both. That means cleaning decisions are methodological decisions. They belong
+in the analysis record alongside model choices, stratification choices, and
+estimator choices.
 
-- what counts as a valid record;
-- what gets recoded versus removed;
-- what can be repaired from the source data;
-- and what should be left untouched because it would alter the original meaning.
+This chapter works through the most consequential cleaning steps for a creel
+dataset: species standardization, trip duration plausibility, catch quantity
+review, and trip status verification. For each step, the focus is not just on
+how to perform the check but on how the choice propagates through to the final
+estimate.
 
-If those decisions are made casually, the analysis can drift away from the field record without anyone noticing.
+The Harlan Reservoir 2022 dataset is clean by real-world standards. It was
+collected under a quality-controlled protocol and reviewed before archiving. That
+makes it a realistic starting point: it will show the kinds of issues that
+survive pre-analysis review, not synthetic data constructed to contain errors.
 
-## Common cleanup tasks
+## Species names and standardization {#sec-species-codes}
 
-Examples include:
+### Why species names matter for estimation
 
-- standardizing species codes;
-- checking that trip start and end times are plausible;
-- reconciling party size with angler counts;
-- identifying duplicates;
-- fixing impossible values;
-- deciding how to handle zero-catch and zero-effort records;
-- separating incomplete and completed trips correctly.
+Species catch data in creel programs often arrives in free-text form. Interview
+clerks enter what anglers say, and anglers use common names that vary by region,
+familiarity, and culture. "Drum" and "sheepshead" describe the same fish in
+different places. "Crappie" may refer to Black Crappie, White Crappie, or an
+undifferentiated pooled entry.
 
-Each of these tasks can look mechanical, but each one carries inferential consequences. For example, standardizing species codes sounds clerical until a code merge changes the species-level total in the final report.
+Those naming differences are inconsequential at the level of a single survey
+running on consistent entry rules. They become consequential when surveys are
+compared across time, merged into multi-site databases, or linked to external
+data sources (bag limit tables, stock assessment databases, CreelCat). A merge
+that pairs "White Bass" with "WHB" will succeed; a merge that pairs "Whitebass"
+with "WHB" will silently fail, and those records will appear as missing rather
+than as mismatched.
 
-## What to document
+The American Fisheries Society publishes standard species codes for exactly this
+reason. `tidycreel` provides `standardize_species()`, which maps free-text
+species names to AFS codes and identifies entries that do not match any known
+code.
 
-Cleanup should leave a trail. The analyst should be able to answer:
+### Applying standardization to Harlan catch data
 
-- which records were changed;
-- which rule was applied;
-- whether the raw record was preserved;
-- and whether the same rule will be used in the next reporting cycle.
+The Harlan catch table contains 11 species entered as free-text common names.
+Most of these map cleanly to AFS codes:
 
-That log is part of the analysis record. It protects the estimate from becoming an undocumented sequence of edits.
+```{r}
+#| label: species-standardize
+#| echo: true
+standardize_species(harlan_catch) |>
+  select(species, species_code) |>
+  distinct() |>
+  arrange(is.na(species_code), species)
+```
 
-## A conservative rule
+Eight of eleven species resolve to AFS codes. Three do not: Freshwater Drum,
+Wiper, and Crappie.
 
-When a cleanup choice changes the estimate, it should be documented the same way a modeling choice would be documented.
+Freshwater Drum (*Aplodinotus grunniens*) is a legitimate species with no
+universal AFS freshwater species code in the default lookup. Its absence from
+the lookup does not indicate a data error — it indicates a gap in the lookup
+table. Wiper is a Striped Bass × White Bass hybrid that varies in naming by
+region and lacks a single-code standard. Crappie entered without species
+designation is a data quality issue: Black Crappie and White Crappie are
+distinct management units in many systems, and pooled entries cannot be split
+after the fact.
 
-That means the analyst should be able to answer:
+These three categories represent different problems. Freshwater Drum requires a
+lookup table extension. Wiper requires a project-specific code assignment.
+Crappie requires a conversation with field staff about whether species-level
+identification was attempted and, if so, how to recover it from supplemental
+records.
 
-- what was changed;
-- why it was changed;
-- what the effect on the estimate was;
-- and whether the same choice should be applied in future reports.
+```{r}
+#| label: fig-species-codes
+#| fig-cap: "Species in the Harlan Reservoir 2022 catch records by AFS code match status. Matched species resolve to standard codes and are ready for cross-survey comparison. Unmatched species require manual resolution before merging with external data."
+#| fig-alt: "Horizontal bar chart showing total catch records for each of 11 species, colored by whether the species matched an AFS code. White Bass, Walleye, and Freshwater Drum have the most records. Three species (Freshwater Drum, Wiper, Crappie) are shown in a different color indicating no AFS match."
+#| echo: false
+standardize_species(harlan_catch) |>
+  mutate(
+    n_records  = n(),
+    code_status = if_else(!is.na(species_code), "Matched", "No AFS match"),
+    species = fct_reorder(species, n_records, .fun = function(s) sum(s))
+  ) |>
+  count(species, code_status) |>
+  ggplot(aes(x = n, y = fct_reorder(species, n), fill = code_status)) +
+  geom_col() +
+  scale_fill_manual(
+    values = c("Matched" = "#2E86AB", "No AFS match" = "#E84855"),
+    name   = "Code status"
+  ) +
+  labs(
+    x = "Catch records",
+    y = NULL
+  ) +
+  theme_creel()
+```
 
-When the impact is large, the safest workflow is usually to keep both the raw and cleaned versions and make the transformation explicit rather than irreversible.
+### What to do when codes are missing
 
-## `tidycreel` support
+When `standardize_species()` returns `NA` for a species, the analyst has three
+options, and the choice should be documented:
 
-Implemented:
-- Later chapters show which validation and cleaning helpers are available in the package workflow.
+1. **Extend the lookup** if the species has an accepted code not in the default
+   table. Supply a custom code map and re-run.
+2. **Assign a project code** for hybrids or regionally specific entries that
+   have no universal standard. The project code must be consistent across all
+   reporting cycles.
+3. **Flag as unresolved** if the entry cannot be reliably coded without
+   returning to field records. Flag the records and report species-level totals
+   only for entries with confirmed codes.
 
-Partially supported:
-- The conceptual rule set is introduced here; implementation details come later.
+Option 3 is the appropriate choice for the Harlan "Crappie" entries. Rather than
+guess, the safer path is to aggregate those records into a "Crappie (pooled)"
+category and note in the report that species-level totals for Crappie are not
+available for 2022.
 
-Manual or conceptual:
-- Deciding how cleaning affects the estimand.
-- Writing a cleanup log.
-- Preserving the raw record while creating a cleaned analysis record.
+## Trip duration: plausibility and outlier review {#sec-trip-duration}
 
-The package can assist with validation and downstream analysis, but it cannot decide which records deserve to be altered. That judgment belongs to the analyst.
+### Why hours_fished is sensitive
 
-## Example focus
+The `hours_fished` field is the effort denominator for catch-per-unit-effort
+estimates. Its mean value among complete trips drives the CPUE calculation
+directly: CPUE = (total catch) / (total hours fished). An extreme value in
+`hours_fished` inflates the denominator, deflates the CPUE, and, if the
+associated catch is high, distorts both the effort and catch components.
 
-How a seemingly minor cleanup changes an annual harvest estimate by altering the denominator and the number of included interviews.
+Access-point surveys at Harlan are scheduled in two periods: morning (period 1,
+8-hour window) and afternoon/evening (period 2, 6-hour window). A trip duration
+exceeding the scheduled window for that period is physically impossible if the
+angler's entire trip occurred within the survey shift. Durations approaching the
+shift ceiling are plausible but warrant review.
 
-That example matters because it shows why a cleanup rule should be tested like any other methodological choice. If the estimate changes materially, the report should say so.
+### Identifying outliers with flag_outliers()
 
-## Takeaway
+`flag_outliers()` implements Tukey's IQR fence method. For a numeric column with
+first quartile $Q_1$ and third quartile $Q_3$:
 
-Cleaning is part of inference. If a cleanup rule changes the estimate, it deserves to be documented, reviewed, and justified.
+$$\text{fence\_high} = Q_3 + k \times \text{IQR}$$
 
-In creel work, the boundary between data preparation and analysis is thinner than it looks.
+Values above the upper fence are flagged as outliers. The multiplier $k$
+controls sensitivity. Tukey's conventional choices are $k = 1.5$ for mild
+outliers and $k = 3.0$ for extreme outliers.
+
+```{r}
+#| label: flag-hours-k15
+#| echo: true
+flag_outliers(harlan_interviews, hours_fished, k = 1.5) |>
+  filter(is_outlier) |>
+  select(interview_id, date, day_type, period, trip_status,
+         hours_fished, fence_high, outlier_reason)
+```
+
+At $k = 1.5$, one interview is flagged: interview 388, recorded on 14 July 2022,
+with `hours_fished = 13.82`. The upper fence at $k = 1.5$ is
+$Q_3 + 1.5 \times \text{IQR} = 5.53 + 1.5 \times 4.42 = 12.17$ hours. Interview
+388 exceeds that fence.
+
+```{r}
+#| label: flag-hours-k30
+#| echo: true
+flag_outliers(harlan_interviews, hours_fished, k = 3.0) |>
+  filter(is_outlier) |>
+  select(interview_id, date, day_type, trip_status, hours_fished,
+         fence_high, outlier_reason)
+```
+
+At $k = 3.0$, the upper fence rises to
+$5.53 + 3.0 \times 4.42 = 18.80$ hours. No records are flagged. A 13.82-hour
+trip falls within the extreme-outlier fence.
+
+The choice between $k = 1.5$ and $k = 3.0$ is not mechanical. For a survey
+with 14-hour interview windows, a 13.82-hour trip is unusual but physically
+possible. Whether to treat it as an error depends on whether the survey period
+for that record permitted a trip that long. The right question is not whether the
+value is statistically unusual but whether it is substantively implausible given
+the field conditions.
+
+In this case, interview 388 is classified as a completed trip on a weekday in
+period 2 (the 6-hour window). A completed trip of 13.82 hours in a 6-hour window
+is impossible — the angler could not have completed a 13.82-hour trip within the
+survey period if the period only ran 6 hours. That physical constraint justifies
+flagging and reviewing, regardless of which $k$ value the IQR fence produced.
+
+### Visualizing the distribution
+
+```{r}
+#| label: fig-hours-distribution
+#| fig-cap: "Distribution of hours fished at Harlan Reservoir 2022, by trip status. Dashed vertical lines show the IQR fence thresholds for outlier detection at k = 1.5 (orange) and k = 3.0 (red). Interview 388 (13.82 hr, complete trip) exceeds the k = 1.5 fence. The k = 3.0 fence at 18.80 hr lies outside the axis range."
+#| fig-alt: "Histogram of hours_fished split by trip status (complete vs incomplete). Complete trips are concentrated between 2 and 8 hours; incomplete trips between 0 and 4 hours. Two dashed vertical lines indicate outlier fences at 12.17 (k=1.5, orange) and 18.80 (k=3.0, red). One point in the complete trip panel near 14 hours is visible as a solitary bar beyond the k=1.5 fence."
+#| echo: false
+flagged_hrs <- flag_outliers(harlan_interviews, hours_fished, k = 1.5)
+fence_15    <- unique(flagged_hrs$fence_high)
+fence_30    <- unique(flag_outliers(harlan_interviews, hours_fished, k = 3.0)$fence_high)
+
+ggplot(harlan_interviews, aes(x = hours_fished)) +
+  geom_histogram(binwidth = 0.5, fill = "#2E86AB", color = "white") +
+  geom_vline(xintercept = fence_15, color = "#E84855", linetype = "dashed",
+             linewidth = 0.8) +
+  geom_vline(xintercept = min(fence_30, 15), color = "#CC5500", linetype = "dotted",
+             linewidth = 0.8) +
+  annotate("text", x = fence_15 - 0.3, y = Inf, label = "k = 1.5",
+           hjust = 1, vjust = 1.5, color = "#E84855", size = 3) +
+  facet_wrap(~trip_status, ncol = 1, scales = "free_y",
+             labeller = labeller(trip_status = c(complete = "Complete trips",
+                                                  incomplete = "Incomplete trips"))) +
+  labs(x = "Hours fished", y = "Interviews") +
+  theme_creel()
+```
+
+### What to do with flagged duration records
+
+The appropriate response to a flagged trip duration depends on the source of the
+anomaly:
+
+- **Transcription error** — if field sheets show a different value, correct to
+  the field record and document the correction.
+- **Plausible but unusual** — if the value is consistent with the field record,
+  retain the record and note in the analysis log that one complete trip exceeded
+  the $k = 1.5$ fence. No correction is needed.
+- **Inconsistent with survey design** — if the duration is impossible given the
+  survey period (as in the period-2 case above), reclassify the trip as
+  incomplete, truncate `hours_fished` to the period boundary, or remove the
+  record. Each option changes the estimate differently.
+
+The conservative default is to flag, document, and retain — then report
+sensitivity to the analyst's choice (see @sec-estimation-impact).
+
+## Catch quantities: large bags and zero-catch trips {#sec-catch-quantities}
+
+### Flag_outliers on fish counts
+
+The same IQR fence logic applies to fish counts. Large bag totals can arise from
+two distinct causes: data entry error (clerk transcribed "32" instead of "2") or
+genuine large catch (angler found a schooling White Bass aggregation and limited
+out on multiple species). The fence identifies which records are statistically
+unusual; field knowledge determines which are substantively suspicious.
+
+```{r}
+#| label: flag-nfish
+#| echo: true
+flag_outliers(harlan_catch, n_fish, k = 1.5) |>
+  filter(is_outlier) |>
+  count(species) |>
+  arrange(desc(n))
+```
+
+At $k = 1.5$, 99 of 987 catch records exceed the fence at 21 fish. The
+distribution is dominated by White Bass and Walleye. White Bass at Harlan school
+aggressively during spring and fall; bag limits in Nebraska permit daily limits
+that can produce interview-level totals well above 21. Walleye with high counts
+may reflect multi-angler parties (the `n_anglers` field records the party, not
+the individual, at Harlan) or productive early-season trips.
+
+These records are not errors in the conventional sense. They are real, they are
+high, and they are the result of field conditions that the survey is designed to
+capture. Removing them would bias harvest estimates downward by systematically
+excluding high-catch parties.
+
+### Zero-catch and zero-effort records
+
+Zero catches are common and valid. An angler who fished all morning and caught
+nothing represents a real data point: zero catch, positive effort. That zero
+enters the CPUE denominator appropriately.
+
+What requires attention is zero effort on a completed trip. A record with
+`trip_status == "complete"` and `hours_fished == 0` is internally inconsistent:
+a completed trip must have positive effort. The Harlan data contains no such
+records:
+
+```{r}
+#| label: zero-effort-check
+#| echo: true
+harlan_interviews |>
+  filter(hours_fished == 0 | (trip_status == "complete" & hours_fished < 0.1))
+```
+
+Zero-catch records, on the other hand, are present and expected. Interviews with
+no associated catch records in `harlan_catch` represent skunked parties — valid
+observations that enter the estimator with catch = 0.
+
+### Context-dependent review
+
+Flagging catch counts at $k = 1.5$ casts a wide net. A more defensible approach
+pairs the flag with domain knowledge:
+
+1. Compare flagged values against legal bag limits for each species. A White Bass
+   count of 32 is plausible (Nebraska has no closed season and a liberal bag
+   limit). A Walleye count of 49 in a single interview warrants a second look at
+   field sheets.
+2. Check whether the party size (`n_anglers`) is large enough to explain the
+   count. An interview with `n_anglers = 4` and 32 White Bass is 8 fish per
+   person — straightforward. An interview with `n_anglers = 1` and 49 Walleye
+   is 49 individual fish — warranting field record review.
+
+The Harlan catch record with the highest outlier flag is 49 Walleye released by
+a single party (interview 388 — the same record flagged for unusual trip
+duration). The combination of an implausible trip duration and an unusually large
+Walleye release count in the same interview strengthens the case for field record
+review.
+
+## Party size and angler counts {#sec-party-size}
+
+The `n_anglers` field records the number of anglers in the interviewed party. At
+Harlan, parties range from 1 to 9:
+
+```{r}
+#| label: nanglers-distribution
+#| echo: true
+harlan_interviews |>
+  count(n_anglers) |>
+  mutate(pct = round(n / sum(n) * 100, 1))
+```
+
+Most parties are 1–2 anglers (75.5%). Parties of 7–9 exist but are rare (0.8%
+of interviews). At $k = 1.5$, `flag_outliers()` sets the fence at 2 anglers,
+flagging all parties of 3 or more — nearly half the dataset. This illustrates
+why $k$ must be calibrated to the variable's natural distribution: `n_anglers`
+is right-skewed but parties of 3 or more are not errors. Use $k = 3.0$ or
+domain-specific bounds (e.g., 10 anglers as an absolute upper plausibility
+limit) rather than $k = 1.5$ for discrete count variables with low expected
+maxima.
+
+A more reliable check is joint consistency between party size and catch. A
+party of 2 anglers reporting 6 Walleye harvested is plausible. A party of 2
+reporting 90 Walleye harvested is not. That joint check requires pairing the
+interview table with the catch table:
+
+```{r}
+#| label: party-catch-consistency
+#| echo: true
+harlan_interviews |>
+  left_join(
+    harlan_catch |>
+      filter(catch_type == "harvested") |>
+      group_by(interview_id) |>
+      summarise(total_harvest = sum(n_fish), .groups = "drop"),
+    by = "interview_id"
+  ) |>
+  mutate(
+    total_harvest      = replace_na(total_harvest, 0),
+    harvest_per_angler = total_harvest / n_anglers
+  ) |>
+  filter(harvest_per_angler > 15) |>
+  select(interview_id, date, n_anglers, total_harvest, harvest_per_angler,
+         trip_status, hours_fished)
+```
+
+Any interview with more than 15 harvested fish per angler — a threshold that
+exceeds legal bag limits for most target species in this system — surfaces as a
+candidate for field record review.
+
+## Trip status as a cleaning variable {#sec-trip-status}
+
+Trip status (complete versus incomplete) is not just a classification field. It
+determines which records enter which estimator:
+
+- Complete trips contribute to CPUE estimation (ratio-of-means uses
+  completed trips only; see @sec-effort-estimation and @sec-cpue-estimation).
+- Incomplete trips are used by some estimators to validate that complete
+  and incomplete anglers are exchangeable (see `validate_incomplete_trips()` in
+  @sec-roving-creel-surveys).
+
+A misclassified trip status is therefore a cleaning decision with a direct
+pathway into the estimate. An incomplete trip recorded as complete inflates the
+hours-fished denominator of CPUE (incomplete trips are shorter on average). A
+complete trip recorded as incomplete removes a valid observation from the ratio
+estimator.
+
+The Harlan data shows the expected pattern: complete trips are longer than
+incomplete trips, with little overlap in their medians:
+
+```{r}
+#| label: summarize-trips-full
+#| echo: true
+summarize_trips(harlan_design_ch11)
+```
+
+The complete trip mean is 4.74 hours; the incomplete trip mean is 1.71 hours.
+The ratio (2.77) is consistent with access-point survey literature where
+incomplete trips typically represent early-arriving anglers intercepted before
+they finish. If those means were reversed — or if incomplete trip durations
+clustered near the shift ceiling — misclassification would be a prime suspect.
+
+## Building a cleaning log {#sec-cleaning-log}
+
+Any cleaning step that changes a record's contribution to an estimate should be
+logged before it is applied. A minimal cleaning log has four columns per
+changed record: the record identifier, the field affected, the original value,
+and the new value. A fifth column should capture the rule applied.
+
+The dplyr approach keeps the raw data intact and stores changes as a separate
+audit table:
+
+```{r}
+#| label: cleaning-log
+#| echo: true
+cleaning_log <- harlan_interviews |>
+  left_join(
+    flag_outliers(harlan_interviews, hours_fished, k = 1.5) |>
+      select(interview_id, is_outlier, fence_high),
+    by = "interview_id"
+  ) |>
+  filter(is_outlier) |>
+  mutate(
+    field         = "hours_fished",
+    original_value = hours_fished,
+    proposed_value = fence_high,
+    rule           = "IQR k=1.5: hours_fished exceeds upper fence; review against field record",
+    action         = "REVIEW — do not apply automatically"
+  ) |>
+  select(interview_id, date, day_type, period, trip_status,
+         field, original_value, proposed_value, rule, action)
+
+cleaning_log
+```
+
+The key discipline is the `action` column. A cleaning log is not a deletion
+list. It is a record of anomalies and proposed responses. The final decision —
+accept, correct, or remove — should be recorded before the analysis runs, not
+reconstructed after the fact.
+
+For the one flagged duration record (interview 388), the proposed action is field
+record review. Until that review is complete, the defensible choice is to run
+the analysis twice: once with the record retained and once with it excluded,
+and report the sensitivity.
+
+## The estimation impact {#sec-estimation-impact}
+
+### How a single record propagates
+
+Interview 388 (13.82 hours, complete, 49 Walleye released, 0 harvested) enters
+the analysis in two places: the trip duration distribution used to compute mean
+hours_fished among complete trips, and the catch table as 49 released Walleye.
+Removing it produces two changes:
+
+**Trip duration summary** — the mean complete trip duration shifts from 4.74 to
+4.72 hours (removing 0.02 hours from the mean of 390 complete trips):
+
+```{r}
+#| label: trips-before-after
+#| echo: true
+# Design without interview 388
+design_clean <- build_design(
+  filter(harlan_interviews_with_catch, interview_id != 388),
+  filter(harlan_catch, interview_id != 388)
+)
+
+# Compare trip summaries
+cat("--- Full dataset ---\n")
+summarize_trips(harlan_design_ch11)
+cat("\n--- Interview 388 removed ---\n")
+summarize_trips(design_clean)
+```
+
+**Catch rate (CPUE)** — removing the 13.82-hour zero-harvest trip reduces the
+hours-fished denominator slightly, and CPUE rises from 0.585 to 0.589 fish/hr:
+
+```{r}
+#| label: cpue-before-after
+#| echo: true
+cpue_full  <- estimate_catch_rate(harlan_design_ch11)$estimates
+cpue_clean <- estimate_catch_rate(design_clean)$estimates
+
+bind_rows(
+  cpue_full  |> mutate(dataset = "Full (n = 390 complete trips)"),
+  cpue_clean |> mutate(dataset = "Interview 388 removed (n = 389)")
+) |>
+  select(dataset, estimate, se, ci_lower, ci_upper, n)
+```
+
+The absolute difference is 0.004 fish/hr — small relative to the 95%
+confidence interval width of 0.18 fish/hr. In this case, retaining or removing
+interview 388 does not materially change the conclusion. That result should be
+reported explicitly: "Sensitivity analysis: removing the one trip duration
+outlier changed the CPUE estimate by 0.004 fish/hr (0.7%), within the
+uncertainty of the estimate."
+
+### When the impact is not small
+
+The Harlan example is clean enough that one outlier has minimal effect. In
+programs with smaller sample sizes (50–80 interviews per stratum), a single
+anomalous record can move a CPUE estimate by 5–10%. The same analysis — run
+twice, compare the difference — is still the right approach. The magnitude of
+the sensitivity result determines whether the record requires resolution before
+the report is finalized.
+
+A cleaning decision that shifts the estimate by more than the reported
+uncertainty (i.e., by more than the half-width of the confidence interval) is
+a decision that should be documented in the methods section, not buried in a
+data appendix.
+
+### Effort estimates are less sensitive
+
+The total effort estimate (angler-hours) comes from instantaneous count
+expansion, not from `hours_fished` in the interview table. Removing interview
+388 does not change the count-based effort estimate:
+
+```{r}
+#| label: effort-before-after
+#| echo: true
+bind_rows(
+  estimate_effort(harlan_design_ch11, target = "stratum_total")$estimates |>
+    mutate(dataset = "Full"),
+  estimate_effort(design_clean, target = "stratum_total")$estimates |>
+    mutate(dataset = "Interview 388 removed")
+) |>
+  select(dataset, estimate, se, ci_lower, ci_upper)
+```
+
+Both designs produce the same 33,052 angler-hour estimate. This illustrates an
+important structural feature of the access-point estimator: effort comes from
+counts, not from interviews. Cleaning decisions that affect the interview table
+propagate into catch-rate estimates (CPUE, total harvest) but not into the
+count-based effort expansion. The two components should be diagnosed separately.
+
+## A conservative cleaning rule {#sec-conservative-cleaning}
+
+The practical guidance from this chapter reduces to four steps:
+
+1. **Flag before removing.** Use `flag_outliers()` and `standardize_species()`
+   to identify anomalies. Do not delete records at the flagging step.
+
+2. **Return to field records for flagged entries.** A statistical flag is a
+   referral, not a verdict. Check the original data sheet before altering any
+   value.
+
+3. **Log every change.** Keep the original value, the corrected value, the
+   rule applied, and the interview ID in a cleaning log that travels with the
+   analysis.
+
+4. **Report sensitivity.** Run the analysis with and without each cleaning
+   decision that materially affects an estimate. If the difference is within the
+   confidence interval, say so. If it is not, the decision requires explicit
+   justification in the methods section.
+
+These steps are not additional overhead. They are the documentation that makes
+an estimate reproducible — by the same analyst next season, by a reviewer, or
+by a manager who needs to understand why this year's estimate differs from
+last year's.
+
+## Takeaway {#sec-cleaning-takeaway}
+
+Data cleaning in creel surveys is part of the estimation process. Decisions
+about which records to accept, recode, or remove propagate through to catch
+rates, harvest totals, and the uncertainty reported around them. The species
+name an angler gives in the field, the trip duration a clerk records, and the
+catch count that enters the database are all measurements — and like all
+measurements, they benefit from systematic review before being embedded in an
+estimate.
+
+`tidycreel` provides `flag_outliers()` for detecting unusual numeric values and
+`standardize_species()` for aligning species names to a common code system.
+Neither function makes the decision for the analyst. Both functions make the
+anomalies visible, document the detection rule, and create a foundation for the
+cleaning log that should accompany every creel analysis.
+
+The Harlan 2022 data required minimal cleaning. One trip duration flagged at
+$k = 1.5$; three species names without AFS codes; no zero-effort completed
+trips; no impossible catch counts given the party sizes observed. Those results
+are worth reporting too: a well-collected dataset that passes systematic review
+gives the analyst confidence that the estimates reflect the fishery, not the
+data entry process.
