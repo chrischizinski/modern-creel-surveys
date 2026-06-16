@@ -72,17 +72,16 @@ Creel survey errors fall into two broad categories: **bias** and **variance**. V
 
 Within bias, the literature identifies several recurring types [@pollock1994]:
 
-**Coverage bias** arises when the sampling frame does not include the full target population. Common examples include private-launch access points omitted from the frame, nocturnal anglers who fish outside survey shift hours, and water bodies or zones excluded for logistical reasons.
+| Error type | Source | Detectable from data alone? | Correctable in analysis? |
+|---|---|---|---|
+| **Coverage** | Frame misses a portion of the target population | No | No — missing group left no records |
+| **Nonresponse** | Refusers differ from participants in measured variables | Partially — if refusals logged | Yes — with inverse-response-rate weights |
+| **Avidity** | More-frequent anglers intercepted more often | Partially — trip length distribution | Partially — harmonic mean for roving; not for access-point seasonal frequency |
+| **Temporal** | Survey does not cover full season or fishing day | Partially — schedule completeness | No — unsampled periods cannot be imputed without auxiliary data |
+| **Spatial** | Some locations sampled more intensively than design specifies | Partially — effort mismatch by site | Partially — post-stratification if auxiliary counts available |
+| **Operational** | Execution errors: missed shifts, data entry, selective interviewing | Yes — if records exist | Partially — removable if flagged early |
 
-**Nonresponse bias** arises when the anglers who are approached but decline to participate differ systematically from those who accept. Refusal rates are highest when conditions are poor, when anglers are packing up in a hurry, and when crews are unfamiliar or encounter language barriers.
-
-**Avidity bias** arises because anglers who fish more often, or for longer trips, are more likely to be intercepted by an on-site survey than infrequent or short-trip anglers. The sample overrepresents the avid core of the fishery unless the estimator accounts for differential interception rates.
-
-**Temporal bias** arises when the survey does not cover the full temporal extent of the fishery — missing weekday patterns, nighttime fishing, or entire months due to budget limits or weather cancellations.
-
-**Spatial bias** arises when some fishing locations contribute disproportionately to the sample because the access point list is incomplete or because certain areas are sampled more intensively for non-statistical reasons.
-
-**Operational errors** are not bias in the statistical sense, but they have the same practical effect. Missed shifts, recording errors, selective interviewing by inexperienced clerks, and species misidentification all alter the effective sample in ways that cannot be corrected by a better estimator.
+: Taxonomy of creel survey errors, with detection and correction status. Coverage errors are the most dangerous because they are invisible in the data. {#tbl-bias-taxonomy}
 
 The practical distinction that matters most is between **structural problems** (baked into the design) and **operational problems** (arising from how the design was executed). Structural problems require a redesign; operational problems can often be addressed in the next field season or caught during data cleaning.
 
@@ -290,7 +289,33 @@ Avidity patterns are not static. The composition of who uses a fishery shifts wi
 #| label: ch08-angler-type
 #| echo: true
 
-summarize_by_angler_type(harlan_design_ch08)
+angler_type_summary <- summarize_by_angler_type(harlan_design_ch08)
+angler_type_summary
+```
+
+```{r}
+#| label: fig-ch08-angler-type
+#| fig-cap: "Composition of boat and bank anglers in the Harlan Reservoir sample by month. The shift from bank-dominated spring fishing to boat-dominated late summer reflects species-driven movement patterns: bank anglers target structure species in cool months; boat anglers follow Walleye and White Bass into open water as temperatures rise."
+#| fig-alt: "A stacked bar chart showing percent of boat and bank anglers by month, with bank anglers dominant in spring and boat anglers dominant in late summer and fall."
+#| echo: true
+
+angler_type_summary |>
+  mutate(
+    month      = factor(month, levels = c("April","May","June","July",
+                                          "August","September","October")),
+    angler_type = factor(angler_type, levels = c("bank", "boat"),
+                         labels = c("Bank", "Boat"))
+  ) |>
+  ggplot(aes(x = month, y = percent, fill = angler_type)) +
+  geom_col(width = 0.7) +
+  scale_fill_manual(values = c("Bank" = "#d7191c", "Boat" = "#2c7bb6")) +
+  labs(
+    x    = NULL,
+    y    = "Percent of interviews",
+    fill = NULL
+  ) +
+  theme_creel() +
+  theme(legend.position = "bottom")
 ```
 
 At Harlan, boat anglers increase from 14% of the spring sample to nearly 90% by late summer. This reflects the seasonal transition from bank-accessible structure fishing in April to open-water trolling for suspended Walleye and White Bass later in the year. A summary across all months treats the spring bank-fishing population and the late-season boat-fishing population as interchangeable, which they are not.
@@ -319,7 +344,40 @@ A second form is **within-day gaps** due to shift structure. The Harlan schedule
 
 A third form is **fair-weather bias**: surveys are more likely to be cancelled or shortened during rain, cold snaps, or high wind. If poor weather suppresses fishing (or changes who fishes and what they catch), then sampled days disproportionately represent favorable conditions. This inflates effort estimates if anglers fish less in bad weather, or distorts catch composition if weather-tolerant anglers target different species than fair-weather anglers.
 
-The Harlan 2022 field record does not include a log of cancelled or shortened shifts. Without that record, it is impossible to assess whether fair-weather bias affected the estimates. For future survey seasons, logging each planned shift and marking it as completed, shortened, or cancelled — and recording the reason — takes five minutes per shift and makes the temporal coverage audit tractable.
+The schedule itself shows what proportion of available days were actually sampled in each stratum:
+
+```{r}
+#| label: fig-ch08-schedule-coverage
+#| fig-cap: "Harlan 2022 sampling coverage by month and day type. Each bar shows the fraction of available calendar days in that stratum that were included in the survey schedule. Coverage ranges from 44% to 75%, reflecting the stratified random draw from available weekday and weekend slots."
+#| fig-alt: "A grouped bar chart showing the percentage of available days sampled by month for weekday and weekend strata, with bars ranging from roughly 44% to 75%."
+#| echo: true
+
+harlan_schedule |>
+  mutate(
+    month   = factor(format(date, "%B"),
+                     levels = c("April","May","June","July",
+                                "August","September","October")),
+    day_type = factor(day_type, levels = c("weekday", "weekend"),
+                      labels = c("Weekday", "Weekend"))
+  ) |>
+  group_by(month, day_type) |>
+  summarise(pct_sampled = 100 * mean(sampled), .groups = "drop") |>
+  ggplot(aes(x = month, y = pct_sampled, fill = day_type)) +
+  geom_col(position = "dodge", width = 0.7) +
+  geom_hline(yintercept = 50, linetype = "dashed", colour = "grey50") +
+  scale_fill_manual(values = c("Weekday" = "#2c7bb6", "Weekend" = "#d7191c")) +
+  labs(
+    x    = NULL,
+    y    = "Percent of available days sampled",
+    fill = NULL
+  ) +
+  theme_creel() +
+  theme(legend.position = "bottom")
+```
+
+@fig-ch08-schedule-coverage shows coverage near 50% for most month-stratum combinations, as expected from the stratified random draw. The June weekend stratum is the highest at 75%; the May weekend stratum is the lowest at 44%. These differences are within the normal range of a single-season sample — no stratum is missing or collapsed.
+
+The Harlan 2022 field record does not include a log of cancelled or shortened shifts within sampled days. Without that record, it is impossible to assess whether fair-weather bias affected the estimates within the sampled shifts. For future survey seasons, logging each planned shift as completed, shortened, or cancelled — and recording the reason — takes five minutes per shift and makes the within-day temporal coverage audit tractable.
 
 ## Operational failure modes {#sec-bias-operational}
 
@@ -329,7 +387,29 @@ Operational problems differ from structural bias in that they arise from executi
 
 The most common interviewing error is one that is not recorded as an error at all: **interviewing only anglers who caught fish**, or avoiding parties that appear unwilling to stop. Both patterns bias catch and CPUE estimates upward.
 
-The simple audit is to compare the zero-catch rate in the interview data against the expected fraction based on local knowledge of the fishery. If the fishery is known to be difficult — a walleye impoundment in midsummer, say — but 90% of interview records show nonzero catch, selective interviewing is the likely explanation. The Harlan data validate cleanly on this dimension: 318 of 600 completed interviews (53%) recorded zero catch, which is consistent with observed conditions.
+The simple audit is to compare the zero-catch rate in the interview data against the expected fraction based on local knowledge of the fishery. If the fishery is known to be difficult — a walleye impoundment in midsummer, say — but 90% of interview records show nonzero catch, selective interviewing is the likely explanation.
+
+```{r}
+#| label: ch08-zero-catch-audit
+#| echo: true
+
+harvest_totals <- harlan_catch |>
+  filter(catch_type == "harvested") |>
+  group_by(interview_id) |>
+  summarise(total_harvest = sum(n_fish), .groups = "drop")
+
+harlan_interviews |>
+  left_join(harvest_totals, by = "interview_id") |>
+  mutate(total_harvest = if_else(is.na(total_harvest), 0L, as.integer(total_harvest)),
+         zero_catch = total_harvest == 0) |>
+  summarise(
+    n_interviews = n(),
+    n_zero       = sum(zero_catch),
+    pct_zero     = round(100 * mean(zero_catch), 1)
+  )
+```
+
+The Harlan data validate cleanly on this dimension: 318 of 600 total interviews (53%) recorded zero catch, which is consistent with observed conditions at a mixed-species reservoir in a moderate-productivity year.
 
 ### Data entry errors
 
