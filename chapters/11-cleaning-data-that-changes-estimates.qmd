@@ -219,19 +219,43 @@ standardize_species(harlan_catch) |>
 When `standardize_species()` returns `NA` for a species, the analyst has three
 options, and the choice should be documented:
 
-1. **Extend the lookup** if the species has an accepted code not in the default
-   table. Supply a custom code map and re-run.
-2. **Assign a project code** for hybrids or regionally specific entries that
-   have no universal standard. The project code must be consistent across all
-   reporting cycles.
-3. **Flag as unresolved** if the entry cannot be reliably coded without
-   returning to field records. Flag the records and report species-level totals
-   only for entries with confirmed codes.
+1. **Assign a project code** for species that have no universal standard but
+   can be coded consistently (Freshwater Drum, Wiper). Apply a
+   `case_when()` override to the `species_code` column after
+   `standardize_species()` runs.
+2. **Create a pooled category** for entries that mix species (Crappie without
+   species designation). A project-specific label like `"CRP-POOL"` flags the
+   record as unresolved without discarding the catch count.
+3. **Flag as unresolved and exclude from species totals** if the entry cannot be
+   reliably coded without returning to field records. Report species totals only
+   for rows where `!is.na(species_code)`.
 
-Option 3 is the appropriate choice for the Harlan "Crappie" entries. Rather than
-guess, the safer path is to aggregate those records into a "Crappie (pooled)"
-category and note in the report that species-level totals for Crappie are not
-available for 2022.
+The `standardize_species()` function does not accept a custom override table
+directly; the correction is applied as a post-processing step:
+
+```{r}
+#| label: species-code-override
+#| echo: true
+harlan_catch_coded <- harlan_catch |>
+  standardize_species() |>
+  mutate(species_code = case_when(
+    species == "Freshwater Drum" ~ "FRD",      # project code; FWS uses FRD
+    species == "Wiper"           ~ "WPR",      # project code; no AFS standard
+    species == "Crappie"         ~ "CRP-POOL", # pooled: species unknown
+    TRUE                         ~ species_code
+  ))
+
+harlan_catch_coded |>
+  select(species, species_code) |>
+  distinct() |>
+  arrange(is.na(species_code), species)
+```
+
+After the override, all 11 species in the Harlan dataset have a code. The
+`"CRP-POOL"` label is a signal to downstream reporting code that this entry
+should not be summed with species-level Crappie totals from other sources.
+Any consistent, documented label works; what matters is that the convention is
+applied identically in every reporting cycle.
 
 ## Referential integrity between tables {#sec-referential-integrity}
 
@@ -513,10 +537,28 @@ Most parties are 1–2 anglers (75.5%). Parties of 7–9 exist but are rare (0.8
 of interviews). At $k = 1.5$, `flag_outliers()` sets the fence at 2 anglers,
 flagging all parties of 3 or more — nearly half the dataset. This illustrates
 why $k$ must be calibrated to the variable's natural distribution: `n_anglers`
-is right-skewed but parties of 3 or more are not errors. Use $k = 3.0$ or
-domain-specific bounds (e.g., 10 anglers as an absolute upper plausibility
-limit) rather than $k = 1.5$ for discrete count variables with low expected
-maxima.
+is right-skewed but parties of 3 or more are not errors. For discrete count
+variables with low expected maxima, domain-specific absolute bounds are more
+useful than IQR fences.
+
+At Harlan, a reasonable absolute upper bound is 8 anglers per interview — a
+figure consistent with a typical boat capacity plus family bank fishing. A
+single record exceeds that bound:
+
+```{r}
+#| label: nanglers-absolute-bound
+#| echo: true
+harlan_interviews |>
+  filter(n_anglers > 8) |>
+  select(interview_id, date, angler_type, n_anglers, hours_fished, trip_status)
+```
+
+Interview 273 recorded 9 anglers on a weekday in May. Nine anglers is
+physically plausible for a group outing but worth confirming against the field
+sheet — both because party size affects the angler-effort denominator and
+because the interview represents 9 angler-trips in the catch rate calculation.
+One misrecorded party of 9 that should have been 2 would contribute 4.5× the
+weight it deserves.
 
 A more reliable check is joint consistency between party size and catch. A
 party of 2 anglers reporting 6 Walleye harvested is plausible. A party of 2
@@ -578,6 +620,32 @@ The ratio (2.77) is consistent with access-point survey literature where
 incomplete trips typically represent early-arriving anglers intercepted before
 they finish. If those means were reversed — or if incomplete trip durations
 clustered near the shift ceiling — misclassification would be a prime suspect.
+
+`validate_incomplete_trips()` tests whether the two groups are
+statistically exchangeable for catch-rate estimation using two one-sided tests
+(TOST) within a specified equivalence margin:
+
+```{r}
+#| label: validate-trips-ch11
+#| echo: true
+validate_incomplete_trips(
+  harlan_design_ch11,
+  catch      = total_harvest,
+  effort     = hours_fished,
+  truncate_at = 0.5
+)
+```
+
+The test fails. Incomplete trips at Harlan catch at a meaningfully higher rate
+than complete trips (0.792 vs. 0.585 fish/hr), and the difference falls outside
+the ±20% equivalence margin. The TOST failure does not indicate that trip status
+was misclassified — it indicates that incomplete anglers systematically differ
+from complete anglers, a common pattern at access-point surveys where early-
+morning arrivals target faster-biting periods. The implication for cleaning is
+the opposite of what might seem intuitive: the two groups should be kept
+separate, not merged. Any record misclassified as "complete" that truly
+represents a shorter, higher-intensity trip would inflate the complete-trip
+catch rate and bias CPUE estimates upward.
 
 ## Building a cleaning log {#sec-cleaning-log}
 
