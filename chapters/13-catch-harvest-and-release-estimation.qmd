@@ -2,116 +2,623 @@
 title: "Catch, Harvest, and Release Estimation"
 ---
 
-## Purpose
-
-Catch, harvest, and release are related but not identical estimands.
-
-This chapter shows how trip-linked interviews expand into species-level or season-level outcomes.
-
-These quantities are often reported in the same table, but they answer different questions. The analyst needs to keep the numerator and the reporting meaning aligned.
-
-## Key ideas
-
-- Catch versus harvest versus release
-- Trip-linked interviews
-- Species-level summaries
-- Estimation by stratum
-- Completed-trip versus partial-trip logic
-
-## Core distinctions
-
-- Catch is the number of fish taken from the water, regardless of whether they were kept.
-- Harvest is the subset retained by anglers.
-- Release is the subset returned to the water.
-
-Those categories are related, but the estimate can differ depending on whether the reporting target is a total, a rate, or a species-specific summary.
-
-The distinction matters because a trip can contribute to more than one outcome at once. An angler may harvest one fish, release two more, and report a catch total that is larger than the harvest total. Those records belong to the same trip but not to the same outcome.
-
-## Trip linkage
-
-Catch and harvest estimates usually come from interview records linked to trips or parties. The analyst has to make sure the catch record is tied to the right trip, the right species, and the right stratum.
-
-Common questions include:
-
-- Is the trip complete?
-- Is the species code consistent?
-- Are harvest and release totals mutually consistent?
-- Are multiple species reported on the same trip?
-
-Trip linkage is where many harvest estimates become fragile. If the interview is not linked to the correct trip or party, the species total can shift without any obvious error message.
-
-## Stratified totals
-
-The same interview data can support:
-
-- a total harvest estimate;
-- a species-specific harvest estimate;
-- a harvest rate;
-- or a catch-and-release summary.
-
-The key is that the estimator and denominator match the target estimand.
-
-For example, a species-specific harvest total may need the trip count within a stratum, while a catch rate may need a different denominator such as party-hours or completed trips. The same source records can support both, but only if the workflow keeps the definitions separate.
-
-## Common reporting choices
-
-In practice, managers often want one of four summaries:
-
-- total harvest for a reporting domain;
-- species-specific harvest;
-- release totals for a target species or group;
-- or a catch-and-release summary that shows both together.
-
-Each of those summaries needs a clear sentence explaining what the numerator counts and what the denominator represents.
-
-## Worked example
-
 ```{r}
-interviews <- data.frame(
-  stratum = c("weekday", "weekday", "weekend", "weekend"),
-  sampled_trips = c(8, 8, 4, 4),
-  total_trips = c(40, 40, 20, 20),
-  bass_harvest = c(3, 2, 4, 5),
-  bass_release = c(1, 0, 2, 1)
-)
+#| label: setup-ch13
+#| include: false
+library(tidycreel)
+library(tidyverse)
+library(lubridate)
+library(here)
 
-interviews$weight <- interviews$total_trips / interviews$sampled_trips
-interviews$harvest_est <- interviews$bass_harvest * interviews$weight
-interviews$release_est <- interviews$bass_release * interviews$weight
+harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
+harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
+harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
+harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 
-aggregate(cbind(harvest_est, release_est) ~ stratum, data = interviews, sum)
-sum(interviews$harvest_est)
-sum(interviews$release_est)
+# Same shift-length lookup used in Ch12
+shift_hours <- c("1" = 8L, "2" = 6L)
+
+# Pre-compute angler_hours and drop component columns
+harlan_counts_ch13 <- harlan_counts |>
+  mutate(
+    period        = as.character(period),
+    total_anglers = boat_anglers + bank_anglers,
+    angler_hours  = total_anglers * shift_hours[period]
+  ) |>
+  select(reservoir, date, day_type, period, section, count_time, angler_hours)
+
+# Pivot catch data to one row per interview with harvested / released columns
+catch_by_interview <- harlan_catch |>
+  group_by(interview_id, catch_type) |>
+  summarise(n_fish = sum(n_fish), .groups = "drop") |>
+  pivot_wider(
+    names_from  = catch_type,
+    values_from = n_fish,
+    values_fill = 0L
+  ) |>
+  mutate(total_catch = harvested + released)
+
+# Join catch summary to interviews; fill zeros for anglers with no catch record
+harlan_interviews_ch13 <- harlan_interviews |>
+  left_join(catch_by_interview, by = "interview_id") |>
+  mutate(
+    harvested   = if_else(is.na(harvested),   0L, as.integer(harvested)),
+    released    = if_else(is.na(released),    0L, as.integer(released)),
+    total_catch = if_else(is.na(total_catch), 0L, as.integer(total_catch))
+  )
+
+# Build the design object
+# catch = total fish encountered (harvested + released)
+# harvest = fish retained — required by estimate_total_harvest()
+suppressMessages({
+  harlan_design_ch13 <- creel_design(
+    calendar = harlan_schedule,
+    date     = "date",
+    strata   = "day_type"
+  ) |>
+    add_counts(harlan_counts_ch13, count_time_col = "count_time") |>
+    add_interviews(
+      interviews     = harlan_interviews_ch13,
+      catch          = "total_catch",
+      harvest        = "harvested",
+      effort         = "hours_fished",
+      trip_duration  = "hours_fished",
+      trip_status    = "trip_status",
+      n_anglers      = "n_anglers",
+      angler_type    = "angler_type",
+      angler_method  = "angler_method",
+      interview_type = "access"
+    ) |>
+    add_catch(
+      data          = harlan_catch,
+      catch_uid     = "interview_id",
+      interview_uid = "interview_id",
+      species       = "species",
+      count         = "n_fish",
+      catch_type    = "catch_type"
+    )
+})
 ```
 
-This example uses a direct expansion from sampled trips to total harvest and release. The structure is deliberately minimal: in a real survey, the interview table would need to be linked to the frame and validated against species and trip structure.
+## Three quantities, one fishery {#sec-catch-distinctions}
 
-The point of the example is not that the arithmetic is hard. It is that the arithmetic only means something if the trip records and species codes are trustworthy.
+Effort is the foundation of creel estimation, but it is rarely what managers
+actually ask about. The questions that drive creel survey design are usually
+some variant of: how many fish were caught, how many were kept, and for which
+species? Those questions sound similar but they require different estimators
+and different data columns.
 
-## `tidycreel` support
+**Catch** is the total number of fish that left the water during a fishing
+trip, regardless of what happened to them afterward. A walleye that was
+measured and returned is a caught fish. So is one that went in the livewell.
+Catch includes both harvest and release.
 
-Implemented:
-- Later chapters show how the package handles catch, harvest, and release.
+**Harvest** is the subset of catch that anglers retained — fish taken home,
+eaten, or otherwise removed from the fishery permanently. Harvest is the
+quantity most directly tied to fishing mortality, and it is what regulations
+target when they set bag limits or size restrictions.
 
-Partially supported:
-- The conceptual mapping from interviews to outcomes is established here.
+**Release** is the complement: fish caught and returned. Release is more
+subject to measurement error than harvest because creel clerks can inspect
+retained fish directly but must rely on angler recall for fish already back in
+the water. Access-point surveys reduce this error by interviewing anglers
+immediately after they leave the water, when memory of released fish is still
+fresh [@pollock1994].
 
-Manual or conceptual:
-- Aligning interview records and catch records.
-- Validating species codes and trip structure.
-- Deciding how to represent incomplete trips.
+The distinction matters more than it might initially appear. An angler who
+catches fifteen white bass but keeps only three has contributed to a harvest
+total of three and a release total of twelve, even though the trip produced
+one catch total of fifteen. The estimator and its denominator have to match
+the question being answered. Collapsing catch and harvest into a single number
+does not cause a computational error — it produces a number that answers
+neither question correctly.
 
-The package can support the expansion once the linkage is valid, but it cannot tell you whether a fish was actually retained or released.
+This chapter shows how the Harlan Reservoir 2022 survey data produce estimates
+of all three quantities using `tidycreel`, and how the relationship between
+them reveals the character of the fishery.
 
-## Example focus
+## The harvest estimator {#sec-harvest-estimator}
 
-Species-specific harvest estimation from trip interviews in a reservoir survey.
+Total harvest is estimated as the product of total angling effort and a
+per-unit-effort rate. The rate is the **harvest per unit effort** (HPUE):
 
-That is a common real-world ask because species-specific totals are often what managers need first, especially when harvest rules or stock concerns differ by species.
+$$
+\widehat{H}_j = \widehat{E}_j \times \widehat{\text{HPUE}}_j
+$$
 
-## Takeaway
+where $\widehat{E}_j$ is the estimated total angling effort in stratum $j$
+(angler-hours) and $\widehat{\text{HPUE}}_j$ is the ratio-of-means HPUE for
+that stratum. The season total sums across strata:
 
-Catch, harvest, and release are often reported together, but they do not all come from the same denominator or interpretation. The workflow has to keep that distinction visible.
+$$
+\widehat{H} = \sum_j \widehat{H}_j
+$$
 
-If the report collapses them too early, the reader may walk away with a clean number and the wrong interpretation.
+with variance propagated through the delta method, combining uncertainty from
+both the effort and HPUE estimates.
+
+The ratio-of-means HPUE is defined as total observed harvest divided by total
+observed effort across all interviews in a stratum [@pollock1994; @hoenig1997]:
+
+$$
+\widehat{\text{HPUE}}_j = \frac{\sum_{i} h_i}{\sum_{i} l_i}
+$$
+
+where $h_i$ is fish harvested on trip $i$ and $l_i$ is hours fished. Unlike
+the CPUE estimator — which is restricted to completed trips because only those
+have a known total catch — HPUE uses all interviews. Harvest from an incomplete
+trip is observable: what is in the livewell at interview time is harvested
+regardless of whether the angler keeps fishing. An angler with three walleye
+in the livewell has harvested three walleye, whether or not the trip is
+finished. Incomplete trips therefore contribute valid harvest and effort records
+to the HPUE denominator and numerator.
+
+The same product structure applies to the release estimator:
+$\widehat{R}_j = \widehat{E}_j \times \widehat{\text{RPUE}}_j$, and to total
+catch: $\widehat{C}_j = \widehat{E}_j \times \widehat{\text{CPUE}}_j$, where
+CPUE uses completed trips only. The three season totals are not arithmetically
+guaranteed to satisfy $\widehat{C} = \widehat{H} + \widehat{R}$ exactly
+because the component estimators differ in their interview pools, but in
+practice they are close.
+
+## Preparing catch data for estimation {#sec-catch-prep}
+
+The design construction in this chapter differs from Chapter 12 in one
+important respect. Chapter 12 passed a single harvest column to
+`add_interviews()` as the `catch` argument. Here, we need two separate
+quantities: total catch (for `estimate_total_catch`) and harvest (for
+`estimate_total_harvest`). A third quantity — released fish — follows
+automatically from their difference.
+
+The `harlan_catch` table stores species-level fish counts with a `catch_type`
+column that takes values `"harvested"` or `"released"`. Pivot that table to
+one row per interview with separate columns for each type.
+
+```{r}
+#| label: catch-prep
+#| echo: true
+catch_by_interview <- harlan_catch |>
+  group_by(interview_id, catch_type) |>
+  summarise(n_fish = sum(n_fish), .groups = "drop") |>
+  pivot_wider(
+    names_from  = catch_type,
+    values_from = n_fish,
+    values_fill = 0L
+  ) |>
+  mutate(total_catch = harvested + released)
+
+catch_by_interview
+```
+
+The result has one row per interview that recorded at least one fish. Interviews
+with no fish are handled when we join to the full interview table: any interview
+absent from `catch_by_interview` receives zeros for all three columns.
+
+```{r}
+#| label: catch-join
+#| echo: true
+harlan_interviews_ch13 <- harlan_interviews |>
+  left_join(catch_by_interview, by = "interview_id") |>
+  mutate(
+    harvested   = if_else(is.na(harvested),   0L, as.integer(harvested)),
+    released    = if_else(is.na(released),    0L, as.integer(released)),
+    total_catch = if_else(is.na(total_catch), 0L, as.integer(total_catch))
+  )
+
+harlan_interviews_ch13 |>
+  select(interview_id, date, day_type, hours_fished, trip_status,
+         total_catch, harvested, released)
+```
+
+The interview table now carries three catch columns at the trip level. Each
+represents a different quantity that managers might ask about, and each feeds
+a different estimation function downstream.
+
+## Building the design object {#sec-ch13-design}
+
+With three catch columns available, the design pipeline is identical to
+Chapter 12 except that we now pass both `catch` and `harvest` to
+`add_interviews()`. The `harvest` argument tells `tidycreel` which column
+represents retained fish; without it, `estimate_total_harvest()` has no
+harvest column to work from.
+
+```{r}
+#| label: design-build
+#| echo: true
+suppressMessages({
+  harlan_design_ch13 <- creel_design(
+    calendar = harlan_schedule,
+    date     = "date",
+    strata   = "day_type"
+  ) |>
+    add_counts(harlan_counts_ch13, count_time_col = "count_time") |>
+    add_interviews(
+      interviews     = harlan_interviews_ch13,
+      catch          = "total_catch",
+      harvest        = "harvested",
+      effort         = "hours_fished",
+      trip_duration  = "hours_fished",
+      trip_status    = "trip_status",
+      n_anglers      = "n_anglers",
+      angler_type    = "angler_type",
+      angler_method  = "angler_method",
+      interview_type = "access"
+    ) |>
+    add_catch(
+      data          = harlan_catch,
+      catch_uid     = "interview_id",
+      interview_uid = "interview_id",
+      species       = "species",
+      count         = "n_fish",
+      catch_type    = "catch_type"
+    )
+})
+
+harlan_design_ch13
+```
+
+Count data preparation mirrors Chapter 12: shift lengths convert instantaneous
+angler counts to angler-hours, so effort and rates share the same time units.
+
+## Harvest rates by day type {#sec-harvest-rate}
+
+The harvest rate — fish harvested per angler-hour — is the ratio-of-means
+HPUE from all 600 party interviews. Because harvest from an incomplete trip is
+directly observable (see @sec-harvest-estimator), no trip-status filter is
+applied; both complete and incomplete interviews contribute.
+
+```{r}
+#| label: harvest-rate-overall
+#| echo: true
+estimate_harvest_rate(harlan_design_ch13)
+```
+
+The overall Harlan 2022 harvest rate is 0.600 fish per angler-hour
+(95% CI: 0.515–0.685). Disaggregating by day type shows that weekend anglers
+harvest at a substantially higher rate than weekday anglers:
+
+```{r}
+#| label: harvest-rate-daytype
+#| echo: true
+estimate_harvest_rate(harlan_design_ch13, by = day_type)
+```
+
+```{r}
+#| label: release-rate-daytype
+#| echo: true
+estimate_release_rate(harlan_design_ch13, by = day_type)
+```
+
+```{r}
+#| label: fig-rates-daytype
+#| echo: true
+#| fig-cap: "Estimated harvest rate (HPUE) and release rate (RPUE) by day type at Harlan Reservoir, 2022. Bars show the ratio-of-means estimate from all party interviews; error bars show 95% confidence intervals. Weekend anglers harvested at a noticeably higher rate than weekday anglers, while release rates were similar across day types."
+#| fig-alt: "Grouped bar chart with HPUE and RPUE on the y axis and weekday/weekend on the x axis. Weekend HPUE (0.815) is higher than weekday HPUE (0.562). Release rates are similar between day types at approximately 0.91 and 0.95."
+
+hpue_by_dt <- estimate_harvest_rate(harlan_design_ch13, by = day_type)
+rpue_by_dt <- estimate_release_rate(harlan_design_ch13, by = day_type)
+
+rates_dt <- bind_rows(
+  hpue_by_dt$estimates |> mutate(rate_type = "Harvest rate (HPUE)"),
+  rpue_by_dt$estimates |> mutate(rate_type = "Release rate (RPUE)")
+)
+
+ggplot(rates_dt, aes(x = day_type, y = estimate, fill = rate_type)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.6) +
+  geom_errorbar(
+    aes(ymin = ci_lower, ymax = ci_upper),
+    position = position_dodge(width = 0.7),
+    width    = 0.25,
+    colour   = "grey30"
+  ) +
+  scale_fill_manual(
+    values = c("Harvest rate (HPUE)" = "#2171b5",
+               "Release rate (RPUE)" = "#74c476"),
+    name   = NULL
+  ) +
+  labs(x = "Day type", y = "Fish per angler-hour") +
+  theme_bw(base_size = 12) +
+  theme(legend.position = "bottom")
+```
+
+The weekend harvest rate (0.815 fish/hour, 95% CI: 0.562–1.068) is about
+45% higher than weekdays (0.562, 95% CI: 0.472–0.652). Release rates, by
+contrast, are nearly identical — 0.911 on weekdays and 0.950 on weekends.
+This pattern means weekend anglers are not catching more fish overall; they
+are keeping a larger fraction of what they catch. The weekend fishery at
+Harlan draws more anglers actively targeting harvestable species, while
+weekday fishing is often more incidental in character.
+
+The stratum-specific rates matter because they multiply against different effort
+volumes to produce the season harvest totals. A higher per-hour rate on weekends
+does not mean weekends dominate the harvest — that depends on how many
+angler-hours each stratum contributes.
+
+## Estimating total harvest {#sec-total-harvest}
+
+`estimate_total_harvest()` combines effort and HPUE via the delta method. The
+`target` argument controls which effort domain is multiplied by the rate:
+`"sampled_days"` (days when at least one count occurred) or `"stratum_total"`
+(all days in the stratum, sampled or not). Use `"stratum_total"` when reporting
+seasonal harvest for the full fishery.
+
+```{r}
+#| label: total-harvest-sampled
+#| echo: true
+estimate_total_harvest(harlan_design_ch13)
+```
+
+```{r}
+#| label: total-harvest-stratum
+#| echo: true
+estimate_total_harvest(harlan_design_ch13, target = "stratum_total")
+```
+
+On sampled days only, estimated harvest was 11,030 fish (95% CI: 7,939–14,122).
+Expanding to all days in the season yields 19,825 fish (95% CI: 14,643–25,006).
+The difference reflects the unsampled days: the creel did not cover every day
+on the calendar, but the expansion assumes those days had fishing activity at
+the same rate structure as sampled days. The sampled-days total describes what
+happened on surveyed days; the stratum-total estimates season-level removal from
+the stock.
+
+Grouping by day type connects the rates from @sec-harvest-rate to the season
+totals:
+
+```{r}
+#| label: total-harvest-by-daytype
+#| echo: true
+estimate_total_harvest(
+  harlan_design_ch13,
+  by     = day_type,
+  target = "stratum_total"
+)
+```
+
+```{r}
+#| label: fig-harvest-totals
+#| echo: true
+#| fig-cap: "Estimated season harvest by day type at Harlan Reservoir, 2022, using the stratum-total effort expansion. Error bars show 95% confidence intervals. Despite weekends having a higher harvest rate per angler-hour, weekdays contribute roughly four times more harvest in absolute terms because weekday fishing pressure is substantially greater."
+#| fig-alt: "Horizontal bar chart with weekday and weekend on the y axis and estimated harvest on the x axis. Weekday bar (15,793 fish) is roughly four times longer than weekend bar (4,032 fish). Error bars on both bars do not overlap zero."
+
+harvest_by_dt <- estimate_total_harvest(
+  harlan_design_ch13,
+  by     = day_type,
+  target = "stratum_total"
+)
+
+ggplot(harvest_by_dt$estimates,
+       aes(x = estimate, y = fct_rev(day_type))) +
+  geom_col(fill = "#2171b5", width = 0.5) +
+  geom_errorbar(
+    aes(xmin = ci_lower, xmax = ci_upper),
+    width  = 0.2,
+    colour = "grey30"
+  ) +
+  labs(
+    x = "Estimated harvest (fish)",
+    y = NULL
+  ) +
+  theme_bw(base_size = 12)
+```
+
+Weekdays account for roughly four times more harvest than weekends in absolute
+terms (15,793 vs. 4,032 fish). Even though the per-hour harvest rate is higher
+on weekends, weekday effort at Harlan is substantially larger — enough to
+reverse the relationship between rate and total. This is the harvest analog of
+the effort result from Chapter 12: a higher rate does not guarantee a higher
+total when the two strata differ in total effort by a wide margin.
+
+## Estimating total catch and release {#sec-catch-release}
+
+Harvest and release are the two components of total catch. Estimating each
+separately allows the analyst to report how much fishing activity ended with
+fish returned to the water — an increasingly important management metric in
+fisheries where exploitation targets are low or catch-and-release is promoted.
+
+```{r}
+#| label: total-catch
+#| echo: true
+estimate_total_catch(harlan_design_ch13, target = "stratum_total")
+```
+
+```{r}
+#| label: total-release
+#| echo: true
+estimate_total_release(harlan_design_ch13, target = "stratum_total")
+```
+
+The estimated total catch for the 2022 season was 49,756 fish
+(95% CI: 36,366–63,147). Of that, approximately 19,825 were harvested and
+30,310 released — roughly 60% of all fish caught were returned. That is a
+large catch-and-release fraction, and it raises a question the estimate alone
+cannot answer: do those released fish survive? The creel measures the number
+returned; post-release mortality is a separate quantity requiring tagging
+studies or laboratory experiments and is applied outside the creel workflow.
+
+The catch rate (CPUE) and release rate (RPUE) confirm the partition:
+
+```{r}
+#| label: release-rate-overall
+#| echo: true
+estimate_release_rate(harlan_design_ch13)
+```
+
+```{r}
+#| label: catch-rate-overall
+#| echo: true
+estimate_catch_rate(harlan_design_ch13)
+```
+
+Note that `estimate_catch_rate()` is filtered to the 390 completed-trip
+interviews (65% of all 600 parties) because incomplete-trip catch totals are
+unknown — the trip is unfinished. HPUE and RPUE use all 600 interviews because
+what is in the livewell or what has been released so far is observable even
+mid-trip. The CPUE result (1.505 fish/hour) is therefore based on a different
+interview pool than the HPUE (0.600) and RPUE (0.917). Their approximate
+sum — $0.600 + 0.917 = 1.517 \approx 1.505$ — is a useful consistency check:
+if HPUE + RPUE ≈ CPUE, the catch partition is internally coherent.
+
+## Reporting catch, harvest, and release together {#sec-combined-reporting}
+
+Management reports often need all three quantities in a single table with
+consistent confidence intervals. Collect the stratum-total estimates for each
+and bind them by row.
+
+```{r}
+#| label: combined-table
+#| echo: true
+harvest_est <- estimate_total_harvest(harlan_design_ch13, target = "stratum_total")
+catch_est   <- estimate_total_catch(harlan_design_ch13,   target = "stratum_total")
+release_est <- estimate_total_release(harlan_design_ch13, target = "stratum_total")
+
+bind_rows(
+  harvest_est$estimates |> mutate(quantity = "Total harvest"),
+  release_est$estimates |> mutate(quantity = "Total release"),
+  catch_est$estimates   |> mutate(quantity = "Total catch")
+) |>
+  select(quantity, estimate, se, ci_lower, ci_upper, n) |>
+  mutate(across(estimate:ci_upper, \(x) round(x)))
+```
+
+The combined table expresses the accounting identity of the fishery: catch
+equals harvest plus release. The estimates do not sum exactly because the
+component estimators differ slightly in their interview pools and variance
+calculations, but they share the same effort base and the same interview
+records.
+
+When presenting this table in a management report, the relevant context is
+what the estimates imply for fishing mortality. An estimated 19,825 harvested
+fish represents direct removal from the Harlan population in 2022 — the number
+an exploitation rate or yield model requires as input. The 30,310 released fish
+contribute to fishing mortality only through post-release mortality, a
+species-specific quantity not estimated by the creel.
+
+## Species composition of the harvest {#sec-species-composition}
+
+The estimates above report totals across all species combined. Species-specific
+harvest estimates require species-level catch rates from
+`estimate_catch_rate(by = species)`. A known issue in the current version of
+`tidycreel` (GitHub issue #64) causes that function to return zeros for all
+species because the internal species-catch lookup filters for a catch type that
+does not match Harlan's field values. Until that fix is available,
+species-level composition can be characterized through the raw catch table,
+which records the true species and catch type for every fish.
+
+```{r}
+#| label: species-comp-table
+#| echo: true
+harlan_catch |>
+  group_by(species, catch_type) |>
+  summarise(n_fish = sum(n_fish), .groups = "drop") |>
+  pivot_wider(
+    names_from  = catch_type,
+    values_from = n_fish,
+    values_fill = 0L
+  ) |>
+  mutate(
+    total        = harvested + released,
+    pct_released = round(released / total * 100, 1)
+  ) |>
+  arrange(desc(total))
+```
+
+White bass dominate by both total catch (4,428 fish) and harvest (2,509),
+with 43% released. Walleye show a starkly different pattern: 1,899 fish caught,
+200 retained, 89.5% released. Freshwater drum are similarly high at 91%
+released. These patterns reflect angler preference and regulation structure:
+walleye have a size limit and are a prized food fish, so sub-legal fish are
+released; freshwater drum are often returned regardless of size. Gizzard shad
+show 0% released — every shad caught was harvested, consistent with their use
+as cut bait.
+
+```{r}
+#| label: fig-species-comp
+#| echo: true
+#| fig-cap: "Species catch composition at Harlan Reservoir, 2022. Bars show recorded fish counts from interview catch records, split by harvest (blue) and release (green). Species are ordered by total catch. White bass dominate both harvest and total catch; walleye and freshwater drum show high release fractions consistent with size-limit regulations and angler preferences."
+#| fig-alt: "Horizontal stacked bar chart with species on the y axis ordered from most-caught (White Bass) to least-caught (Crappie). Each bar is split into harvested (blue) and released (green) segments. White Bass has the longest bar at over 4,000 fish; Walleye has a very large green (released) segment."
+
+species_comp <- harlan_catch |>
+  group_by(species, catch_type) |>
+  summarise(n_fish = sum(n_fish), .groups = "drop") |>
+  group_by(species) |>
+  mutate(total = sum(n_fish)) |>
+  ungroup() |>
+  mutate(
+    species    = fct_reorder(species, total),
+    catch_type = factor(catch_type, levels = c("released", "harvested"))
+  )
+
+ggplot(species_comp, aes(x = n_fish, y = species, fill = catch_type)) +
+  geom_col() +
+  scale_fill_manual(
+    values = c("harvested" = "#2171b5", "released" = "#74c476"),
+    labels = c("Harvested", "Released"),
+    name   = NULL
+  ) +
+  labs(
+    x = "Number of fish (raw interview records)",
+    y = NULL
+  ) +
+  theme_bw(base_size = 12) +
+  theme(legend.position = "bottom")
+```
+
+The species composition in raw catch records accurately describes which species
+anglers encounter and what they do with them. It does not, by itself, produce
+an expanded season total per species — that requires species-level CPUE
+estimates applied to total effort, which is covered in Chapter 14 once the
+`by = species` functionality is restored.
+
+## What the creel can and cannot measure {#sec-ch13-limits}
+
+A well-executed creel survey provides design-unbiased estimates of harvest,
+catch, and release at the stratum level. Three limitations are worth stating
+clearly.
+
+**Post-release mortality is not measured.** The creel records that a fish was
+returned to the water; it does not follow that fish. For species with high
+post-release survival under typical conditions (most warm-water species in
+summer), the released total approximates the number that survive. For species
+with elevated post-release mortality — fish caught on bait, held in warm
+water, or deeply hooked — some fraction of the release total contributes to
+fishing mortality even though it was not recorded as harvest. Adjustments for
+post-release mortality require independent data from tagging studies or
+laboratory experiments and are applied outside the creel estimation workflow.
+
+**Release counts depend on angler recall.** In an access-point survey, creel
+clerks inspect retained fish directly, so harvest counts and species
+identification are accurate for kept fish. Released fish are reported from
+memory. At Harlan, where anglers are interviewed immediately at the boat ramp,
+that recall is fresh — but an angler who released fifty white bass over a
+four-hour trip may not have counted precisely. For common rough fish that
+anglers return automatically, the released count is more likely to be
+approximated than the retained count [@pollock1994].
+
+**Interviews with no catch record mean zero catch, not missing data.** An
+interview with no rows in `harlan_catch` means the angler reported catching
+nothing — not that the question was skipped. The `left_join` to
+`catch_by_interview` and the subsequent zero-fill treat those interviews
+correctly: they contribute a zero to both the numerator and the denominator of
+the ratio-of-means estimators.
+
+## Takeaway {#sec-ch13-takeaway}
+
+Catch, harvest, and release are three distinct quantities produced by the same
+set of interviews. `estimate_total_harvest()`, `estimate_total_catch()`, and
+`estimate_total_release()` each return a design-based season estimate with
+propagated variance. The key requirement is that `add_interviews()` receive
+explicit `catch` and `harvest` arguments, which the design carries forward to
+all downstream estimation functions.
+
+The HPUE and RPUE estimators use all interviews — including incomplete trips —
+because what is harvested or released at the time of interview is directly
+observable. CPUE uses completed trips only because the final catch total of an
+in-progress trip is unknown. This is not an inconsistency in the workflow; it
+reflects what each quantity actually measures.
+
+At Harlan in 2022, roughly 60% of all fish caught were released. The harvest
+rate on weekends was substantially higher than on weekdays, but weekday
+fishing pressure was large enough that weekdays still account for about 80% of
+season harvest. Rate and total tell different stories about the fishery — both
+are necessary for a complete picture.
