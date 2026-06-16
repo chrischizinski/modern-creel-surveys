@@ -61,6 +61,52 @@ build_design <- function(interviews, catch_data) {
 }
 
 harlan_design_ch11 <- build_design(harlan_interviews_with_catch, harlan_catch)
+
+# Ch13-style harvest design (needed for estimate_total_harvest in what-if)
+prep_harvest_interviews <- function(catch_df) {
+  catch_pivot <- catch_df |>
+    group_by(interview_id, catch_type) |>
+    summarise(n_fish = sum(n_fish), .groups = "drop") |>
+    pivot_wider(names_from = catch_type, values_from = n_fish, values_fill = 0L) |>
+    mutate(total_catch = harvested + released)
+  harlan_interviews |>
+    left_join(catch_pivot, by = "interview_id") |>
+    mutate(
+      harvested   = if_else(is.na(harvested),   0L, as.integer(harvested)),
+      released    = if_else(is.na(released),    0L, as.integer(released)),
+      total_catch = if_else(is.na(total_catch), 0L, as.integer(total_catch))
+    )
+}
+
+build_design_harvest <- function(catch_df) {
+  ints <- prep_harvest_interviews(catch_df)
+  suppressWarnings(suppressMessages(
+    creel_design(calendar = harlan_schedule, date = "date", strata = "day_type") |>
+      add_counts(harlan_counts_effort, count_time_col = "count_time") |>
+      add_interviews(
+        interviews     = ints,
+        catch          = "total_catch",
+        harvest        = "harvested",
+        effort         = "hours_fished",
+        trip_duration  = "hours_fished",
+        trip_status    = "trip_status",
+        n_anglers      = "n_anglers",
+        angler_type    = "angler_type",
+        angler_method  = "angler_method",
+        interview_type = "access"
+      ) |>
+      add_catch(
+        data          = catch_df,
+        catch_uid     = "interview_id",
+        interview_uid = "interview_id",
+        species       = "species",
+        count         = "n_fish",
+        catch_type    = "catch_type"
+      )
+  ))
+}
+
+harlan_design_ch11_harvest <- build_design_harvest(harlan_catch)
 ```
 
 ## Cleaning as part of inference {#sec-cleaning-inference}
@@ -187,6 +233,51 @@ guess, the safer path is to aggregate those records into a "Crappie (pooled)"
 category and note in the report that species-level totals for Crappie are not
 available for 2022.
 
+## Referential integrity between tables {#sec-referential-integrity}
+
+A creel dataset is a set of linked tables: a schedule table, an interview table,
+and a catch table. Cleaning a single table without checking the others can leave
+the dataset in an inconsistent state. The most common failure modes are:
+
+- **Orphan catch records** — catch rows whose `interview_id` does not match any
+  interview. These inflate species totals without contributing effort or trip
+  information.
+- **Zero-catch interviews** — interview rows with no matching catch records.
+  These are usually valid (skunked anglers), but a large count may signal a data
+  entry gap.
+
+A pair of `anti_join()` calls checks both conditions:
+
+```{r}
+#| label: referential-integrity
+#| echo: true
+# Catch records with no parent interview
+anti_join(harlan_catch, harlan_interviews, by = "interview_id")
+
+# Interviews with no catch records at all
+anti_join(harlan_interviews, harlan_catch, by = "interview_id") |>
+  count(trip_status)
+```
+
+The Harlan data passes both checks. No catch records lack a parent interview —
+the catch table is fully linked. The 158 interviews with no catch records are
+not a data gap: 56 are completed trips and 102 are incomplete trips where the
+angler reported zero fish caught. Zero-catch completed trips are valid
+observations and must remain in the analysis (they enter the CPUE denominator
+as hours fished with zero catch).
+
+The second check is worth running any time the catch table and interview table
+arrive from different sources — for example, when interview data is collected
+in a mobile app and catch data is added later from a separate entry screen. In
+that workflow, late-arriving catch records that reference deleted interview IDs
+would appear as orphans here.
+
+When an orphan catch record is found, the response depends on whether the
+interview can be recovered. If the interview was not entered, the catch record
+should be removed. If the interview was entered under a different ID (a key
+mismatch, common in manual entry), the catch record should be relinked. Either
+way, the decision should be logged.
+
 ## Trip duration: plausibility and outlier review {#sec-trip-duration}
 
 ### Why hours_fished is sensitive
@@ -254,31 +345,65 @@ is impossible — the angler could not have completed a 13.82-hour trip within t
 survey period if the period only ran 6 hours. That physical constraint justifies
 flagging and reviewing, regardless of which $k$ value the IQR fence produced.
 
-### Visualizing the distribution
+### Visualizing duration against catch
+
+A univariate view of `hours_fished` shows where the fence falls. A bivariate
+view — hours fished against total fish caught — reveals whether a flagged record
+is unusual in one dimension only or in both simultaneously.
 
 ```{r}
-#| label: fig-hours-distribution
-#| fig-cap: "Distribution of hours fished at Harlan Reservoir 2022, by trip status. Dashed vertical lines show the IQR fence thresholds for outlier detection at k = 1.5 (orange) and k = 3.0 (red). Interview 388 (13.82 hr, complete trip) exceeds the k = 1.5 fence. The k = 3.0 fence at 18.80 hr lies outside the axis range."
-#| fig-alt: "Histogram of hours_fished split by trip status (complete vs incomplete). Complete trips are concentrated between 2 and 8 hours; incomplete trips between 0 and 4 hours. Two dashed vertical lines indicate outlier fences at 12.17 (k=1.5, orange) and 18.80 (k=3.0, red). One point in the complete trip panel near 14 hours is visible as a solitary bar beyond the k=1.5 fence."
+#| label: fig-hours-catch-scatter
+#| fig-cap: "Hours fished versus total fish caught (harvest + release) per interview at Harlan Reservoir 2022. Each point is one interview, colored by trip status. Interview 388 (13.82 hr, 49 fish) sits at the far right — the longest trip in the dataset. The dashed vertical line marks the k = 1.5 IQR outlier fence for hours_fished (12.17 hr). Several other complete trips show high catch counts (up to 189 fish) with shorter durations, indicating that duration and catch quantity are weakly correlated at Harlan."
+#| fig-alt: "Scatter plot with hours fished on the x-axis (0 to 14) and total fish caught on the y-axis (0 to 200). Points are colored by trip status (complete vs incomplete). Most points cluster below 8 hours and below 50 fish. Interview 388 is the rightmost point at 13.82 hours and 49 fish, labeled and highlighted. A dashed vertical line at 12.17 hours marks the k=1.5 fence. Several other unlabeled points show catch counts above 100 fish with shorter durations."
 #| echo: false
-flagged_hrs <- flag_outliers(harlan_interviews, hours_fished, k = 1.5)
-fence_15    <- unique(flagged_hrs$fence_high)
-fence_30    <- unique(flag_outliers(harlan_interviews, hours_fished, k = 3.0)$fence_high)
+total_catch_per_int <- harlan_catch |>
+  group_by(interview_id) |>
+  summarise(total_catch = sum(n_fish), .groups = "drop")
 
-ggplot(harlan_interviews, aes(x = hours_fished)) +
-  geom_histogram(binwidth = 0.5, fill = "#2E86AB", color = "white") +
+scatter_data <- harlan_interviews |>
+  left_join(total_catch_per_int, by = "interview_id") |>
+  mutate(
+    total_catch = replace_na(total_catch, 0L),
+    highlight   = interview_id == 388
+  )
+
+fence_15 <- unique(flag_outliers(harlan_interviews, hours_fished, k = 1.5)$fence_high)
+
+ggplot(scatter_data, aes(x = hours_fished, y = total_catch,
+                         color = trip_status, shape = trip_status)) +
+  geom_point(data = filter(scatter_data, !highlight),
+             alpha = 0.55, size = 1.8) +
+  geom_point(data = filter(scatter_data, highlight),
+             color = "#E84855", size = 4, shape = 18) +
   geom_vline(xintercept = fence_15, color = "#E84855", linetype = "dashed",
              linewidth = 0.8) +
-  geom_vline(xintercept = min(fence_30, 15), color = "#CC5500", linetype = "dotted",
-             linewidth = 0.8) +
-  annotate("text", x = fence_15 - 0.3, y = Inf, label = "k = 1.5",
-           hjust = 1, vjust = 1.5, color = "#E84855", size = 3) +
-  facet_wrap(~trip_status, ncol = 1, scales = "free_y",
-             labeller = labeller(trip_status = c(complete = "Complete trips",
-                                                  incomplete = "Incomplete trips"))) +
-  labs(x = "Hours fished", y = "Interviews") +
+  annotate("text", x = fence_15 - 0.3, y = Inf,
+           label = "k = 1.5 fence\n(12.17 hr)", hjust = 1, vjust = 1.3,
+           color = "#E84855", size = 2.8) +
+  annotate("text", x = 13.82, y = 55, label = "Interview 388",
+           hjust = 0.5, vjust = -0.3, color = "#E84855", size = 2.8) +
+  scale_color_manual(
+    values = c(complete = "#2E86AB", incomplete = "#A8DADC"),
+    name   = "Trip status"
+  ) +
+  scale_shape_manual(
+    values = c(complete = 16, incomplete = 17),
+    name   = "Trip status"
+  ) +
+  labs(x = "Hours fished", y = "Total fish (harvest + release)") +
   theme_creel()
 ```
+
+Interview 388 is the rightmost point: the longest trip in the dataset at 13.82
+hours with a moderate catch of 49 fish. It is unusual for its duration, not for
+its catch count. Trips with far higher catch totals (up to 189 fish) appear
+throughout the dataset with much shorter durations, demonstrating that hours
+fished and total catch are only weakly correlated at Harlan. That weak
+correlation is itself informative: it means no single threshold on either
+variable alone is sufficient to identify implausible combinations. A trip with
+low duration and unusually high catch (for example, 189 fish in 1.92 hours,
+visible in the upper-left region of the plot) deserves the same scrutiny as
+a trip with unusually long duration.
 
 ### What to do with flagged duration records
 
@@ -497,6 +622,56 @@ record review. Until that review is complete, the defensible choice is to run
 the analysis twice: once with the record retained and once with it excluded,
 and report the sensitivity.
 
+### Applying a cleaning decision in code
+
+Once a cleaning decision is made, the implementation follows one of three
+patterns depending on the action taken. All three keep the raw data unchanged
+and produce a derived cleaned dataset:
+
+```{r}
+#| label: cleaning-apply
+#| echo: true
+# Option 1: truncate hours_fished to the period boundary (6 hr for period 2)
+interviews_truncated <- harlan_interviews |>
+  mutate(
+    hours_fished = case_when(
+      interview_id == 388 ~ 6.0,   # period 2 maximum
+      TRUE                ~ hours_fished
+    )
+  )
+
+# Option 2: remove the record entirely
+interviews_removed <- harlan_interviews |>
+  filter(interview_id != 388)
+
+# Option 3: reclassify trip status to incomplete (then drop from CPUE)
+interviews_reclassified <- harlan_interviews |>
+  mutate(
+    trip_status = if_else(interview_id == 388, "incomplete", trip_status)
+  )
+
+# Show effect on mean complete trip duration
+list(
+  original      = harlan_interviews,
+  truncated     = interviews_truncated,
+  removed       = interviews_removed,
+  reclassified  = interviews_reclassified
+) |>
+  map_dfr(
+    ~ filter(.x, trip_status == "complete") |>
+        summarise(n = n(), mean_hr = mean(hours_fished), max_hr = max(hours_fished)),
+    .id = "approach"
+  )
+```
+
+Each option shifts the mean complete trip duration by a different amount.
+Truncation to 6.0 hours reduces the mean most aggressively because 6.0 is
+well below interview 388's recorded value. Removal reduces it more modestly
+because it eliminates one observation. Reclassification to incomplete removes
+the record from the complete-trip pool entirely, producing the same result as
+removal for CPUE estimation. Which option matches the field record determines
+which is correct — not statistical convenience.
+
 ## The estimation impact {#sec-estimation-impact}
 
 ### How a single record propagates
@@ -547,6 +722,56 @@ interview 388 does not materially change the conclusion. That result should be
 reported explicitly: "Sensitivity analysis: removing the one trip duration
 outlier changed the CPUE estimate by 0.004 fish/hr (0.7%), within the
 uncertainty of the estimate."
+
+### What if the catch classification were wrong?
+
+The CPUE analysis above tests the impact of removing a record. A different
+class of cleaning error — a catch-type misclassification — has a different
+propagation path. Consider the question: what if interview 388 had the
+49 Walleye entered as *harvested* rather than *released*, and the
+misclassification went undetected?
+
+That scenario does not change the hours-fished denominator. It does change the
+harvest numerator. The effect is isolated to `estimate_total_harvest()`:
+
+```{r}
+#| label: whatif-harvest
+#| echo: true
+# Hypothetical: 49 released Walleye entered as harvested (catch_type error)
+catch_whatif <- harlan_catch |>
+  mutate(
+    catch_type = if_else(
+      interview_id == 388 & species == "Walleye",
+      "harvested",
+      catch_type
+    )
+  )
+
+design_whatif <- build_design_harvest(catch_whatif)
+
+bind_rows(
+  estimate_total_harvest(harlan_design_ch11_harvest)$estimates |>
+    mutate(scenario = "Actual (49 Walleye released)"),
+  estimate_total_harvest(design_whatif)$estimates |>
+    mutate(scenario = "What-if (49 Walleye entered as harvested)")
+) |>
+  select(scenario, estimate, se, ci_lower, ci_upper)
+```
+
+Reclassifying 49 released Walleye as harvested in one interview adds
+approximately 177 fish to the season harvest estimate — a 1.6% upward bias.
+The reason the expansion factor is roughly 3.6× (not 1.0×) is that the
+stratified estimator treats this interview's harvest rate as representative
+of other complete trips in the same stratum. One high-catch record inflates
+the stratum-level mean, which then multiplies against the total estimated
+effort.
+
+Whether 177 fish is material depends on the management context. For a fishery
+with a Walleye quota or a slot-limit assessment, a 1.6% harvest overestimate
+matters. For a general community harvest summary, it may be within acceptable
+reporting uncertainty. The point is not the magnitude in isolation — it is that
+the analyst should compute it and make the judgment explicitly rather than
+assume catch-type errors are inconsequential.
 
 ### When the impact is not small
 
