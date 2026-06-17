@@ -2,131 +2,663 @@
 title: "Uncertainty, Diagnostics, and Precision"
 ---
 
-## Purpose
-
-Good creel estimates need both a point estimate and a measure of uncertainty.
-
-This chapter addresses uncertainty, diagnostics, precision reporting, and sensitivity checks.
-
-The core question is not just how big the estimate is, but how much faith the reader should put in it and why.
-
-## Key ideas
-
-- Design-based variance
-- Precision reporting
-- Diagnostics for sample coverage
-- Sensitivity to missingness and bias
-- Distinguishing random error from structural problems
-
-## Uncertainty
-
-Uncertainty answers the question: how much would this estimate change if we repeated the survey under the same design?
-
-That is different from bias, which asks whether the design is centered on the right target in the first place.
-
-In creel work, uncertainty can come from:
-
-- limited sample size;
-- uneven strata;
-- variable response;
-- count variability;
-- incomplete coverage of the frame.
-
-The important distinction is that uncertainty is about variability under the design, while bias is about systematic drift away from the target. A report that confuses those two can make a noisy estimate seem wrong when it is merely imprecise.
-
-## Diagnostics
-
-Diagnostics show whether the design and the data actually support the estimate.
-
-Useful checks include:
-
-- sample coverage by stratum;
-- counts of missing or unmatched records;
-- effect of a small number of high-leverage observations;
-- sensitivity of the estimate to alternate cleaning choices;
-- whether the realized sample resembles the planned sample.
-
-Diagnostics are the bridge between the statistical result and the field reality. They tell the analyst whether the design assumptions still look plausible after cleaning, weighting, and aggregation.
-
-## Diagnostic tiers
-
-It helps to think in tiers:
-
-- data integrity diagnostics, which check for missing, duplicated, or unmatched records;
-- design diagnostics, which check coverage, weighting, and sample balance;
-- and estimate diagnostics, which check whether the final number is overly sensitive to a small number of records or a single rule choice.
-
-That separation makes it easier to say where a problem actually lives.
-
-## Precision reporting
-
-Precision should be communicated in terms that readers can understand:
-
-- standard errors;
-- confidence intervals;
-- relative standard error or coefficient of variation;
-- and practical judgment about whether the estimate is stable enough for the decision at hand.
-
-Precision is not the same thing as correctness. A precise estimate can still be wrong if the frame or assumptions are wrong.
-
-Precision should also be matched to the audience. A technical appendix can carry the full variance details, while the main report may only need a concise interval and a short explanation of what drives it.
-
-## Sensitivity checks
-
-When the estimate could change under plausible alternatives, sensitivity checks should be explicit.
-
-Examples:
-
-- different handling of missing counts;
-- alternate treatment of incomplete trips;
-- different stratification choices;
-- alternative cleanup rules.
-
-Sensitivity checks are most valuable when they test a plausible alternative that would genuinely change the interpretation. A tiny reformatting change is not very informative; a different handling of incomplete trips usually is.
-
-## Worked example
-
 ```{r}
-effort <- c(420, 180)
-catch <- c(140, 96)
+#| label: setup-ch15
+#| include: false
+library(tidycreel)
+library(tidyverse)
+library(here)
 
-cpue <- catch / effort
-overall <- sum(catch) / sum(effort)
+harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
+harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
+harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
+harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 
-se_simple <- sd(cpue) / sqrt(length(cpue))
-ci_lower <- overall - 1.96 * se_simple
-ci_upper <- overall + 1.96 * se_simple
+# Shift lengths (hours): period 1 = AM (8 h), period 2 = PM (6 h)
+shift_hours <- c("1" = 8L, "2" = 6L)
 
-c(overall_cpue = overall, se_simple = se_simple, lower = ci_lower, upper = ci_upper)
+harlan_counts_effort <- harlan_counts |>
+  mutate(
+    period        = as.character(period),
+    total_anglers = boat_anglers + bank_anglers,
+    angler_hours  = total_anglers * shift_hours[period]
+  ) |>
+  select(reservoir, date, day_type, period, section, count_time, angler_hours)
+
+harvest_by_interview <- harlan_catch |>
+  filter(catch_type == "harvested") |>
+  group_by(interview_id) |>
+  summarise(total_harvest = sum(n_fish), .groups = "drop")
+
+harlan_interviews_with_catch <- harlan_interviews |>
+  left_join(harvest_by_interview, by = "interview_id") |>
+  mutate(total_harvest = if_else(is.na(total_harvest), 0L, as.integer(total_harvest)))
+
+suppressMessages({
+  harlan_design <- creel_design(
+    calendar = harlan_schedule,
+    date     = "date",
+    strata   = "day_type"
+  ) |>
+    add_counts(harlan_counts_effort, count_time_col = "count_time") |>
+    add_interviews(
+      interviews     = harlan_interviews_with_catch,
+      catch          = "total_harvest",
+      effort         = "hours_fished",
+      trip_duration  = "hours_fished",
+      trip_status    = "trip_status",
+      n_anglers      = "n_anglers",
+      angler_type    = "angler_type",
+      angler_method  = "angler_method",
+      interview_type = "access"
+    ) |>
+    add_catch(
+      data          = harlan_catch,
+      catch_uid     = "interview_id",
+      interview_uid = "interview_id",
+      species       = "species",
+      count         = "n_fish",
+      catch_type    = "catch_type"
+    )
+})
 ```
 
-This is only an illustrative calculation, but it shows the reporting pattern: point estimate, uncertainty, and a quick check that the result is not being treated as more certain than it is. In the real workflow, the variance would come from the survey design rather than from this brief summary.
+A creel estimate without uncertainty information is only half an answer. The
+point estimate tells you how large the catch or effort was; the uncertainty
+wrapper tells you how much faith to put in that number and whether the design
+was precise enough to support the decisions that will follow. This chapter
+covers three questions that every creel analyst should be able to answer: where
+does uncertainty come from in these estimates, how should it be communicated,
+and how much sampling would be needed to hit a precision target?
 
-Even a simple example can be useful if it reminds the analyst to separate the estimate from the uncertainty wrapper around it.
+## The anatomy of an estimate {#sec-uncertainty-anatomy}
 
-## `tidycreel` support
+When `estimate_effort()` runs, it returns not just the effort total but a full
+uncertainty wrapper: a standard error, a confidence interval, and a decomposition
+of variance into between-day and within-day components. Each of those pieces
+carries distinct diagnostic value.
 
-Implemented:
-- Later chapters show the available diagnostics and uncertainty outputs.
+```{r}
+#| label: effort-full
+#| echo: true
 
-Partially supported:
-- The uncertainty framework is introduced here; implementation comes later.
+eff <- suppressWarnings(estimate_effort(harlan_design))
+eff$estimates
+```
 
-Manual or conceptual:
-- Interpreting uncertainty in context.
-- Deciding when a precision problem is actually a design problem.
-- Writing sensitivity notes that are honest but concise.
+The season total for Harlan 2022 is
+`r formatC(round(eff$estimates$estimate), big.mark = ",")` angler-hours,
+with a standard error of
+`r formatC(round(eff$estimates$se), big.mark = ",")` angler-hours.
+The coefficient of variation — SE divided by the estimate — is
+`r round(eff$estimates$se / eff$estimates$estimate * 100, 1)`%, which falls
+well within the 15–20% threshold commonly used as an acceptable precision
+benchmark for management-grade creel estimates [@mccormick2017].
 
-The package can help compute and organize the outputs, but the diagnosis still belongs to the analyst.
+```{r}
+#| label: effort-cv
+#| echo: true
 
-## Example focus
+eff$estimates |>
+  mutate(cv = se / estimate) |>
+  select(estimate, se, cv, ci_lower, ci_upper, n)
+```
 
-A precision summary that informs whether more sampling is needed in the next field season.
+The confidence interval runs from
+`r formatC(round(eff$estimates$ci_lower), big.mark = ",")` to
+`r formatC(round(eff$estimates$ci_upper), big.mark = ",")` angler-hours.
+That range spans roughly
+`r round((eff$estimates$ci_upper - eff$estimates$ci_lower) / eff$estimates$estimate * 100)`%
+of the point estimate, which is wide enough to matter for year-over-year
+comparisons but narrow enough to support most within-season management
+recommendations.
 
-That is the most practical use of uncertainty in many agency settings: deciding whether the current design is good enough or whether the next round needs more coverage.
+## Where variance comes from {#sec-uncertainty-decomp}
 
-## Takeaway
+Effort variance decomposes into two parts: variation between sampled days
+and variation among instantaneous counts within a day. The `se_between` and
+`se_within` columns in the estimates tibble expose this decomposition directly.
 
-Uncertainty tells you how noisy the estimate is. Diagnostics show whether the estimate should be trusted at all. The report should include both.
+```{r}
+#| label: variance-decomp-data
+#| echo: true
 
-If either piece is missing, the reader has only part of the story.
+eff$estimates |>
+  select(se_between, se_within, se)
+```
+
+Between-day variance accounts for
+`r round(eff$estimates$se_between^2 / eff$estimates$se^2 * 100)`% of total
+variance at Harlan. Day-to-day differences in how many anglers arrive — driven
+by weather, weekday versus weekend, and season — are a larger source of
+uncertainty than moment-to-moment fluctuation within a shift. This is the
+expected pattern for reservoir access-point surveys: the arrival process is
+bursty by day, so sampling more days reduces uncertainty more than sampling
+more periods within the days already in the sample.
+
+```{r}
+#| label: fig-ch15-variance-decomp
+#| fig-cap: "Variance decomposition for Harlan Reservoir 2022 season effort. Between-day variance (dark) dominates within-day variance (light), indicating that adding sampling days would reduce uncertainty more than increasing counts per day."
+#| fig-alt: "Stacked bar chart showing se_between and se_within contributions to total effort SE"
+
+eff$estimates |>
+  select(se_between, se_within) |>
+  pivot_longer(everything(), names_to = "component", values_to = "se") |>
+  mutate(
+    component = recode(component,
+      "se_between" = "Between-day",
+      "se_within"  = "Within-day"
+    ),
+    component = fct_relevel(component, "Between-day")
+  ) |>
+  ggplot(aes(x = "Season total", y = se^2, fill = component)) +
+  geom_col(width = 0.4) +
+  scale_fill_manual(
+    values = c("Between-day" = "#2c6e49", "Within-day" = "#95d5b2"),
+    name   = "Variance component"
+  ) +
+  scale_y_continuous(
+    labels = scales::comma,
+    name   = "Variance (angler-hours²)"
+  ) +
+  labs(x = NULL, title = "Effort variance decomposition") +
+  theme_creel() +
+  theme(legend.position = "bottom")
+```
+
+For designs where within-day variance dominates instead — common in open-water
+boat fisheries where encounter rates shift sharply from morning to afternoon —
+the prescription runs the other direction: more counts per sampled day, not
+more days. The variance decomposition is the diagnostic that determines which
+lever is worth pulling.
+
+## Precision by stratum {#sec-uncertainty-stratum}
+
+Reporting a single season CV obscures whether both weekday and weekend strata
+are meeting precision targets. `estimate_effort()` accepts a `by` argument to
+produce stratum-specific estimates with their own uncertainty wrappers.
+
+```{r}
+#| label: effort-by-stratum
+#| echo: true
+
+eff_strata <- suppressWarnings(
+  estimate_effort(harlan_design, by = "day_type")
+)
+eff_strata$estimates
+```
+
+Weekend effort at Harlan carries a CV of
+`r round(eff_strata$estimates$se[eff_strata$estimates$day_type == "weekend"] /
+  eff_strata$estimates$estimate[eff_strata$estimates$day_type == "weekend"] * 100, 1)`%,
+roughly three times the weekday CV of
+`r round(eff_strata$estimates$se[eff_strata$estimates$day_type == "weekday"] /
+  eff_strata$estimates$estimate[eff_strata$estimates$day_type == "weekday"] * 100, 1)`%.
+That difference reflects both fewer weekend-eligible days in the season calendar
+and higher day-to-day variability in weekend attendance. Both strata meet the
+15% precision target, but the weekend stratum would benefit most from additional
+sampling if resources permitted reallocation.
+
+```{r}
+#| label: fig-ch15-stratum-ci
+#| fig-cap: "Effort estimates with 95% confidence intervals by day type, Harlan Reservoir 2022. Whiskers span the 95% CI returned by `estimate_effort(by = 'day_type')`. Weekend effort is substantially lower but also less precisely estimated."
+#| fig-alt: "Bar chart with error whiskers showing effort CI for weekday and weekend strata"
+
+eff_strata$estimates |>
+  mutate(
+    day_type = str_to_title(day_type),
+    cv       = se / estimate
+  ) |>
+  ggplot(aes(x = day_type, y = estimate, fill = day_type)) +
+  geom_col(width = 0.5, show.legend = FALSE) +
+  geom_errorbar(
+    aes(ymin = ci_lower, ymax = ci_upper),
+    width = 0.15,
+    linewidth = 0.8
+  ) +
+  geom_text(
+    aes(
+      y     = ci_upper + 300,
+      label = paste0("CV = ", round(cv * 100, 1), "%")
+    ),
+    size = 3.5
+  ) +
+  scale_y_continuous(labels = scales::comma, name = "Angler-hours") +
+  scale_fill_manual(values = c("Weekday" = "#2c6e49", "Weekend" = "#95d5b2")) +
+  labs(x = "Day type", title = "Effort by stratum with 95% CI") +
+  theme_creel()
+```
+
+## Precision reporting in practice {#sec-uncertainty-reporting}
+
+Managers and readers need three quantities: the point estimate, the uncertainty
+range, and a unitless relative measure they can compare across estimates, species,
+and years. A clean precision table assembles all three.
+
+```{r}
+#| label: precision-table
+#| echo: true
+
+cpue <- suppressWarnings(estimate_catch_rate(harlan_design))
+
+bind_rows(
+  eff$estimates  |> mutate(quantity = "Effort (angler-hours)"),
+  cpue$estimates |> mutate(quantity = "CPUE (fish/angler-hr)")
+) |>
+  mutate(cv = round(se / estimate, 3)) |>
+  select(quantity, estimate, se, cv, ci_lower, ci_upper, n)
+```
+
+The CPUE estimate of
+`r round(cpue$estimates$estimate, 3)` fish per angler-hour carries a CV of
+`r round(cpue$estimates$se / cpue$estimates$estimate * 100, 1)`%, tighter than
+the effort CV of
+`r round(eff$estimates$se / eff$estimates$estimate * 100, 1)`%.
+That difference is typical: CPUE is estimated from interview data alone and
+does not propagate the additional uncertainty from the count-based effort
+expansion. Harvest, by contrast, propagates both sources — its CV will always
+be at least as large as the larger of the effort and catch-rate CVs.
+
+Communicating precision to non-technical audiences calls for a different
+framing than raw SE. A confidence interval in the units of the estimate
+— "between 13,900 and 22,900 angler-hours" — is usually more intuitive
+than the SE alone. For regulatory reporting, where a threshold matters (did
+harvest exceed the target?), the interval can be used to answer directly:
+does the entire interval sit below the threshold, or does it straddle it?
+Straddling a threshold is a qualitatively different result from an estimate
+comfortably below it, even if both point estimates look similar.
+
+## Sampling coverage as a diagnostic {#sec-uncertainty-coverage}
+
+The variance estimates produced by `estimate_effort()` describe sampling
+variability under the realized design. They cannot detect a different problem:
+systematic gaps in which days or months were actually sampled. A month where
+no weekday samples were collected is not a precision problem — it is a
+structural gap that biases the stratum mean in an unknowable direction.
+
+Coverage is straightforward to compute: compare the days that appear in the
+count data against the full season frame from the schedule.
+
+```{r}
+#| label: coverage-by-month
+#| echo: true
+
+coverage <- harlan_counts_effort |>
+  distinct(date, day_type) |>
+  mutate(month = lubridate::month(date, label = TRUE)) |>
+  count(month, day_type, name = "n_sampled") |>
+  left_join(
+    harlan_schedule |>
+      mutate(month = lubridate::month(date, label = TRUE)) |>
+      count(month, day_type, name = "n_scheduled"),
+    by = c("month", "day_type")
+  ) |>
+  mutate(pct_sampled = n_sampled / n_scheduled)
+
+coverage
+```
+
+Coverage at Harlan ranges from
+`r round(min(coverage$pct_sampled) * 100)`% to
+`r round(max(coverage$pct_sampled) * 100)`% across month-stratum combinations,
+with no complete gaps. That consistency indicates the design was implemented
+as planned, which supports the validity of the variance estimates.
+
+```{r}
+#| label: fig-ch15-coverage
+#| fig-cap: "Sampling coverage (proportion of scheduled days actually sampled) by month and day type, Harlan Reservoir 2022. Bars show the fraction of frame days in each cell that received at least one count. The dashed line at 50% is the approximate target under the Harlan design. No cell falls below 44%, indicating no structural coverage gaps."
+#| fig-alt: "Grouped bar chart showing sampling coverage by month for weekday and weekend strata"
+
+coverage |>
+  mutate(day_type = str_to_title(day_type)) |>
+  ggplot(aes(x = month, y = pct_sampled, fill = day_type)) +
+  geom_col(position = "dodge", width = 0.7) +
+  geom_hline(yintercept = 0.50, linetype = "dashed", color = "grey40") +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1),
+                     name = "Proportion of frame days sampled") +
+  scale_fill_manual(
+    values = c("Weekday" = "#2c6e49", "Weekend" = "#95d5b2"),
+    name = "Day type"
+  ) +
+  labs(x = "Month", title = "Sampling coverage by month and day type") +
+  theme_creel() +
+  theme(legend.position = "bottom")
+```
+
+When coverage varies widely across months — for instance, a July with only
+25% of weekdays sampled because of access closures — those months contribute
+a disproportionately imprecise stratum mean to the seasonal total. A coverage
+plot surfaces this before it becomes invisible inside an aggregate CV.
+
+## How many sampling days are enough? {#sec-precision-samplesize}
+
+Before the next field season, the survey coordinator needs to answer a practical
+question: how many sampling days would be required to hit a target CV? This is
+a design-forward question that the current estimates can inform retrospectively,
+because the sample mean and sample variance from the completed survey are the
+best available estimates of the population parameters needed for sample size
+calculations.
+
+The strata parameters required for `creel_n_effort()` are the stratum frame
+sizes $N_h$ (total days in the season calendar by day type), the stratum
+means $\bar{y}_h$ (mean daily angler-hours from the sample), and the stratum
+variances $s^2_h$.
+
+```{r}
+#| label: strata-params
+#| echo: true
+
+# Aggregate daily angler-hours from count data; frame size from schedule
+strata_params <- harlan_counts_effort |>
+  group_by(date, day_type) |>
+  summarise(daily_total = sum(angler_hours), .groups = "drop") |>
+  group_by(day_type) |>
+  summarise(
+    n_sampled = n(),
+    ybar_h    = mean(daily_total),
+    s2_h      = var(daily_total),
+    .groups   = "drop"
+  ) |>
+  left_join(
+    harlan_schedule |> count(day_type, name = "N_h"),
+    by = "day_type"
+  )
+
+strata_params
+```
+
+With those parameters in hand, `creel_n_effort()` solves for the sample size
+allocation that minimizes variance subject to a CV target, using Neyman
+proportional allocation across strata.
+
+```{r}
+#| label: n-required
+#| echo: true
+
+N_h    <- setNames(strata_params$N_h,    strata_params$day_type)
+ybar_h <- setNames(strata_params$ybar_h, strata_params$day_type)
+s2_h   <- setNames(strata_params$s2_h,   strata_params$day_type)
+
+# Required n at three CV targets
+bind_rows(
+  creel_n_effort(cv_target = 0.10, N_h = N_h, ybar_h = ybar_h, s2_h = s2_h) |>
+    as.list() |> as_tibble() |> mutate(cv_target = "10%"),
+  creel_n_effort(cv_target = 0.15, N_h = N_h, ybar_h = ybar_h, s2_h = s2_h) |>
+    as.list() |> as_tibble() |> mutate(cv_target = "15%"),
+  creel_n_effort(cv_target = 0.20, N_h = N_h, ybar_h = ybar_h, s2_h = s2_h) |>
+    as.list() |> as_tibble() |> mutate(cv_target = "20%")
+) |>
+  select(cv_target, weekday, weekend, total)
+```
+
+The Harlan 2022 design sampled 83 weekdays and 35 weekends — 118 days total.
+Hitting a 15% CV requires only 32 weekday days and 14 weekend days under
+Neyman allocation, which means the 2022 design was substantially
+over-sampled relative to that target. The extra sampling was not wasted:
+it buys insurance against unexpected variability and supports finer-grained
+analyses by species, month, or angler type that a minimum-n design would not
+support. But for a new reservoir where budget is tight, the sample size table
+provides a defensible lower bound.
+
+## Validating the current design {#sec-precision-validate}
+
+`validate_design()` takes the proposed or actual sample size and returns a
+pass/fail verdict for each stratum against a stated CV target.
+
+```{r}
+#| label: validate-design
+#| echo: true
+
+design_report <- validate_design(
+  N_h        = N_h,
+  ybar_h     = ybar_h,
+  s2_h       = s2_h,
+  n_proposed = c(weekday = 83L, weekend = 35L),
+  cv_target  = 0.15,
+  type       = "effort"
+)
+
+design_report$results
+```
+
+Both strata pass with substantial margin: the achieved CV for weekday days is
+`r round(design_report$results$cv_actual[design_report$results$stratum == "weekday"] * 100, 1)`%
+against a 15% target, and
+`r round(design_report$results$cv_actual[design_report$results$stratum == "weekend"] * 100, 1)`%
+for weekend days. The report also records the minimum n required for each
+stratum, making it easy to see how much headroom exists before the design
+would fall below threshold.
+
+The design report serves a documentation purpose as well as a diagnostic one.
+Including it in a survey report gives readers explicit evidence that the
+sampling plan met its stated precision goals — or, where a stratum fell
+short, an honest accounting of which estimates to treat with additional
+caution.
+
+## Power to detect change {#sec-precision-power}
+
+Precision addresses the current survey; power addresses future comparisons.
+A fishery manager who wants to detect a 20% change in fishing effort between
+years needs to know whether the current design is sensitive enough to distinguish
+real change from sampling noise.
+
+`creel_power()` computes the probability that a two-sample test will correctly
+reject the null hypothesis of no change, given the historical CV of the
+estimate, the proposed sample size, and the magnitude of the true difference
+to detect.
+
+```{r}
+#| label: power-single
+#| echo: true
+
+# At current sample size, what power to detect a 30% change?
+# Using CV = 0.30 to represent a more variable (e.g., multi-year) context
+creel_power(
+  n             = 118,
+  cv_historical = 0.30,
+  delta_pct     = 0.30,
+  alpha         = 0.05
+)
+```
+
+With a historical CV of 30% and 118 sampling days per year, power to detect
+a 30% change exceeds 90%. The picture changes substantially for smaller surveys
+with more variable effort.
+
+```{r}
+#| label: fig-ch15-power-curve
+#| fig-cap: "Statistical power to detect an effort change as a function of sample size and effect size, assuming three levels of historical CV. Each line shows the power curve for a given CV at a 5% significance threshold. The dashed line marks 80% power, the conventional minimum for planned comparisons."
+#| fig-alt: "Line chart showing power curves for three historical CVs (0.15, 0.30, 0.50) across sample sizes 10 to 150"
+
+crossing(
+  n             = seq(10, 150, by = 5),
+  cv_historical = c(0.15, 0.30, 0.50),
+  delta_pct     = 0.30
+) |>
+  mutate(
+    power    = pmap_dbl(list(n, cv_historical, delta_pct),
+                        ~ creel_power(..1, ..2, ..3, alpha = 0.05)),
+    cv_label = paste0("CV = ", cv_historical * 100, "%")
+  ) |>
+  ggplot(aes(x = n, y = power, color = cv_label, linetype = cv_label)) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 0.80, linetype = "dashed", color = "grey50") +
+  annotate("text", x = 15, y = 0.82, label = "80% power", hjust = 0,
+           size = 3.2, color = "grey40") +
+  scale_color_manual(
+    values = c("CV = 15%" = "#2c6e49", "CV = 30%" = "#74c69d",
+               "CV = 50%" = "#b7e4c7"),
+    name = "Historical CV"
+  ) +
+  scale_linetype_manual(
+    values = c("CV = 15%" = "solid", "CV = 30%" = "dashed",
+               "CV = 50%" = "dotted"),
+    name = "Historical CV"
+  ) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
+  labs(
+    x     = "Sample size (days per year)",
+    y     = "Power",
+    title = "Power to detect 30% effort change"
+  ) +
+  theme_creel() +
+  theme(legend.position = "bottom")
+```
+
+For a stable reservoir fishery like Harlan with an observed CV of 12%, 80%
+power to detect a 30% change requires fewer than 20 sampling days per year.
+For a more variable fishery — coastal runs, fluctuating ice-out timing,
+reservoir drawdowns — where the CV might reach 50%, the same detection
+threshold requires roughly 120 days. The power analysis reframes budget
+decisions: if management requires detecting a 20% change, the power curve
+specifies the minimum sampling commitment needed to make that detection
+statistically credible.
+
+`power_creel()` provides a unified interface for the same computation
+expressed as a table, which is more convenient when generating design
+recommendations for a report.
+
+```{r}
+#| label: power-table
+#| echo: true
+
+# Sample size needed for 80% power across effect sizes
+crossing(delta_pct = c(0.10, 0.20, 0.30, 0.40, 0.50)) |>
+  mutate(
+    n_for_80pct = map_dbl(delta_pct, function(d) {
+      # Find minimum n achieving >= 0.80 power
+      n_seq <- seq(5, 300, by = 5)
+      powers <- sapply(n_seq, function(n)
+        creel_power(n, cv_historical = 0.30, delta_pct = d))
+      n_seq[which(powers >= 0.80)[1]]
+    }),
+    delta_label = paste0(delta_pct * 100, "%")
+  ) |>
+  select(delta_label, n_for_80pct) |>
+  rename("Change to detect" = delta_label, "Days required (CV = 30%)" = n_for_80pct)
+```
+
+## CV sensitivity to interview sample size {#sec-precision-cpue-sensitivity}
+
+For CPUE estimates, the relevant sample size is the number of completed
+interviews rather than the number of sampling days. `cv_from_n()` with
+`type = "cpue"` shows how CPUE precision responds to interview sample size
+given input CVs for the catch and effort components. This is a planning tool:
+calibrate the input parameters using historical data or the current survey's
+observed variability, then read off the interview target.
+
+The Harlan 2022 season produced a CPUE estimate of 0.585 fish/angler-hour
+from 390 complete interviews (CV = 7.9%). Individual catch rates per interview
+have high variability — many zero-catch anglers and a few high-count outliers
+— so `cv_catch` for planning purposes is substantially larger than the
+aggregate CPUE CV. A value of 1.5 (150%) for the individual catch-rate CV
+is consistent with the observed aggregate precision at Harlan and typical of
+reservoir access-point fisheries where zero-catch encounters are common.
+
+```{r}
+#| label: cv-cpue-sensitivity
+#| echo: true
+
+# cv_catch calibrated so the curve passes near the observed 7.9% CV at n = 390
+cv_catch  <- 1.5
+cv_effort <- round(eff$estimates$se / eff$estimates$estimate, 2)
+
+tibble(n_interviews = seq(50, 450, by = 25)) |>
+  mutate(
+    cv_cpue = map_dbl(n_interviews, \(n)
+      cv_from_n(type = "cpue", n = n,
+                cv_catch = cv_catch, cv_effort = cv_effort))
+  )
+```
+
+```{r}
+#| label: fig-ch15-cv-sensitivity
+#| fig-cap: "Estimated CPUE coefficient of variation as a function of interview sample size. Input CVs are calibrated to match the observed 7.9% CV at the Harlan 2022 sample size of 390 interviews (dashed vertical line). The horizontal dotted line marks 15% CV. Returns to precision become negligible beyond roughly 150 interviews for this level of variability."
+#| fig-alt: "Line chart showing CPUE CV declining with interview sample size, with reference lines at n=390 and CV=15%"
+
+tibble(n_interviews = seq(20, 500, by = 10)) |>
+  mutate(
+    cv_cpue = map_dbl(n_interviews, \(n)
+      cv_from_n(type = "cpue", n = n,
+                cv_catch = cv_catch, cv_effort = cv_effort))
+  ) |>
+  ggplot(aes(x = n_interviews, y = cv_cpue)) +
+  geom_line(color = "#2c6e49", linewidth = 1) +
+  geom_vline(xintercept = 390, linetype = "dashed", color = "grey50") +
+  geom_hline(yintercept = 0.15, linetype = "dotted", color = "#d62828") +
+  annotate("text", x = 400, y = 0.11, label = "2022 survey\n(n = 390)",
+           hjust = 0, size = 3.2, color = "grey40") +
+  annotate("text", x = 25, y = 0.155, label = "CV = 15%",
+           hjust = 0, size = 3.2, color = "#d62828") +
+  scale_y_continuous(labels = scales::percent, name = "CPUE CV") +
+  labs(
+    x     = "Interview sample size",
+    title = "CPUE precision as a function of interview sample size"
+  ) +
+  theme_creel()
+```
+
+The curve shows sharply diminishing returns: moving from 50 to 150 interviews
+produces a large precision gain, but the incremental benefit from 200 to 400
+interviews is modest. The 15% CV threshold is crossed near 100 interviews —
+well below the 390 the 2022 survey collected. The extra interviews are not
+wasted: they support species-specific CPUE, monthly breakdowns, and angler-type
+comparisons that require precision within each domain rather than just the
+season total.
+
+For a new reservoir without historical data, `cv_from_n()` can be used
+prospectively by borrowing cv_catch and cv_effort estimates from a comparable
+fishery. The sensitivity of the result to the input CVs is worth exploring:
+doubling cv_catch roughly doubles the required interview count for a given
+precision target.
+
+## Diagnostics alongside uncertainty {#sec-uncertainty-diagnostics}
+
+Uncertainty quantifies sampling error. Diagnostics assess whether the data
+structure behind the estimate is sound enough to trust the estimates in the
+first place. A precise estimate built on a biased or incomplete frame is not
+a good result — it is a confident wrong answer.
+
+Three diagnostic questions are worth asking before reporting any estimate:
+
+**Did coverage match the design?** Compare sampled days to the frame.
+Systematic gaps — no weekday samples in July, no AM periods in certain
+months — create structural bias that the variance estimator cannot detect.
+
+**Are any strata under-replicated?** A stratum with two or three sampled days
+cannot support a reliable variance estimate. The `validate_design()` output
+identifies strata where the proposed $n$ fell short of the required minimum;
+`audit_strata()` (Chapter 10) flags strata present in the frame but absent
+from the count data.
+
+**Are any estimates driven by a small number of records?** A single high-harvest
+day or an outlier interview can dominate a stratum mean. `flag_outliers()`
+(Chapter 11) identifies those records before estimation. Including a sensitivity
+note — "the harvest estimate would change by X% if the three highest-count days
+were treated as anomalies" — is more informative than the interval alone when
+the estimate is leverage-heavy.
+
+These diagnostics belong in the same section of the survey report as the
+precision table. Separating them into a technical appendix invites readers
+to skip one and accept the other without context.
+
+## Takeaway {#sec-uncertainty-takeaway}
+
+Every estimate produced by a creel survey has two parts: the point estimate
+and its uncertainty wrapper. `estimate_effort()` and `estimate_catch_rate()`
+return both in a single call, along with the variance decomposition needed to
+diagnose whether adding sampling days or sampling intervals would be the more
+efficient investment.
+
+`creel_n_effort()`, `validate_design()`, and `creel_power()` connect the
+completed survey to the next season's design. Sample size calculations
+grounded in the current survey's variance estimates are the most defensible
+basis for a budget request. Power calculations make the detection threshold
+explicit rather than leaving managers to infer it from the CV alone.
+
+The coefficient of variation is the most useful single summary of precision
+for management communication. A CV below 15% is generally considered adequate
+for season-total effort and harvest; a CV below 20% is acceptable for CPUE
+when interviews are limited. Both thresholds assume the frame is complete,
+the design assumptions are met, and the diagnostics described in Chapter 11
+have been applied before estimation.

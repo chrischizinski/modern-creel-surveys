@@ -2,117 +2,540 @@
 title: "CPUE Estimation"
 ---
 
-## Purpose
-
-Catch-per-unit-effort is one of the most familiar creel summaries, but it is also one of the easiest to overinterpret.
-
-This chapter shows how CPUE is derived and where interpretation can fail.
-
-CPUE is attractive because it compresses a lot of information into one ratio. That same compression is why the estimate has to be labeled carefully.
-
-## Key ideas
-
-- CPUE as a ratio
-- Angler-hour and boat-hour denominators
-- Completed-trip versus incomplete-trip logic
-- When CPUE is and is not comparable
-- Why ratio estimates need explicit context
-
-## What CPUE is
-
-CPUE is catch per unit effort. The unit may be:
-
-- catch per angler-hour;
-- catch per boat-hour;
-- catch per trip;
-- or another ratio defined by the survey design.
-
-The ratio is only meaningful if the numerator and denominator refer to the same reporting domain and the same time window.
-
-That condition sounds obvious, but it is often violated when people compare one stratum to another, or one survey year to another, without checking whether the denominator really means the same thing.
-
-## Comparison problems
-
-CPUE is often compared across:
-
-- seasons;
-- strata;
-- species;
-- access types;
-- or years.
-
-Those comparisons are only sensible if the sampling design and denominator are comparable. A weekend CPUE and a seasonal CPUE are not the same thing, even if they use the same units.
-
-The analyst should say whether the ratio is being used as a descriptive snapshot, a management indicator, or a basis for comparison. Those uses are not interchangeable.
-
-## Completed versus incomplete trips
-
-For completed trips, the denominator is usually straightforward.
-
-For incomplete trips, the denominator may be partial, censored, or still evolving. In that setting, a naive CPUE comparison can be misleading if it treats a mid-trip observation as if it were a final trip summary.
-
-This is especially important for roving surveys and any design where interviews occur before trips are finished. The numerator may still change after contact, so the ratio is only a temporary view of the fishing experience.
-
-## Why ratios feel stronger than they are
-
-Ratios look precise because they are compact. A single CPUE value can hide differences in trip length, effort mix, access coverage, or trip completeness.
-
-That is not a reason to avoid CPUE. It is a reason to report it as a ratio with context, not as a universal property of the fishery.
-
-## Reporting CPUE honestly
-
-When CPUE is reported, the analyst should say:
-
-- what the numerator is;
-- what the denominator is;
-- whether trips were completed;
-- what strata or periods were included;
-- and whether the comparison is intended to be descriptive or inferential.
-
-If the audience is likely to overread the ratio, the report should say what CPUE does not imply. For example, a higher CPUE does not necessarily mean the fishery is healthier, only that the observed catch relative to effort was higher under the reported design.
-
-## Worked example
-
 ```{r}
-cpue <- data.frame(
-  stratum = c("weekday", "weekend"),
-  catch = c(140, 96),
-  effort_hours = c(420, 180)
-)
+#| label: setup-ch14
+#| include: false
+library(tidycreel)
+library(tidyverse)
+library(lubridate)
+library(here)
 
-cpue$cpue <- cpue$catch / cpue$effort_hours
-cpue
+harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
+harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
+harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
+harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 
-sum(cpue$catch) / sum(cpue$effort_hours)
+shift_hours <- c("1" = 8L, "2" = 6L)
+
+harlan_counts_ch14 <- harlan_counts |>
+  mutate(
+    period        = as.character(period),
+    total_anglers = boat_anglers + bank_anglers,
+    angler_hours  = total_anglers * shift_hours[period]
+  ) |>
+  select(reservoir, date, day_type, period, section, count_time, angler_hours)
+
+catch_by_interview <- harlan_catch |>
+  group_by(interview_id, catch_type) |>
+  summarise(n_fish = sum(n_fish), .groups = "drop") |>
+  pivot_wider(
+    names_from  = catch_type,
+    values_from = n_fish,
+    values_fill = 0L
+  ) |>
+  mutate(total_catch = harvested + released)
+
+harlan_interviews_ch14 <- harlan_interviews |>
+  left_join(catch_by_interview, by = "interview_id") |>
+  mutate(
+    harvested   = if_else(is.na(harvested),   0L, as.integer(harvested)),
+    released    = if_else(is.na(released),    0L, as.integer(released)),
+    total_catch = if_else(is.na(total_catch), 0L, as.integer(total_catch))
+  )
+
+suppressMessages({
+  harlan_design_ch14 <- creel_design(
+    calendar = harlan_schedule,
+    date     = "date",
+    strata   = "day_type"
+  ) |>
+    add_counts(harlan_counts_ch14, count_time_col = "count_time") |>
+    add_interviews(
+      interviews     = harlan_interviews_ch14,
+      catch          = "total_catch",
+      harvest        = "harvested",
+      effort         = "hours_fished",
+      trip_duration  = "hours_fished",
+      trip_status    = "trip_status",
+      n_anglers      = "n_anglers",
+      angler_type    = "angler_type",
+      angler_method  = "angler_method",
+      interview_type = "access"
+    ) |>
+    add_catch(
+      data          = harlan_catch,
+      catch_uid     = "interview_id",
+      interview_uid = "interview_id",
+      species       = "species",
+      count         = "n_fish",
+      catch_type    = "catch_type"
+    )
+})
 ```
 
-This example shows two common outputs: a stratum-specific ratio and a pooled ratio across strata. They answer different questions, so they should not be reported as if they were identical.
+## What CPUE is {#sec-cpue-what}
 
-The stratum-specific value is useful for within-group comparisons. The pooled value is useful for the overall domain. The two numbers should not be mixed unless the weights and design support the combination.
+Catch-per-unit-effort (CPUE) compresses the fishing experience into a single ratio:
+catch divided by effort. That compression is both its appeal and its main source of
+misinterpretation.
 
-## `tidycreel` support
+In a roving or access-point creel survey, effort is measured in angler-hours —
+the product of the number of anglers and the hours they fished. Catch is the
+number of fish contacted over that same duration. The resulting ratio, in units of
+fish per angler-hour, is a population-average catch rate: how many fish a
+representative angler would encounter per hour under the survey conditions.
 
-Implemented:
-- Later chapters show how the package handles CPUE.
+CPUE is not an index of abundance in the strict sense. A higher CPUE could reflect
+better fishing conditions, a change in effort distribution, or an actual increase in
+fish density. Without a stable relationship between catchability and true abundance,
+CPUE should be labeled as the rate observed under the sampling design, not as a
+direct measure of population size. The distinction matters most when comparing
+CPUE across years, strata, or water bodies where survey conditions differ.
 
-Partially supported:
-- The ratio logic is established here; implementation comes later.
+Within a single survey period, however, CPUE is exactly what management reporting
+requires: an estimate of how productive the fishery appeared to anglers who
+participated. That quantity, with its uncertainty, is what `tidycreel` computes
+from interview records.
 
-Manual or conceptual:
-- Choosing the right denominator and domain.
-- Avoiding false comparisons across incompatible ratios.
-- Treating incomplete-trip CPUE with caution.
+## Two ratio estimators {#sec-cpue-estimators}
 
-The package can calculate the ratio, but the analyst has to decide whether the ratio is actually the right summary.
+There are two ways to form a ratio from interview data, and they answer subtly
+different questions [@hoenig1997].
 
-## Example focus
+The **ratio-of-means** (ROM) estimator sums catch and effort separately across
+all interviews, then divides:
 
-Comparing CPUE across strata without overinterpreting the ratio as a universal fishery condition.
+$$\widehat{\text{CPUE}}_{\text{ROM}} = \frac{\sum_{i=1}^{n} c_i}{\sum_{i=1}^{n} e_i}$$
 
-That framing keeps the ratio useful without pretending it says more than it does.
+where $c_i$ is the total catch for interview $i$ and $e_i$ is the hours fished.
+This estimator is weighted by trip length: anglers who fished longer contribute
+more to both the numerator and the denominator. It is the natural estimator for
+completed trips because the full trip record — final catch and full elapsed hours —
+is available at the time of interview.
 
-## Takeaway
+The **mean-of-ratios** (MOR) estimator computes a per-trip rate for each interview
+first, then averages those rates:
 
-CPUE is useful, but only if the denominator is meaningful. A ratio can be compact and still be misleading if the sampling context is not the same.
+$$\widehat{\text{CPUE}}_{\text{MOR}} = \frac{1}{n} \sum_{i=1}^{n} \frac{c_i}{e_i}$$
 
-Whenever CPUE appears in a report, the reader should know what was being divided by what.
+This gives each trip equal weight regardless of duration. It is the natural
+estimator for incomplete trips, where the interview catches an angler mid-trip and
+$c_i$ and $e_i$ are snapshots of a fishing session still in progress. If the catch
+process is stationary — if the rate of catching fish does not change systematically
+within a trip — then the MOR applied to incomplete trips should estimate the same
+parameter as the ROM applied to completed trips.
+
+The stationarity assumption is the critical qualifier. If anglers learn during a
+trip (improving their catch rate over time), then early-trip snapshots will
+underestimate the completed-trip rate. @hoenig1997 analyzed this under a learner
+model and found that truncating very short trips — removing interviews where the
+angler has fished fewer than 30 minutes — substantially reduced bias by excluding
+anglers who had barely started and thus had few catches relative to their eventual
+rate. The `estimator = "mortr"` option in `estimate_catch_rate()` applies this
+truncation automatically.
+
+@pollock1994 recommended using completed trips wherever possible because the ROM
+estimator requires no stationarity assumption. This book follows that convention:
+`estimate_catch_rate()` uses the ROM estimator on completed trips by default.
+
+A practical diagnostic compares both estimators using the same dataset. If the
+completed and incomplete estimates are close — within 10% of the complete-trip
+value — the stationarity assumption is supported and incomplete-trip data can
+supplement the analysis if sample sizes are small. If they diverge substantially,
+the analyst should investigate whether the catch process is non-stationary before
+using MOR-based estimates.
+
+## The Harlan CPUE baseline {#sec-cpue-harlan-baseline}
+
+The 2022 Harlan Reservoir creel survey collected 600 party interviews. Of those,
+390 were completed trips (65%) and 210 were incomplete (35%). The ratio-of-means
+estimator uses the 390 completed-trip records.
+
+```{r}
+#| label: cpue-overall
+#| echo: true
+cpue_overall <- estimate_catch_rate(harlan_design_ch14)
+cpue_overall
+```
+
+The output tibble has five columns: `estimate` is the ratio-of-means CPUE,
+`se` is the Taylor-linearized standard error, `ci_lower` and `ci_upper` are the
+95% confidence interval bounds, and `n` is the number of completed-trip interviews
+used. Every subsequent call to `estimate_catch_rate()` returns the same structure.
+
+The overall CPUE estimate is 1.51 fish per angler-hour (95% CI: [1.32, 1.69]).
+The standard error of 0.093 yields a CV of about 6.2%, which falls comfortably
+below the 15% precision threshold used in Chapter 15. The 390 completed-trip
+sample is adequate for a precise ratio estimate at the survey-wide level.
+
+This estimate is the average catch rate for all anglers in all strata combined.
+It answers the question: how many fish did a typical angler at Harlan encounter
+per hour in 2022? It does not say anything about the total number of fish in the
+reservoir, about whether fishing improved or declined from prior years, or about
+whether any particular species drove the rate.
+
+## CPUE by day-type stratum {#sec-cpue-by-stratum}
+
+The survey design stratifies the calendar into weekdays and weekends. Weekend days
+attract different angler populations — often more casual anglers or families —
+and can have different crowding, access patterns, and fishing conditions than
+weekdays. Stratum-specific CPUE separates those effects.
+
+```{r}
+#| label: cpue-by-daytype
+#| echo: true
+cpue_dt <- estimate_catch_rate(harlan_design_ch14, by = day_type)
+cpue_dt$estimates
+```
+
+```{r}
+#| label: fig-ch14-stratum-ci
+#| echo: true
+#| fig-cap: "CPUE by day-type stratum at Harlan Reservoir, 2022. Points show ratio-of-means estimates from completed-trip interviews; horizontal bars show 95% confidence intervals. Labels report the estimated rate and sample size. Weekend CPUE appears slightly higher but the wider confidence interval reflects the smaller completed-trip sample."
+#| fig-alt: "Forest plot with two rows (Weekday and Weekend) on the y axis. Each row shows a point estimate and horizontal error bar for 95% confidence interval. Weekday CI is narrow (roughly 1.3–1.7); Weekend CI is wide (roughly 1.2–2.1). A vertical dashed reference line marks the overall estimate of 1.51."
+cpue_dt$estimates |>
+  mutate(
+    day_type = str_to_title(day_type),
+    label    = sprintf("%.2f (n = %d)", estimate, n)
+  ) |>
+  ggplot(aes(x = estimate, y = day_type)) +
+  geom_vline(xintercept = 1.51, linetype = "dashed", colour = "grey50") +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
+                 height = 0.15, linewidth = 0.8) +
+  geom_point(size = 3) +
+  geom_text(aes(label = label), vjust = -0.8, size = 3.5) +
+  labs(
+    x = "CPUE (fish per angler-hour)",
+    y = NULL,
+    title = "CPUE by day-type stratum",
+    caption = "Dashed line: overall estimate (1.51 fish/hr). Error bars: 95% CI."
+  ) +
+  xlim(0.9, 2.4) +
+  theme_minimal()
+```
+
+Weekend CPUE (1.64 fish/hr) is slightly higher than weekday CPUE (1.48 fish/hr),
+but the weekend estimate carries a much wider confidence interval because only 69
+weekend interviews were completed trips, compared to 321 weekday interviews. The
+weekend SE is 0.22, more than twice the weekday SE of 0.10. The weekend CI extends
+from 1.21 to 2.08 — a range of nearly one fish per hour — while the weekday CI
+spans only 0.40 units.
+
+Whether the weekend and weekday rates are genuinely different is not resolved by
+this data alone. The overlap in confidence intervals is substantial. A formal
+comparison would require a pooled-variance test or a model-based contrast, but
+for reporting purposes the key observation is that weekend estimates carry higher
+uncertainty and should be interpreted with that caveat.
+
+## CPUE by angler type {#sec-cpue-by-angler-type}
+
+The interviews distinguish bank anglers from boat anglers. These two groups fish
+differently: boat anglers can move to productive structure, cover more water, and
+access mid-lake habitat; bank anglers are constrained to the shoreline. If the
+fish community or the productive habitat is distributed unevenly, the two groups
+should show different catch rates.
+
+```{r}
+#| label: cpue-by-anglertype
+#| echo: true
+cpue_at <- estimate_catch_rate(harlan_design_ch14, by = angler_type)
+cpue_at$estimates
+```
+
+```{r}
+#| label: fig-ch14-angler-type
+#| echo: true
+#| fig-cap: "CPUE by angler type at Harlan Reservoir, 2022. Bank anglers show a substantially higher catch rate than boat anglers, with overlapping confidence intervals only at the outer bounds. The difference reflects both access patterns and target species, not equivalent fishing conditions."
+#| fig-alt: "Forest plot with two rows (Bank and Boat) on the y axis. Bank angler point is near 3.0 with a wide CI extending from about 1.8 to 4.1; Boat angler point is near 1.4 with a narrow CI from about 1.2 to 1.6. A vertical dashed reference line marks the overall estimate of 1.51."
+cpue_at$estimates |>
+  mutate(
+    angler_type = str_to_title(angler_type),
+    label       = sprintf("%.2f (n = %d)", estimate, n)
+  ) |>
+  ggplot(aes(x = estimate, y = angler_type)) +
+  geom_vline(xintercept = 1.51, linetype = "dashed", colour = "grey50") +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
+                 height = 0.15, linewidth = 0.8) +
+  geom_point(size = 3) +
+  geom_text(aes(label = label), vjust = -0.8, size = 3.5) +
+  labs(
+    x = "CPUE (fish per angler-hour)",
+    y = NULL,
+    title = "CPUE by angler type",
+    caption = "Dashed line: overall estimate (1.51 fish/hr). Error bars: 95% CI."
+  ) +
+  xlim(0, 5) +
+  theme_minimal()
+```
+
+Bank anglers report 2.95 fish per angler-hour (95% CI: [1.83, 4.07]), more than
+twice the boat angler rate of 1.41 fish/hr (95% CI: [1.23, 1.59]). The difference
+is large and the confidence intervals do not overlap.
+
+The interpretation requires care. It is tempting to conclude that bank fishing is
+simply more productive, but the comparison conflates method with location and
+target species. Bank anglers at Harlan skew toward white bass, which school near
+the dam face and rocky banks — habitat that is highly accessible from shore and
+episodically very productive when fish are surface feeding. Boat anglers are more
+likely to be pursuing walleye in deeper mid-lake structure, a lower-frequency catch
+but a more deliberately targeted species. The raw CPUE ratio reflects both the
+biology and the behavior, not productivity of the water body alone.
+
+The sample sizes also differ: only 71 bank-angler completed-trip interviews vs 319
+for boat anglers. The bank angler estimate is less precise (SE = 0.57, CV ≈ 19%)
+and should be interpreted in that light.
+
+When reporting CPUE by subgroup, the analyst should always report the sample size
+and CI alongside the point estimate. A 2.95 with a CI of [1.83, 4.07] is a
+different level of evidence than a 1.41 with [1.23, 1.59]. Omitting the interval
+suggests a precision that the data do not support.
+
+## Validating the estimator: the complete vs incomplete diagnostic {#sec-cpue-diagnostic}
+
+The choice between ROM and MOR matters most when incomplete trips are numerous
+and when the analyst suspects non-stationary catch processes. `tidycreel` provides
+a diagnostic mode that applies both estimators and compares the results.
+
+```{r}
+#| label: cpue-diagnostic
+#| echo: true
+cpue_diag <- estimate_catch_rate(harlan_design_ch14, use_trips = "diagnostic")
+cpue_diag$comparison
+```
+
+The completed-trip estimate is 1.51 fish/hr; the incomplete-trip truncated MOR
+estimate is 1.48 fish/hr. The difference is 0.027 — less than 2% of the
+completed-trip value — and falls well within the 10% threshold used as a
+stationarity benchmark [@hoenig1997]. The diagnostic interpretation returned by
+the function confirms this: "Estimates are similar."
+
+The MOR estimate uses 152 of the 210 incomplete-trip interviews; 58 were truncated
+because the angler had fished fewer than 30 minutes when contacted. Those very
+short-trip interviews are dropped to avoid leveraging noisy per-trip ratios from
+anglers who had barely started fishing.
+
+The agreement between estimators for Harlan 2022 is reassuring. It suggests that
+the catch process at Harlan is approximately stationary: anglers were not
+systematically more or less successful later in their trips relative to earlier.
+This supports using the completed-trip ROM estimate as the primary result without
+adjustment.
+
+```{r}
+#| label: fig-ch14-diagnostic
+#| echo: true
+#| fig-cap: "Complete vs incomplete trip CPUE estimates at Harlan Reservoir, 2022. The ratio-of-means estimate from completed trips (n = 390) and the truncated mean-of-ratios estimate from incomplete trips (n = 152 after removing trips < 30 min) differ by less than 2%, supporting the stationarity assumption. Error bars show 95% confidence intervals."
+#| fig-alt: "Forest plot with two rows: Complete (n=390) and Incomplete (n=152). Complete trip point is near 1.51 with a narrow CI. Incomplete trip point is near 1.48 with a much wider CI. A vertical dashed reference line marks 1.51."
+cpue_diag$comparison |>
+  mutate(
+    trip_type = str_to_title(trip_type),
+    label     = sprintf("%.2f (n = %d)", estimate, n)
+  ) |>
+  ggplot(aes(x = estimate, y = trip_type)) +
+  geom_vline(xintercept = 1.51, linetype = "dashed", colour = "grey50") +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
+                 height = 0.15, linewidth = 0.8) +
+  geom_point(size = 3) +
+  geom_text(aes(label = label), vjust = -0.8, size = 3.5) +
+  labs(
+    x = "CPUE (fish per angler-hour)",
+    y = "Trip type",
+    title = "Complete vs incomplete trip CPUE",
+    caption = "Dashed line: complete-trip estimate (1.51 fish/hr). Error bars: 95% CI."
+  ) +
+  xlim(0.5, 2.5) +
+  theme_minimal()
+```
+
+The diagnostic is especially important when the complete-trip sample is small.
+If fewer than 30% of interviews are completed trips, the ROM estimate may be
+imprecise and the analyst should explicitly test whether MOR-based supplementation
+would improve precision without introducing systematic bias. At Harlan, with 65%
+complete trips, the diagnostic is confirmatory rather than diagnostic in a strict
+sense — it validates the design, not rescues it.
+
+## Harvest rate and release rate {#sec-cpue-hpue-rpue}
+
+CPUE encompasses all fish contacted — harvested and released together. The
+component rates are estimated separately by `estimate_harvest_rate()` and
+`estimate_release_rate()`. These functions use all interviews, including incomplete
+trips, because the current livewell contents and any fish already released are
+observable regardless of whether the trip is finished.
+
+```{r}
+#| label: hpue-rpue
+#| echo: true
+hpue <- estimate_harvest_rate(harlan_design_ch14)
+rpue <- estimate_release_rate(harlan_design_ch14)
+
+bind_rows(
+  hpue$estimates |> mutate(quantity = "Harvest rate (HPUE)"),
+  rpue$estimates |> mutate(quantity = "Release rate (RPUE)")
+) |>
+  select(quantity, estimate, se, ci_lower, ci_upper, n)
+```
+
+Harvest rate is 0.600 fish per angler-hour (SE = 0.043); release rate is 0.917
+fish per angler-hour (SE = 0.071). Both use all 600 interviews (n = 600), which
+is why the sample sizes differ from the CPUE n of 390.
+
+A simple consistency check: if the catch partition is internally coherent, then
+HPUE + RPUE should approximately equal CPUE. Here, 0.600 + 0.917 = 1.517, which
+compares well to the CPUE of 1.51. The 0.7% discrepancy arises because CPUE uses
+only completed trips while HPUE and RPUE use all interviews — different
+denominators produce a small arithmetic disagreement that does not indicate an
+error. The close agreement confirms that the interview records are internally
+consistent.
+
+The release fraction (RPUE / CPUE ≈ 0.917 / 1.51 ≈ 0.61) says that roughly 61%
+of fish contacted at Harlan were released. This is a useful planning number: if
+an angler at Harlan catches 10 fish in a session, about 6 are expected to go back.
+The harvest fraction (0.600 / 1.51 ≈ 0.40) reflects the direct extraction rate
+and feeds directly into harvest estimation when multiplied by total angler-hours
+(see Chapter 13).
+
+```{r}
+#| label: fig-ch14-rates
+#| echo: true
+#| fig-cap: "Catch, harvest, and release rates at Harlan Reservoir, 2022. CPUE uses completed-trip interviews only (n = 390); HPUE and RPUE use all interviews (n = 600). HPUE plus RPUE sum to 1.517, within 0.7% of CPUE, confirming internal consistency of the catch partition. Error bars show 95% confidence intervals."
+#| fig-alt: "Three horizontal error bars arranged vertically. CPUE at top (~1.51) with a narrow CI. RPUE in middle (~0.917) with a moderate CI. HPUE at bottom (~0.600) with a narrow CI. A vertical dashed line marks the CPUE value of 1.51."
+bind_rows(
+  cpue_overall$estimates |> mutate(quantity = "CPUE (all catch)"),
+  rpue$estimates          |> mutate(quantity = "RPUE (released)"),
+  hpue$estimates          |> mutate(quantity = "HPUE (harvested)")
+) |>
+  mutate(quantity = factor(quantity,
+    levels = c("CPUE (all catch)", "RPUE (released)", "HPUE (harvested)"))) |>
+  ggplot(aes(x = estimate, y = quantity)) +
+  geom_vline(xintercept = 1.51, linetype = "dashed", colour = "grey50") +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
+                 height = 0.15, linewidth = 0.8) +
+  geom_point(size = 3) +
+  geom_text(aes(label = sprintf("%.3f", estimate)), vjust = -0.8, size = 3.5) +
+  labs(
+    x = "Rate (fish per angler-hour)",
+    y = NULL,
+    title = "Catch, harvest, and release rates",
+    caption = "Dashed line: CPUE baseline (1.51 fish/hr). Error bars: 95% CI."
+  ) +
+  xlim(0, 2.1) +
+  theme_minimal()
+```
+
+## Species-level CPUE {#sec-cpue-by-species}
+
+Management decisions often require species-specific catch rates: walleye CPUE
+is relevant to minimum-size regulations, white bass CPUE to bag limits. The
+natural call is `estimate_catch_rate(by = species)`, but a known issue in the
+current version of `tidycreel` (GitHub issue #64) causes this to return zeros
+for all species. The internal species-catch lookup matches on a catch type label
+that does not align with the field values in the Harlan dataset.
+
+```{r}
+#| label: cpue-species-issue
+#| echo: true
+estimate_catch_rate(harlan_design_ch14, by = species)
+```
+
+All estimates are zero. This is not a property of the Harlan data; it is a package
+limitation. Until issue #64 is resolved, species-level CPUE must be approximated
+from the raw catch table rather than from the estimation pipeline.
+
+The raw approach computes an approximate catch rate per species by pooling catch
+and effort across completed-trip interviews:
+
+```{r}
+#| label: species-cpue-approx
+#| echo: true
+species_catch <- harlan_catch |>
+  filter(catch_type %in% c("harvested", "released")) |>
+  group_by(interview_id, species) |>
+  summarise(n_fish = sum(n_fish), .groups = "drop")
+
+completed_ids <- harlan_interviews |>
+  filter(trip_status == "complete") |>
+  pull(interview_id)
+
+species_catch |>
+  filter(interview_id %in% completed_ids) |>
+  left_join(
+    harlan_interviews |> select(interview_id, hours_fished),
+    by = "interview_id"
+  ) |>
+  group_by(species) |>
+  summarise(
+    total_fish  = sum(n_fish),
+    total_hours = sum(hours_fished),
+    approx_cpue = round(total_fish / total_hours, 3),
+    n_interviews = n_distinct(interview_id),
+    .groups = "drop"
+  ) |>
+  arrange(desc(approx_cpue))
+```
+
+This is a descriptive approximation, not a design-based estimate. It ignores
+stratification weights and does not produce a standard error. The values should
+be read as a relative ranking — white bass dominate the catch rate, walleye are
+the second most frequently encountered species — rather than as calibrated
+population estimates.
+
+When issue #64 is resolved in a future package version,
+`estimate_catch_rate(by = species)` will replace this workaround and produce
+design-based species CPUE with proper confidence intervals.
+
+## What CPUE implies and what it does not {#sec-cpue-interpretation}
+
+CPUE is a ratio with a numerator (catch) and a denominator (effort). Both
+components carry uncertainty, and that uncertainty propagates into the ratio.
+The standard error produced by `estimate_catch_rate()` reflects that propagation
+using Taylor linearization, which is appropriate for smooth statistics like ratios
+under the assumption that both components are large enough relative to their
+variability.
+
+Several common misinterpretations deserve explicit attention.
+
+**CPUE is not abundance.** A CPUE of 1.51 fish per angler-hour does not mean
+there are 1.51 catchable fish per angler-hour of water. Catchability — the
+probability that a fish is contacted given it is present — varies with gear type,
+habitat use, season, and fish behavior. Creel surveys do not estimate catchability;
+they estimate the rate experienced by anglers. Converting CPUE to abundance
+requires catchability coefficients that are rarely available.
+
+**CPUE comparisons require compatible designs.** A weekday CPUE from one year
+is not directly comparable to a weekend CPUE from another year without accounting
+for stratum composition. If the proportion of weekday surveys changes between years,
+the pooled CPUE changes even if neither weekday nor weekend rates change. Comparing
+overall rates across years is only defensible if the survey design and stratum
+weights are held constant, or if stratum-specific rates are compared directly.
+
+**Higher CPUE does not equal better fishing.** Anglers may report high CPUE because
+they targeted a species with dense schooling behavior, fished during a peak
+season, or changed their technique. Fishery health depends on biomass, age
+structure, and recruitment — quantities that CPUE alone cannot reveal.
+
+**CPUE from completed trips excludes some anglers systematically.** The ROM
+estimator uses only trips that ended before the survey period closed. Anglers
+who fished past the survey closing time are excluded. If late-evening fishing
+has different catch rates — common when fish are crepuscular — the completed-trip
+estimate may be slightly biased toward daytime conditions. The diagnostic check
+(Section [-@sec-cpue-diagnostic]) helps assess the magnitude of this effect.
+
+Reporting CPUE honestly means stating the estimator used, the sample size of
+completed trips, the survey period and strata included, and a confidence interval.
+A point estimate alone — "anglers caught 1.5 fish per hour" — strips the precision
+context that distinguishes a well-supported finding from a noisy snapshot.
+
+## Takeaway {#sec-cpue-takeaway}
+
+CPUE is catch divided by effort, expressed as a ratio with an uncertainty
+estimate. `tidycreel` implements two estimators: ratio-of-means for completed
+trips (default) and mean-of-ratios for incomplete trips (diagnostic or roving
+designs). At Harlan 2022, the overall completed-trip CPUE is 1.51 fish/hr
+(95% CI: [1.32, 1.69]). Bank anglers show a markedly higher rate than boat anglers,
+a difference that reflects target species and habitat access rather than overall
+productivity. The complete vs incomplete diagnostic confirms stationarity: both
+estimators produce estimates within 2% of each other.
+
+The most important interpretation rule is also the simplest: report CPUE as a
+rate observed under a specific design, with its confidence interval, for a specific
+population of anglers in a specific time window. That framing prevents the ratio
+from being overread as a universal property of the fishery.

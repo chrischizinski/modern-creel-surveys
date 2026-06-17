@@ -2,114 +2,821 @@
 title: "Reporting and Interpretation"
 ---
 
-## Purpose
-
-The final step in a creel workflow is the report. It explains what the estimate means, what it does not mean, and how much confidence the reader should place in it.
-
-This chapter is where the earlier methodological decisions become visible to the people who need the result. A report is not just output formatting; it is the public face of the analysis.
-
-## Key ideas
-
-- Technical versus managerial reporting
-- Tables, figures, and narrative summaries
-- Limitations and caveats
-- Reproducible reporting workflow
-- How to avoid overstating the result
-
-## Different audiences
-
-Creel reports often serve multiple audiences:
-
-- field staff who need operational feedback;
-- managers who need a decision summary;
-- researchers who need methodological detail;
-- stakeholders who need a concise explanation of what happened.
-
-The same estimate may need different levels of detail for each audience, but the underlying claim should stay the same.
-
-That separation matters because audience adaptation should change the presentation, not the substance. If the estimate means one thing to staff and another to managers, the report has already failed.
-
-## Reporting style
-
-A defensible report usually includes:
-
-- a short statement of the question;
-- the reporting domain;
-- the design and unit of analysis;
-- the key estimates;
-- uncertainty and caveats;
-- a short interpretation that avoids overclaiming.
-
-The strongest reports make the domain visible early, use plain language for the target quantity, and keep the interpretation close to the evidence.
-
-## Common mistakes
-
-The most common reporting failures are:
-
-- leaving out the domain;
-- failing to say what the denominator is;
-- presenting a point estimate without uncertainty;
-- mixing stratified and unstratified interpretations;
-- describing a result as general when it only covers a subset of the fishery.
-
-Another common failure is burying the domain in a footnote or appendix. If the boundary of the estimate matters, it should be visible where the result is stated.
-
-## Reproducible outputs
-
-The report should be reproducible from the same analysis pipeline that generated the estimates. That makes it easier to:
-
-- rerun the report when data change;
-- track revisions across years;
-- audit the steps that produced a conclusion.
-
-Reproducibility also protects the report from drifting away from the analysis over time. When a future analyst reruns the workflow, they should get the same structure and ideally the same conclusion unless the data changed.
-
-## Worked example
-
 ```{r}
-estimate <- 2345
-se <- 180
-lower <- estimate - 1.96 * se
-upper <- estimate + 1.96 * se
+#| label: setup-ch16
+#| include: false
+library(tidycreel)
+library(tidyverse)
+library(lubridate)
+library(here)
 
-cat(
-  "Estimated annual angler-hours in the public-access domain were",
-  format(estimate, big.mark = ","),
-  "with an approximate 95% interval from",
-  format(round(lower), big.mark = ","),
-  "to",
-  format(round(upper), big.mark = ","),
-  ".\n"
-)
+harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
+harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
+harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
+harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
+
+shift_hours <- c("1" = 8L, "2" = 6L)
+
+harlan_counts_ch16 <- harlan_counts |>
+  mutate(
+    period        = as.character(period),
+    total_anglers = boat_anglers + bank_anglers,
+    angler_hours  = total_anglers * shift_hours[period]
+  ) |>
+  select(reservoir, date, day_type, period, section, count_time, angler_hours)
+
+catch_by_interview <- harlan_catch |>
+  group_by(interview_id, catch_type) |>
+  summarise(n_fish = sum(n_fish), .groups = "drop") |>
+  pivot_wider(
+    names_from  = catch_type,
+    values_from = n_fish,
+    values_fill = 0L
+  ) |>
+  mutate(total_catch = harvested + released)
+
+harlan_interviews_ch16 <- harlan_interviews |>
+  left_join(catch_by_interview, by = "interview_id") |>
+  mutate(
+    harvested   = if_else(is.na(harvested),   0L, as.integer(harvested)),
+    released    = if_else(is.na(released),    0L, as.integer(released)),
+    total_catch = if_else(is.na(total_catch), 0L, as.integer(total_catch))
+  )
+
+suppressMessages({
+  harlan_design_ch16 <- creel_design(
+    calendar = harlan_schedule,
+    date     = "date",
+    strata   = "day_type"
+  ) |>
+    add_counts(harlan_counts_ch16, count_time_col = "count_time") |>
+    add_interviews(
+      interviews     = harlan_interviews_ch16,
+      catch          = "total_catch",
+      harvest        = "harvested",
+      effort         = "hours_fished",
+      trip_duration  = "hours_fished",
+      trip_status    = "trip_status",
+      n_anglers      = "n_anglers",
+      angler_type    = "angler_type",
+      angler_method  = "angler_method",
+      interview_type = "access"
+    ) |>
+    add_catch(
+      data          = harlan_catch,
+      catch_uid     = "interview_id",
+      interview_uid = "interview_id",
+      species       = "species",
+      count         = "n_fish",
+      catch_type    = "catch_type"
+    )
+})
+
+fmt_comma <- function(x) formatC(round(x), format = "f", digits = 0, big.mark = ",")
+fmt_rate  <- function(x) sprintf("%.2f", x)
+fmt_pct   <- function(x) sprintf("%.1f%%", x)
 ```
 
-That style works because it tells the reader what was estimated, how uncertain it is, and what domain it applies to without adding unnecessary words.
+## Reporting as the final mile {#sec-reporting-intro}
 
-The wording is compact, but the information content is high. That is the standard the rest of the report should try to meet.
+A creel survey produces estimates with standard errors and confidence intervals.
+Whether those numbers serve their purpose depends entirely on how they are
+communicated. A well-executed survey can mislead if the report fails to state
+what domain was sampled, how the estimate was constructed, or what uncertainty
+attaches to the result. A less precise survey can still support a sound management
+decision if the report is honest about its limitations and what the numbers cannot
+answer.
 
-## `tidycreel` support
+Reporting is not cleanup that happens after analysis — it is the last step of
+analysis. The decisions made during survey design (which strata to sample, which
+estimator to apply, which interviews to include) determine what the final number
+actually measures. The report is where those decisions become visible to people
+who did not make them. A number without a domain statement is not an estimate;
+it is a quantity of unknown scope.
 
-Implemented:
-- Later chapters show how the package supports report-ready outputs.
+This chapter shows how to assemble all Harlan Reservoir 2022 estimates into a
+single report-ready structure, write defensible narrative sentences with inline R
+so the prose stays synchronized with the analysis, present tables and figures
+appropriate for different management audiences, and state caveats that protect
+readers from overgeneralizing results to domains the survey did not cover.
 
-Partially supported:
-- The reporting principles are established here; implementation comes later.
+## The reporting contract {#sec-report-contract}
 
-Manual or conceptual:
-- Producing a defensible report from the analysis.
-- Writing for different audiences without changing the estimate itself.
-- Keeping the interpretation narrower than the data can support.
+Every creel report makes an implicit claim about what the numbers mean. Making
+that claim explicit requires six elements, stated in some form before any
+estimates appear.
 
-The package can help generate report-ready numbers, but the analyst still owns the narrative.
+**1. The question.** What biological or management quantity was the primary
+target? Effort, total harvest, catch rate, or all three? Specifying the question
+first tells the reader what to look for and what to skip. A report whose stated
+question is "what was the total harvest of game fish at Harlan Reservoir in
+2022?" has a different burden of evidence than one asking "how did effort vary
+by day type?"
 
-## Example focus
+**2. The domain.** Which part of the fishery do the estimates cover? The Harlan
+2022 survey sampled public-access areas using an access-point design during
+standard operating hours from April through October. Estimates therefore apply
+to that spatiotemporal domain — not to private shorelines, not to pre-spawn
+April activity occurring before sampling began, not to effort on days when no
+crew was deployed.
 
-A year-end creel report for agency staff and managers that includes both totals and caveats.
+The most common reporting failure is leaving the domain unstated [@pollock1994].
+Without it, an estimate of 19,000 fish harvested reads as though it applies to
+the entire reservoir and the entire calendar year. It does not. The domain is
+not a caveat to be buried at the end — it belongs in the same sentence as the
+number.
 
-That is where methodological discipline matters most, because the audience is likely to treat the numbers as decision inputs.
+**3. The design and unit of analysis.** Stratified access-point creel survey;
+day-type strata (weekday and weekend); angler-hours as the effort unit;
+party-based interviews; 600 total interviews across the season. A reader who
+understands the design can evaluate whether the estimators are appropriate and
+whether the same design could be applied to their own system.
 
-## Takeaway
+**4. The key estimates.** Point estimates for each quantity, with labels that
+include units. "Effort" is ambiguous; "33,000 angler-hours" is not.
 
-Interpretation is part of analysis. If the report overstates the scope of the estimate, the numerical result is not enough to save it.
+**5. Uncertainty.** Standard errors and 95% confidence intervals for every
+estimate in the report. A point estimate without uncertainty is not an estimate
+— it is a guess with no information about how seriously to take it. Presenting
+only the point estimate implicitly claims perfect precision, which no creel
+survey achieves.
 
-The report has to tell the truth about the design, not just about the arithmetic.
+**6. Interpretation.** A brief statement of what the estimate implies for
+management, constrained to what the data can support. The interpretation should
+not be wider than the domain. If the survey covered public-access areas only,
+the interpretation should not conclude that the total fishery is under pressure —
+it should conclude that the sampled portion shows evidence of pressure.
+
+These six elements protect both the reader and the analyst. Readers get the
+information they need to evaluate how much weight to put on the numbers.
+Analysts get a record of what the survey was designed to measure and a defense
+against future questions about what was or was not estimated.
+
+## Assembling the Harlan estimates {#sec-report-assemble}
+
+Chapters 12 through 15 demonstrated each estimator separately. A report needs
+all of them together, in one structure, so that the full picture of the fishery
+is visible at once. The starting point is the same design object built throughout
+Part IV — here reconstructed from the raw Harlan data in a hidden setup chunk
+using the same pipeline from those earlier chapters.
+
+Running all estimates in sequence and extracting the `$estimates` slot from each
+produces a set of tibbles with a consistent column structure:
+`estimate`, `se`, `ci_lower`, `ci_upper`. That structural consistency is what
+makes assembly straightforward.
+
+```{r}
+#| label: estimates-ch16
+#| echo: true
+
+eff_ch16     <- estimate_effort(harlan_design_ch16,         target = "stratum_total")
+harvest_ch16 <- estimate_total_harvest(harlan_design_ch16,  target = "stratum_total")
+catch_ch16   <- estimate_total_catch(harlan_design_ch16,    target = "stratum_total")
+release_ch16 <- estimate_total_release(harlan_design_ch16,  target = "stratum_total")
+cpue_ch16    <- estimate_catch_rate(harlan_design_ch16)
+hpue_ch16    <- estimate_harvest_rate(harlan_design_ch16)
+rpue_ch16    <- estimate_release_rate(harlan_design_ch16)
+```
+
+The `target = "stratum_total"` argument expands sampled-day estimates to the
+full stratum — the appropriate choice when reporting a season total rather than
+a summary of surveyed days only. The rate estimators (`estimate_catch_rate`,
+`estimate_harvest_rate`, `estimate_release_rate`) do not take a `target`
+argument because they are ratios, not totals; they are already expressed per
+unit effort and scale-free with respect to sampling intensity.
+
+With all seven objects in hand, `bind_rows()` collects them into a single
+reporting table. A `select()` call standardizes the column set across
+estimators that return slightly different output structures (effort returns
+`se_between` and `se_within`; other estimators return only `se`).
+
+```{r}
+#| label: summary-raw-ch16
+#| echo: true
+
+report_summary <- bind_rows(
+  eff_ch16$estimates |>
+    select(estimate, se, ci_lower, ci_upper) |>
+    mutate(quantity = "Effort",         unit = "angler-hours"),
+  harvest_ch16$estimates |>
+    select(estimate, se, ci_lower, ci_upper) |>
+    mutate(quantity = "Total harvest",  unit = "fish"),
+  catch_ch16$estimates |>
+    select(estimate, se, ci_lower, ci_upper) |>
+    mutate(quantity = "Total catch",    unit = "fish"),
+  release_ch16$estimates |>
+    select(estimate, se, ci_lower, ci_upper) |>
+    mutate(quantity = "Total release",  unit = "fish"),
+  cpue_ch16$estimates |>
+    select(estimate, se, ci_lower, ci_upper) |>
+    mutate(quantity = "CPUE",           unit = "fish / hr"),
+  hpue_ch16$estimates |>
+    select(estimate, se, ci_lower, ci_upper) |>
+    mutate(quantity = "HPUE",           unit = "fish / hr"),
+  rpue_ch16$estimates |>
+    select(estimate, se, ci_lower, ci_upper) |>
+    mutate(quantity = "RPUE",           unit = "fish / hr")
+) |>
+  select(quantity, unit, estimate, se, ci_lower, ci_upper)
+
+report_summary
+```
+
+The seven-row tibble is the raw material for every derived output in this
+chapter — narrative sentences, formatted tables, and all three figures.
+All downstream objects read from `report_summary` or from the individual estimate
+objects, so any change to the estimation pipeline propagates automatically.
+
+The estimates confirm the values established in earlier chapters:
+`r fmt_comma(eff_ch16$estimates$estimate)` angler-hours of effort,
+`r fmt_comma(harvest_ch16$estimates$estimate)` fish harvested,
+`r fmt_comma(catch_ch16$estimates$estimate)` fish caught in total, and
+a catch rate of `r fmt_rate(cpue_ch16$estimates$estimate)` fish per angler-hour.
+The harvest CI spans from
+`r fmt_comma(harvest_ch16$estimates$ci_lower)` to
+`r fmt_comma(harvest_ch16$estimates$ci_upper)` fish —
+a range of `r fmt_comma(harvest_ch16$estimates$ci_upper - harvest_ch16$estimates$ci_lower)` fish
+from lower to upper bound. Reporting only the point estimate would conceal that
+entire span.
+
+## Narrative reporting with inline R {#sec-narrative}
+
+A table of estimates is not a report. It is the evidence a report draws on.
+The report also needs to tell the reader what the estimates mean, in plain
+language, with the numbers embedded directly in the prose so that a reader who
+never reaches the table still encounters the key result.
+
+Quarto supports inline R expressions using backtick notation: any expression
+inside `` `r ` `` is evaluated at render time and its result is inserted into
+the surrounding prose. This mechanism ensures that the narrative cannot drift
+from the analysis. If the data or design changes, re-rendering the document
+updates every inline number automatically. There is no manual transcription
+step where errors can enter.
+
+```{r}
+#| label: fmt-helpers-ch16
+#| echo: true
+#| eval: false
+
+fmt_comma <- function(x) formatC(round(x), format = "f", digits = 0, big.mark = ",")
+fmt_rate  <- function(x) sprintf("%.2f", x)
+fmt_pct   <- function(x) sprintf("%.1f%%", x)
+```
+
+These helpers, defined once in the setup chunk, cover the three formats that
+creel reports need most often. `fmt_comma()` rounds to the nearest integer and
+adds thousand-separator commas — appropriate for totals where sub-unit precision
+is spurious. `fmt_rate()` uses two decimal places — appropriate for CPUE and
+HPUE where differences at the second decimal place can signal meaningful change
+across years. `fmt_pct()` formats coefficients of variation as percentages for
+precision tables.
+
+The sentence pattern that works for creel estimates has three parts: what was
+estimated, how large the estimate is, and how uncertain it is. Domain belongs
+in the first part. The three examples below show correctly structured report
+sentences for effort, harvest, and catch rate.
+
+::: {.callout-note title="Report sentence: effort"}
+Anglers expended an estimated
+`r fmt_comma(eff_ch16$estimates$estimate)` angler-hours at Harlan
+Reservoir during the 2022 open season
+(95% CI: `r fmt_comma(eff_ch16$estimates$ci_lower)`–`r fmt_comma(eff_ch16$estimates$ci_upper)` angler-hours).
+:::
+
+::: {.callout-note title="Report sentence: harvest"}
+Total harvest in public-access areas was estimated at
+`r fmt_comma(harvest_ch16$estimates$estimate)` fish
+(SE = `r fmt_comma(harvest_ch16$estimates$se)`,
+95% CI: `r fmt_comma(harvest_ch16$estimates$ci_lower)`–`r fmt_comma(harvest_ch16$estimates$ci_upper)` fish).
+:::
+
+::: {.callout-note title="Report sentence: catch rate"}
+The overall catch rate was
+`r fmt_rate(cpue_ch16$estimates$estimate)` fish per angler-hour
+(SE = `r fmt_rate(cpue_ch16$estimates$se)`,
+95% CI: `r fmt_rate(cpue_ch16$estimates$ci_lower)`–`r fmt_rate(cpue_ch16$estimates$ci_upper)` fish / hr),
+based on `r cpue_ch16$estimates$n` completed party interviews.
+:::
+
+Each sentence includes three things that are often omitted in practice: the
+domain ("Harlan Reservoir, 2022 open season"), the unit ("angler-hours" or
+"fish per angler-hour"), and the uncertainty ("SE =" and "95% CI"). Omitting
+any one of them weakens the claim without necessarily making it wrong — but it
+leaves the reader unable to evaluate the estimate.
+
+Choosing precision is also a reporting decision. Reporting a harvest estimate
+of `r fmt_comma(harvest_ch16$estimates$estimate)` fish implies that the model
+is accurate to the individual fish, which it is not. The point estimate is an
+expansion of count-derived effort and interview-derived rates, each carrying
+substantial uncertainty. Rounding to the nearest hundred or even the nearest
+thousand is defensible for a management report where the practical question is
+"roughly how many fish were removed?" rather than "exactly how many?"
+
+```{r}
+#| label: rounding-demo-ch16
+#| echo: true
+
+harvest_est <- harvest_ch16$estimates$estimate
+
+cat(sprintf(
+  "Raw point estimate:       %s fish\n
+Rounded to nearest 100:   %s fish\n
+Rounded to nearest 1,000: %s fish\n",
+  fmt_comma(harvest_est),
+  fmt_comma(round(harvest_est, -2)),
+  fmt_comma(round(harvest_est, -3))
+))
+```
+
+For most management contexts, rounding to the nearest hundred preserves the
+meaningful information while avoiding spurious precision. The exact rounding
+choice should be stated in the report — "estimates are rounded to the nearest
+100 fish" — so readers understand that the reported figure is not exact.
+
+## The summary table {#sec-report-table}
+
+A formatted summary table presents all estimates simultaneously with consistent
+rounding and visible uncertainty. The goal is a table that a fisheries manager
+can hand to a supervisor or include in an annual report without additional
+editing.
+
+```{r}
+#| label: report-table-ch16
+#| echo: true
+
+report_table <- report_summary |>
+  mutate(
+    Estimate = case_when(
+      unit %in% c("angler-hours", "fish") ~ fmt_comma(estimate),
+      TRUE                                 ~ fmt_rate(estimate)
+    ),
+    SE = case_when(
+      unit %in% c("angler-hours", "fish") ~ fmt_comma(se),
+      TRUE                                 ~ fmt_rate(se)
+    ),
+    `95% CI` = paste0(
+      case_when(
+        unit %in% c("angler-hours", "fish") ~ fmt_comma(ci_lower),
+        TRUE                                 ~ fmt_rate(ci_lower)
+      ),
+      "–",
+      case_when(
+        unit %in% c("angler-hours", "fish") ~ fmt_comma(ci_upper),
+        TRUE                                 ~ fmt_rate(ci_upper)
+      )
+    ),
+    CV = fmt_pct(se / estimate * 100)
+  ) |>
+  select(
+    Quantity = quantity,
+    Unit     = unit,
+    Estimate,
+    SE,
+    `95% CI`,
+    CV
+  )
+
+report_table
+```
+
+The CV column — coefficient of variation, expressed as SE / estimate × 100 —
+gives readers a scale-free precision indicator. A CV below 20% is commonly
+cited as management-grade precision for recreational fisheries surveys
+[@pollock1994]. The Harlan estimates vary by quantity: effort benefits from
+the stratified design and has the lowest CV among the totals, while harvest and
+catch totals carry both effort uncertainty and rate uncertainty, producing larger
+CVs. Rate estimates fall between those extremes.
+
+The table should appear in any report with a caption that states the domain:
+"Estimated effort, harvest, catch, release, and catch rates for Harlan
+Reservoir 2022, covering public-access areas during the open season
+(April–October). All totals use `target = "stratum_total"` expansions;
+rates are ratio-of-means estimates from all eligible interviews."
+
+## Summary figure: totals {#sec-fig-totals}
+
+For audiences who read figures before tables, a summary plot that shows all
+totals with confidence intervals communicates scale and uncertainty more
+efficiently than a table. Because effort (angler-hours) and the fish counts
+(harvest, catch, release) have different units and very different magnitudes,
+they require separate panels with free scales.
+
+```{r}
+#| label: fig-ch16-totals
+#| echo: true
+#| fig-cap: "Season totals for Harlan Reservoir 2022. Left panel: total angling effort in angler-hours. Right panel: estimated total catch, harvest, and release in number of fish. Points are ratio-of-means estimates; horizontal bars show 95% confidence intervals. Catch exceeds harvest because the majority of fish were released; the CI on each total reflects combined uncertainty from effort estimation and rate estimation."
+#| fig-alt: "Two-panel dot-and-CI plot. Left panel shows estimated effort with a wide CI. Right panel shows three quantities: total catch, release, and harvest in descending order; all have wide CIs relative to their point estimates."
+
+totals_effort <- report_summary |>
+  filter(quantity == "Effort") |>
+  mutate(panel = "Effort (angler-hours)")
+
+totals_fish <- report_summary |>
+  filter(quantity %in% c("Total catch", "Total harvest", "Total release")) |>
+  mutate(panel = "Fish (count)")
+
+totals_plot <- bind_rows(totals_effort, totals_fish) |>
+  mutate(
+    quantity = fct_relevel(quantity, "Total catch", "Total release", "Total harvest"),
+    panel    = fct_relevel(panel, "Effort (angler-hours)", "Fish (count)")
+  )
+
+ggplot(totals_plot, aes(x = estimate, y = quantity)) +
+  geom_linerange(
+    aes(xmin = ci_lower, xmax = ci_upper),
+    linewidth = 0.8,
+    color     = "#2171b5"
+  ) +
+  geom_point(
+    size  = 3,
+    color = "#2171b5"
+  ) +
+  scale_x_continuous(labels = scales::comma) +
+  facet_wrap(~panel, scales = "free", ncol = 2) +
+  labs(
+    x     = "Estimate (with 95% CI)",
+    y     = NULL,
+    title = "Harlan Reservoir 2022: season totals"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    strip.text       = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+```
+
+The width of the confidence intervals in both panels conveys a message that
+numbers alone can obscure: the estimates are imprecise. The effort CI alone
+spans a range large enough to shift harvest estimates by several thousand fish.
+A manager who sees only the point estimates might treat them as facts; the
+figure makes clear that they are model-derived quantities with meaningful
+uncertainty attached.
+
+## Precision profile {#sec-fig-precision}
+
+Not all estimates from the same survey are equally reliable. Effort estimates
+from a well-designed stratified survey typically have lower CVs than harvest
+or catch totals, because the latter add rate uncertainty on top of effort
+uncertainty. A precision profile — a horizontal bar chart of CVs — makes
+these differences visible and helps managers understand which parts of the
+report deserve the most caution.
+
+```{r}
+#| label: fig-ch16-precision
+#| echo: true
+#| fig-cap: "Coefficient of variation (CV) for each Harlan Reservoir 2022 estimate. Bars show SE / estimate × 100. The dashed vertical line at 20% marks a commonly cited threshold for management-grade precision in recreational fishery surveys. Estimates with CVs above 20% should be interpreted cautiously and may justify increased sampling effort in future seasons."
+#| fig-alt: "Horizontal bar chart showing CV for seven estimates ordered from largest to smallest. Color distinguishes effort, fish totals, and rate estimates. A vertical dashed line at 20% marks the management-grade precision threshold."
+
+cv_tbl <- report_summary |>
+  mutate(cv = se / estimate * 100) |>
+  mutate(
+    quantity = fct_reorder(quantity, cv),
+    category = case_when(
+      quantity == "Effort"                              ~ "Effort",
+      as.character(quantity) %in% c("Total harvest",
+                                    "Total catch",
+                                    "Total release")   ~ "Total (fish)",
+      TRUE                                              ~ "Rate (fish / hr)"
+    )
+  )
+
+ggplot(cv_tbl, aes(x = cv, y = quantity, fill = category)) +
+  geom_col(width = 0.6) +
+  geom_vline(xintercept = 20, linetype = "dashed", color = "gray40") +
+  annotate(
+    "text",
+    x = 21, y = Inf,
+    label    = "20% target",
+    hjust    = 0,
+    vjust    = 1.5,
+    size     = 3.2,
+    color    = "gray30"
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Effort"           = "#2171b5",
+      "Total (fish)"     = "#6baed6",
+      "Rate (fish / hr)" = "#bdd7e7"
+    )
+  ) +
+  scale_x_continuous(labels = function(x) paste0(x, "%")) +
+  labs(
+    x    = "Coefficient of variation (CV)",
+    y    = NULL,
+    fill = NULL,
+    title = "Harlan Reservoir 2022: estimate precision"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position    = "bottom",
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.y = element_blank()
+  )
+```
+
+```{r}
+#| label: cv-summary-ch16
+#| echo: false
+
+eff_cv     <- eff_ch16$estimates$se     / eff_ch16$estimates$estimate     * 100
+harvest_cv <- harvest_ch16$estimates$se / harvest_ch16$estimates$estimate * 100
+cpue_cv    <- cpue_ch16$estimates$se    / cpue_ch16$estimates$estimate    * 100
+```
+
+For the Harlan 2022 survey, effort precision
+(CV = `r fmt_pct(eff_cv)`) falls within the range expected for a stratified
+access-point survey with adequate sampling of both day types. Harvest carries
+a substantially higher CV
+(CV = `r fmt_pct(harvest_cv)`) because it inherits uncertainty from both
+the effort expansion and the harvest rate estimation; each source of uncertainty
+combines multiplicatively in the total. The catch rate, derived only from
+completed trip interviews, has a CV of `r fmt_pct(cpue_cv)` — moderate
+precision that reflects the number of completed interviews relative to the
+variability in individual catch outcomes.
+
+Estimates that exceed the 20% CV threshold are not wrong — they are imprecise.
+An imprecise estimate is still useful if the management question is whether a
+quantity is large or small, not whether it equals a specific value. An estimated
+harvest with a high CV still rules out both very low and very high harvests; it
+just cannot distinguish between values that differ by less than about one
+standard error on either side of the point estimate.
+
+If specific estimates consistently fall above the CV threshold across years,
+the appropriate response is to revisit the sampling design rather than to
+report the numbers without comment. Chapter 15 showed how `creel_power()` and
+`cv_from_n()` can guide sample size decisions toward a precision target. The
+precision profile here identifies which quantities need that investment.
+
+## Stratified reporting {#sec-report-strat}
+
+The season totals are the headline, but stratified estimates often contain
+the management-relevant signal. A regulation that differentially affects
+weekday or weekend fishing — a bag limit change, a closure, a catch-and-release
+requirement — should be evaluated against stratified estimates, not the
+pooled season total.
+
+The same `estimate_total_harvest()` call with a `by` argument produces
+stratum-level estimates. These share the design structure from the overall call,
+so the stratified and unstratified results are methodologically consistent.
+
+```{r}
+#| label: harvest-by-daytype-ch16
+#| echo: true
+
+harvest_by_dt <- estimate_total_harvest(
+  harlan_design_ch16,
+  by     = day_type,
+  target = "stratum_total"
+)
+
+harvest_by_dt$estimates
+```
+
+The stratified harvest figures answer a question the season total cannot: where
+does the removal occur? A figure makes the comparison immediate.
+
+```{r}
+#| label: fig-ch16-strat
+#| echo: true
+#| fig-cap: "Estimated total harvest by day type at Harlan Reservoir, 2022. Points show stratum-total estimates; bars show 95% confidence intervals. Weekday harvest substantially exceeds weekend harvest in absolute terms because the weekday stratum contains more days and accumulated more angler-hours over the season."
+#| fig-alt: "Horizontal dot-and-CI plot with two rows: weekday and weekend. The weekday estimate is substantially larger than the weekend estimate, and both CIs are wide but non-overlapping."
+
+ggplot(harvest_by_dt$estimates, aes(x = estimate, y = day_type)) +
+  geom_linerange(
+    aes(xmin = ci_lower, xmax = ci_upper),
+    linewidth = 0.8,
+    color     = "#2171b5"
+  ) +
+  geom_point(size = 3.5, color = "#2171b5") +
+  scale_x_continuous(labels = scales::comma) +
+  labs(
+    x     = "Estimated harvest (fish, with 95% CI)",
+    y     = NULL,
+    title = "Harlan Reservoir 2022: harvest by day type"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.minor = element_blank())
+```
+
+```{r}
+#| label: strat-table-ch16
+#| echo: true
+
+strat_table <- harvest_by_dt$estimates |>
+  mutate(
+    `Day type` = day_type,
+    Harvest    = fmt_comma(estimate),
+    SE         = fmt_comma(se),
+    `95% CI`   = paste0(fmt_comma(ci_lower), "–", fmt_comma(ci_upper)),
+    CV         = fmt_pct(se / estimate * 100)
+  ) |>
+  select(`Day type`, Harvest, SE, `95% CI`, CV)
+
+strat_table
+```
+
+The stratified harvest table answers a different question than the season total:
+not how many fish were harvested overall, but whether harvest is concentrated
+in weekday or weekend fishing. That distinction matters when a regulation change
+would close or restrict one day type, because the season-total reduction is not
+proportional to harvest per day — it depends on how many days of each type
+occur and how much harvest each carries.
+
+Interpreting stratified estimates correctly requires stating the stratum
+definition in the table caption. "Weekday" in the Harlan survey means any
+Monday through Friday that fell within the sampling frame; "weekend" means
+Saturday and Sunday. A regulation effective only on Saturdays would affect a
+subset of the "weekend" stratum, and the stratum estimate would overstate the
+impact unless further post-stratified.
+
+## Domain and scope {#sec-report-domain}
+
+Every estimate has a scope boundary. The boundary is not a limitation to
+apologize for — it is a property of the design that tells readers where the
+estimate applies. Stating it clearly prevents two common errors: applying the
+estimate to a domain it cannot cover, and assuming the estimate is invalid
+because it does not cover everything.
+
+For the Harlan 2022 survey, the scope boundaries are:
+
+**Temporal scope.** Sampling ran from April through October during standard
+crew operating hours. Effort and harvest on days outside the sampling frame,
+during pre-dawn and late-evening hours, and on crew non-deployment days are
+not in the estimate. Winter fishing is excluded entirely.
+
+**Spatial scope.** The access-point design covers public-access areas where
+departing anglers can be intercepted. Private shorelines, mid-lake boats not
+associated with a sampled access point, and tributaries outside the main
+reservoir are not represented.
+
+**Species scope.** Catch and harvest rates are available for species recorded
+in the catch table. Rare species may be under-sampled — a catch record requires
+that at least one party in the interview sample encountered that species. Total
+harvest by species inherits both effort uncertainty and the sampling uncertainty
+from the catch table.
+
+**Design scope.** The access-point method samples anglers as they depart. It
+is not designed to capture effort by anglers who never return to a sampled
+access point (e.g., anglers who enter by canoe and exit via a private road).
+The fraction of effort in those groups is unknown; if it is large, the effort
+estimate is biased downward.
+
+Stating these boundaries in the report is not weakness — it is the information
+a reader needs to decide whether the estimate answers their management question.
+If the question is "how much did harvest decline after a bag limit change?",
+the answer requires an estimate with the same domain in both years. If the
+domain is not documented, the before-after comparison cannot be made with
+confidence even if both years' surveys used identical methods.
+
+## Writing for different audiences {#sec-report-audience}
+
+A creel report often serves audiences with different needs and different
+tolerances for statistical language. Field staff need operational feedback.
+Managers need a decision summary. Researchers need methodological detail.
+Stakeholders need a plain-language explanation of what the survey found.
+
+The same estimates can support all four audiences without changing the underlying
+claim — only the presentation changes.
+
+**Manager summary (2–3 sentences).** Lead with the most policy-relevant
+quantity. State the estimate, the CI, and one interpretive sentence.
+
+::: {.callout-note title="Manager version"}
+The 2022 Harlan Reservoir creel survey estimated
+`r fmt_comma(harvest_ch16$estimates$estimate)` fish harvested
+(95% CI: `r fmt_comma(harvest_ch16$estimates$ci_lower)`–`r fmt_comma(harvest_ch16$estimates$ci_upper)`)
+from public-access areas during the April–October season.
+The catch rate of `r fmt_rate(cpue_ch16$estimates$estimate)` fish per
+angler-hour was within the range observed in recent years.
+Total effort was approximately
+`r fmt_comma(eff_ch16$estimates$estimate)` angler-hours.
+:::
+
+**Researcher disclosure.** Provide the estimator name, the variance formula,
+the software pipeline, and any assumptions that were checked or violated.
+State CV for each quantity and note any diagnostic findings (incomplete-trip
+sensitivity, variance decomposition, coverage diagnostics). The `report_table`
+from @sec-report-table, with its CV column, is the core of a researcher-facing
+results section.
+
+**Stakeholder language.** Avoid jargon, define every number in plain terms
+before stating it, and lead with what the fishery looked like rather than what
+the survey was designed to do.
+
+::: {.callout-note title="Stakeholder version"}
+About `r fmt_comma(harvest_ch16$estimates$estimate)` fish were kept by
+anglers fishing Harlan Reservoir in 2022. That number could be anywhere
+from `r fmt_comma(harvest_ch16$estimates$ci_lower)` to
+`r fmt_comma(harvest_ch16$estimates$ci_upper)` fish, depending on
+how representative the surveyed days were of the full season.
+Of all fish caught, roughly
+`r fmt_pct((catch_ch16$estimates$estimate - harvest_ch16$estimates$estimate) / catch_ch16$estimates$estimate * 100)`
+were released.
+:::
+
+The estimate does not change between these versions. The confidence interval
+does not change. What changes is which information gets foregrounded and what
+vocabulary is used to present it.
+
+A failure of audience adaptation is describing the survey method in detail to
+a stakeholder audience that wants to know whether the fish population is healthy
+— and omitting the uncertainty when writing for a manager who needs to decide
+whether to tighten regulations. Both failures serve the wrong need.
+
+## Reproducible reports {#sec-reproducibility}
+
+The most defensible property of a Quarto-based creel report is that it can be
+regenerated from the same data and code. When the data change — because a data
+entry error is corrected, or a late interview is added — re-running
+`quarto render` updates every table, figure, and inline number automatically.
+No manual transcription step introduces new errors.
+
+That reproducibility has practical consequences for multi-year programs:
+
+**Year-over-year reuse.** A report template developed for the 2022 season can
+be applied to 2023 data by swapping the input files. The chapter structure,
+section headings, figure layouts, and table formats carry over. Only the
+numbers change, and those changes are automatic.
+
+**Audit trail.** Because the analysis lives in the same document as the report,
+a future analyst can trace any number back to the code that produced it. There
+is no gap between "the analysis" and "the report" where undocumented decisions
+accumulate.
+
+**Version control.** Storing the `.qmd` source and input data in a version
+control system (git) creates a complete record of every change to the report
+over time. If a manager asks why the 2022 harvest estimate was revised, the
+git history shows exactly what changed and when.
+
+The design object — `harlan_design_ch16` in this chapter — is the key
+intermediate artifact. Saving it at the end of the analysis pipeline and
+loading it at the start of the reporting pipeline creates a clean separation
+between estimation and presentation without breaking the audit chain.
+
+```{r}
+#| label: save-design-ch16
+#| echo: true
+#| eval: false
+
+saveRDS(harlan_design_ch16, here("data/harlan_design_2022.rds"))
+```
+
+A report template that loads a saved design object rather than rebuilding it
+from raw data is faster to render and explicit about where the design
+assumptions live. The data provenance statement in the report caption can then
+cite the specific data files and the date they were last modified.
+
+## Common reporting failures {#sec-report-failures}
+
+The six-element framework from @sec-report-contract works as a checklist for
+catching the most common reporting errors before the report reaches its audience.
+
+**Leaving out the domain.** An estimate of 19,000 fish harvested with no domain
+statement could refer to the entire reservoir, a single access point, or a single
+species. The reader cannot tell. Fix: state the domain — water body, access type,
+sampling period, species scope — in the first sentence that reports any estimate.
+
+**Failing to state the denominator.** A catch rate is meaningless without its
+denominator. "Anglers caught 1.5 fish" is not a catch rate. "Anglers caught
+1.5 fish per angler-hour" is. The denominator is what makes the rate comparable
+across surveys of different sizes. Fix: always report rates with explicit units.
+
+**Presenting a point estimate without uncertainty.** A single number cannot tell
+the reader whether the survey was precise enough to be useful or imprecise enough
+to be misleading. Fix: report SE and 95% CI alongside every point estimate. The
+CV column in @sec-report-table makes it easy to include precision for all
+quantities at once.
+
+**Mixing stratified and unstratified interpretations.** If the estimate covers
+all days, the interpretation should not compare weekday versus weekend behavior
+unless a stratified estimate is also reported. Interpreting the season-total CPUE
+as evidence that weekday anglers catch more fish is a domain error — the total
+was not computed by day type. Fix: every interpretation stays within the domain
+of the estimate that supports it.
+
+**Burying the domain in a footnote.** A domain statement that appears only in a
+footnote or appendix will be missed by readers who stop at the table. Fix: the
+domain belongs in the first paragraph and in every table caption.
+
+**Describing a result as general when it covers only a subset.** "Harlan
+Reservoir anglers harvested approximately 20,000 fish" implies coverage of all
+anglers. A survey that covers only public-access areas cannot make that claim
+without qualification. Fix: "Anglers at public-access areas covered by the 2022
+creel survey harvested approximately 20,000 fish."
+
+## Takeaway {#sec-ch16-takeaway}
+
+The estimate is correct only if the report says what it means. A point estimate
+without a domain, a domain without uncertainty, or an interpretation wider than
+the evidence all undermine the value of the survey that produced the number.
+
+The inline R approach — embedding estimates in prose at render time — protects
+against transcription errors and keeps the document honest when data change.
+The six-element framework protects against the interpretive errors that no
+amount of statistical care can prevent if the report does not state what was
+measured.
+
+The Harlan Reservoir 2022 estimates tell a specific story about a specific
+fishery during a specific season at specific access points. That story is worth
+telling precisely. It is also worth telling accurately — which means telling the
+reader where the story begins and where it ends.

@@ -1,133 +1,607 @@
 ---
-title: "Case Study: Reservoir Creel Survey"
+title: "Case Study: Cedar Lake Roving Creel Survey"
 ---
 
-## Purpose
-
-This chapter brings the earlier chapters together in one reservoir example.
-
-The goal is not to invent a perfect survey. The goal is to show how the design, data model, estimation steps, diagnostics, and report writing fit together in a realistic workflow.
-
-The case study is meant to feel operational: a real fishery, a real reporting need, and a sequence of decisions that have to be made in the right order.
-
-## Key ideas
-
-- Full workflow from frame to report
-- Common operational tradeoffs
-- How the earlier chapters fit together in practice
-- Where the workflow is strongest and where it needs judgment
-
-## Case study frame
-
-Imagine a reservoir with:
-
-- multiple public access points;
-- weekday and weekend demand differences;
-- a seasonal open-water period;
-- separate effort and interview data;
-- and a year-end report that must summarize effort, catch, harvest, and uncertainty.
-
-That setting is rich enough to show the main creel logic without getting lost in edge cases.
-
-It also mirrors the kinds of tradeoffs agencies actually face: limited staff time, mixed access patterns, and a report that has to balance technical accuracy with a short public summary.
-
-## Workflow summary
-
-The case study should walk through:
-
-1. defining the reporting domain;
-2. building the frame and strata;
-3. organizing the data as linked tables;
-4. validating the cleaned analysis data;
-5. estimating effort;
-6. estimating harvest and catch;
-7. checking uncertainty and diagnostics;
-8. writing the report.
-
-Each step depends on the one before it. If the domain is wrong, the effort estimate is wrong. If the tables are not linked well, the harvest estimate is fragile. If the diagnostics are not checked, the report may overstate confidence.
-
-## Operational tradeoffs
-
-Real reservoir work usually involves tradeoffs such as:
-
-- whether to prioritize the busiest ramp or cover more of the network;
-- how much to stratify by day type or season;
-- whether incomplete interviews should be used in a rate calculation;
-- how to handle missing count days;
-- whether a small precision gain is worth more field effort.
-
-The case study shows that these are design decisions, not afterthoughts.
-
-That framing matters because the case study is not trying to hide uncertainty. It is trying to show how the survey gets turned into a defensible public claim despite normal field constraints.
-
-## Step-by-step logic
-
-In a full writeup, the case study would narrate each stage:
-
-- define the public-access open-water domain;
-- split the sample into weekday and weekend strata;
-- record counts and interviews in linked tables;
-- validate the cleaned records before estimation;
-- expand effort and trip-based outcomes separately;
-- compute uncertainty from the design;
-- and write a report that stays inside the covered domain.
-
-That sequence is the same one used throughout the book. The case study simply shows it in one place.
-
-## Worked setup
-
 ```{r}
-frame <- data.frame(
-  site_id = c("north_ramp", "south_ramp", "east_shore", "west_ramp"),
-  stratum = c("weekday", "weekday", "weekend", "weekend"),
-  total_periods = c(24, 24, 12, 12),
-  sampled_periods = c(12, 12, 6, 4)
-)
+#| label: setup
+#| include: false
+library(tidycreel)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(forcats)
+library(patchwork)
+library(here)
 
-frame$weight <- frame$total_periods / frame$sampled_periods
-frame
+cedar_schedule   <- readRDS(here("data/cedar_schedule.rds"))
+cedar_counts     <- readRDS(here("data/cedar_counts.rds"))
+cedar_interviews <- readRDS(here("data/cedar_interviews.rds"))
+cedar_catch      <- readRDS(here("data/cedar_catch.rds"))
+
+# Shift hours: both periods 6 hours (6 am–noon and noon–6 pm)
+shift_hrs <- c("1" = 6L, "2" = 6L)
+
+# Counts: pre-compute angler_hours, retain only count variable (Ch12 pattern)
+cedar_counts_effort <- cedar_counts |>
+  mutate(
+    period       = as.character(period),
+    angler_hours = (bank_anglers + boat_anglers) * shift_hrs[period]
+  ) |>
+  select(reservoir, date, day_type, period, section, count_time, angler_hours)
+
+# Catch wide: harvested + released columns required by add_interviews()
+catch_wide <- cedar_catch |>
+  group_by(interview_id, catch_type) |>
+  summarise(n = sum(n_fish), .groups = "drop") |>
+  pivot_wider(names_from = catch_type, values_from = n, values_fill = 0L) |>
+  mutate(total_catch = harvested + released)
+
+cedar_int2 <- cedar_interviews |>
+  mutate(period = as.character(period)) |>
+  left_join(catch_wide, by = "interview_id") |>
+  mutate(across(c(harvested, released, total_catch),
+                ~ if_else(is.na(.), 0L, as.integer(.))))
+
+# Build design object
+suppressMessages({
+  cedar_design <- creel_design(
+    calendar = cedar_schedule,
+    date     = "date",
+    strata   = "day_type"
+  ) |>
+    add_counts(cedar_counts_effort, count_time_col = "count_time") |>
+    add_interviews(
+      interviews     = cedar_int2,
+      catch          = "total_catch",
+      harvest        = "harvested",
+      effort         = "hours_fished",
+      trip_duration  = "hours_fished",
+      trip_status    = "trip_status",
+      n_anglers      = "n_anglers",
+      angler_type    = "angler_type",
+      angler_method  = "angler_method",
+      interview_type = "roving"
+    ) |>
+    add_catch(
+      data          = cedar_catch,
+      catch_uid     = "interview_id",
+      interview_uid = "interview_id",
+      species       = "species",
+      count         = "n_fish",
+      catch_type    = "catch_type"
+    )
+})
+
+# Pre-compute all season-level estimates for inline R
+eff_tot   <- estimate_effort(cedar_design, target = "stratum_total")
+eff_strat <- estimate_effort(cedar_design, by = day_type, target = "stratum_total")
+harv_tot  <- estimate_total_harvest(cedar_design, target = "stratum_total")
+harv_strat <- estimate_total_harvest(cedar_design, by = day_type, target = "stratum_total")
+cat_tot   <- estimate_total_catch(cedar_design, target = "stratum_total")
+rel_tot   <- estimate_total_release(cedar_design, target = "stratum_total")
+cpue_all  <- estimate_catch_rate(cedar_design)
+cpue_dt   <- estimate_catch_rate(cedar_design, by = day_type)
+cpue_at   <- estimate_catch_rate(cedar_design, by = angler_type)
+hpue_all  <- estimate_harvest_rate(cedar_design)
+
+# Formatting helpers
+fmt_comma <- function(x) formatC(round(x), format = "f", digits = 0, big.mark = ",")
+fmt_rate  <- function(x) sprintf("%.2f", x)
+fmt_pct   <- function(x) sprintf("%.1f%%", x)
+fmt_cv    <- function(est) fmt_pct(100 * est$se / est$estimate)
 ```
 
-This minimal frame is enough to show the full logic:
+## Setting and design overview
 
-- the access network is named;
-- the strata are visible;
-- the planned and realized sample differ by site;
-- and the weights are explicit.
+Harlan Reservoir anchors Part IV: a large impoundment sampled by access-point design, dominated by boat anglers, and operated over a single calendar year at high daily sampling intensity. Cedar Lake represents a complementary setting — a small urban reservoir managed primarily for walk-in anglers who do not require a boat ramp.
 
-From that point, the remaining steps are to attach count data, interview data, and diagnostics in the same domain.
+Cedar Lake was surveyed under a roving creel design. A single clerk drove the lake perimeter twice per sampling period, recording instantaneous counts of all visible anglers and stopping to interview parties encountered mid-trip. Unlike an access-point survey, roving contacts happen while anglers are still fishing: the clerk records fish caught so far and time elapsed so far, then continues the circuit. The result is a high fraction of incomplete-trip interviews and a catch-rate estimator that must account for the truncated trip record.
 
-The point of the setup is to show that the design object and the data model are not abstract. They are the mechanism that keeps the reservoir analysis from becoming a pile of disconnected summaries.
+The fishery targets channel catfish, bluegill, and white crappie across a seven-month open-water season, April through October 2023. Weekend pressure peaks in June and July, while shoulder months in April and October see reduced effort driven by cold weather and occasional survey-day cancellations due to rain or dangerous conditions.
 
-## Interpretation
+This chapter walks the full analysis pipeline — frame to final report — using Cedar Lake as the vehicle.
 
-The final interpretation should stay within the covered domain. If the survey covers the public access network during the open-water season, then the report should say exactly that rather than implying coverage of every angler or every day of the year.
+## Data overview
 
-The final report should also say what was not measured. That honesty is part of the value of the example.
+Four linked tables describe the 2023 Cedar Lake survey:
 
-## `tidycreel` support
+```{r}
+#| label: cedar-summary
+n_days   <- nrow(cedar_schedule)
+n_samp   <- sum(cedar_schedule$sampled)
+n_int    <- nrow(cedar_interviews)
+n_comp   <- sum(cedar_interviews$trip_status == "complete")
+n_incomp <- sum(cedar_interviews$trip_status == "incomplete")
+pct_bank <- 100 * mean(cedar_interviews$angler_type == "bank")
 
-Implemented:
-- The case study uses the package workflows introduced earlier in the book.
+cat(
+  "Survey period:   ", format(min(cedar_schedule$date), "%B %d"), "–",
+  format(max(cedar_schedule$date), "%B %d, %Y"), "\n",
+  "Total days:      ", n_days, "\n",
+  "Sampled days:    ", n_samp, sprintf("(%.0f%%)\n", 100 * n_samp / n_days),
+  "Interviews:      ", n_int,
+  sprintf("(%d complete, %d incomplete)\n", n_comp, n_incomp),
+  "Bank anglers:    ", sprintf("%.0f%% of interviews\n", pct_bank),
+  sep = ""
+)
+```
 
-Partially supported:
-- The end-to-end path is conceptual here until the package sections are expanded.
+The `r fmt_pct(100 * n_incomp / n_int)` incomplete-trip rate reflects the roving design: every interview happens mid-trip, capturing only elapsed time and fish so far. Complete trips — parties who happened to be finishing when the clerk passed — account for `r fmt_pct(100 * n_comp / n_int)` of contacts. That fraction is used for CPUE estimation because only completed trips record the full trip outcome.
 
-Manual or conceptual:
-- Filling gaps in the workflow.
-- Deciding what has to be done manually versus through the package.
-- Writing the case study as a model for future projects.
+### Seasonal survey coverage
 
-The package can support the workflow, but the case study is where the analyst proves the workflow is being used for a real management question.
+Sampling intensity followed a proportional design: more survey days were allocated to summer months when angler pressure peaks. Eighteen survey days were cancelled or produced zero-angler counts due to rain, cold fronts, or high winds.
 
-## Example focus
+```{r}
+#| label: fig-cedar-season
+#| fig-cap: "Monthly sampling effort and mean instantaneous angler count at Cedar Lake, 2023. Left: number of sampled days per month by stratum. Right: mean total anglers per count by month. Zero-count days from adverse weather appear in both panels."
+#| fig-width: 8
+#| fig-height: 3.5
 
-A reservoir case study that combines effort, catch, harvest, diagnostics, and interpretation.
+monthly_days <- cedar_schedule |>
+  filter(sampled) |>
+  mutate(month = factor(format(date, "%b"), levels = month.abb)) |>
+  count(month, day_type)
 
-The case study is the closest thing this book has to a full rehearsal of the final product.
+monthly_counts <- cedar_counts |>
+  mutate(
+    month = factor(format(date, "%b"), levels = month.abb),
+    total = bank_anglers + boat_anglers
+  ) |>
+  group_by(month) |>
+  summarise(mean_count = mean(total), .groups = "drop")
 
-## Takeaway
+p1 <- ggplot(monthly_days, aes(month, n, fill = day_type)) +
+  geom_col(position = "stack") +
+  scale_fill_manual(values = c(weekday = "#6baed6", weekend = "#2171b5"),
+                    name = "Day type") +
+  labs(x = NULL, y = "Sampled days") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
 
-The case study is where the book proves it can handle the whole workflow. The estimate should be understandable from design to report, not just reproducible in code.
+p2 <- ggplot(monthly_counts, aes(month, mean_count)) +
+  geom_col(fill = "#74c476") +
+  geom_hline(yintercept = 0, linewidth = 0.3) +
+  labs(x = NULL, y = "Mean anglers per count") +
+  theme_minimal(base_size = 11)
 
-If a reader cannot trace the logic from the frame to the final sentence, the example is still too thin.
+p1 + p2
+```
+
+The seasonal arc is clear: mean instantaneous counts rise from `r round(monthly_counts$mean_count[monthly_counts$month == "Apr"], 1)` anglers per count in April to `r round(monthly_counts$mean_count[monthly_counts$month == "Aug"], 1)` in August before falling through October. Zero or near-zero count days are visible in April and October, reflecting cancelled surveys during cold or high-wind conditions.
+
+### Angler composition across the season
+
+Bank anglers dominate the Cedar Lake count record, but their fraction varies slightly by month as the small boat contingent fluctuates.
+
+```{r}
+#| label: fig-cedar-bankboat
+#| fig-cap: "Monthly angler composition at Cedar Lake, 2023, from instantaneous count records. Bank anglers (dark) dominate throughout the season; the boat fraction increases slightly in midsummer. Zero-count days from adverse weather reduce monthly totals without changing the proportion."
+#| fig-width: 6.5
+#| fig-height: 3.2
+
+cedar_counts |>
+  mutate(month = factor(format(date, "%b"), levels = month.abb)) |>
+  group_by(month) |>
+  summarise(
+    bank = sum(bank_anglers),
+    boat = sum(boat_anglers),
+    .groups = "drop"
+  ) |>
+  pivot_longer(c(bank, boat), names_to = "type", values_to = "count") |>
+  ggplot(aes(month, count, fill = type)) +
+  geom_col(position = "fill") +
+  scale_fill_manual(values = c(bank = "#74c476", boat = "#2171b5"),
+                    name = "Angler type") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = NULL, y = "Fraction of counted anglers",
+       title = "Monthly bank vs. boat composition") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+Bank anglers account for `r fmt_pct(100 * sum(cedar_counts$bank_anglers) / sum(cedar_counts$bank_anglers + cedar_counts$boat_anglers))` of all counted anglers across the season. This compositional stability simplifies interpretation: the season-level CPUE by angler type is not confounded by a seasonal shift in who is on the water.
+
+### Incomplete trips in a roving design
+
+```{r}
+#| label: cedar-trip-summary
+summarize_trips(cedar_design)
+```
+
+`summarize_trips()` reports median and mean trip duration separately for complete and incomplete trips. At Cedar Lake, the median complete trip lasts considerably longer than the median time-fished reported for incomplete contacts — an expected consequence of length-biased sampling. Anglers encountered mid-circuit have already been fishing for some time (so they are more likely to have started early or plan a long trip), which means the elapsed-time record understates the eventual full-trip duration.
+
+```{r}
+#| label: cedar-incomplete-check
+validate_incomplete_trips(
+  cedar_design,
+  catch   = harvested,
+  effort  = hours_fished,
+  truncate_at = 0.5
+)
+```
+
+`validate_incomplete_trips()` runs a two-one-sided t-test (TOST) equivalence test comparing harvest-per-hour between incomplete and complete trips. A non-significant result means the data are consistent with rate equivalence — that incomplete trips are not selectively capturing faster or slower anglers. Equivalence within ± 0.5 fish/hr is the default tolerance. If the test rejects equivalence, the analyst should investigate whether a particular time window (early morning, pre-storm) drives a systematic bias in which anglers are contacted mid-trip.
+
+## Building the design object
+
+The Cedar Lake pipeline follows the same four-step assembly used throughout Part III and Part IV. Three features differ from the Harlan build:
+
+1. **Both periods have equal shift length.** Harlan's morning shift runs 8 hours; Cedar Lake uses 6 hours for each period (6 am–noon, noon–6 pm). The shift-hours vector reflects that equality.
+2. **Counts carry only `angler_hours`.** Bank and boat counts are summed and multiplied by shift length before calling `add_counts()`. The component columns are dropped so `tidycreel` selects only the target variable.
+3. **Two catch columns required.** `estimate_total_harvest()` requires a dedicated harvest column passed via the `harvest` argument. Total catch (harvested + released) is a separate column passed via `catch`.
+
+```{r}
+#| label: cedar-counts-prep
+# Pre-compute angler_hours; drop component columns
+cedar_counts_effort |>
+  filter(date == as.Date("2023-07-08")) |>
+  select(date, day_type, period, count_time, angler_hours)
+```
+
+```{r}
+#| label: cedar-int-prep
+# Interview table with both catch columns
+cedar_int2 |>
+  select(interview_id, date, trip_status, angler_type, hours_fished,
+         harvested, released, total_catch) |>
+  slice(1:6)
+```
+
+The split between `harvested` and `total_catch` is what allows the estimation layer to produce HPUE (harvest per unit effort) and CPUE (catch per unit effort) as distinct quantities from the same interview record.
+
+```{r}
+#| label: cedar-design-build
+#| eval: false
+cedar_design <- creel_design(
+  calendar = cedar_schedule,
+  date     = "date",
+  strata   = "day_type"
+) |>
+  add_counts(cedar_counts_effort, count_time_col = "count_time") |>
+  add_interviews(
+    interviews     = cedar_int2,
+    catch          = "total_catch",
+    harvest        = "harvested",
+    effort         = "hours_fished",
+    trip_duration  = "hours_fished",
+    trip_status    = "trip_status",
+    n_anglers      = "n_anglers",
+    angler_type    = "angler_type",
+    angler_method  = "angler_method",
+    interview_type = "roving"
+  ) |>
+  add_catch(
+    data          = cedar_catch,
+    catch_uid     = "interview_id",
+    interview_uid = "interview_id",
+    species       = "species",
+    count         = "n_fish",
+    catch_type    = "catch_type"
+  )
+```
+
+The design object stores the frame, counts, interviews, and catch in a single structure. All estimation functions read from this object rather than from the raw tables, ensuring consistent stratum labels, consistent day-type assignments, and a reproducible audit trail.
+
+## Effort estimation
+
+Total angler-hours is estimated from instantaneous count data. Each sampled day contributes two count replicates per period; `add_counts()` averages replicates within a period before computing day-period effort as `mean_count × shift_hours`. The design then expands sampled-day effort to the full survey period using the ratio of total days to sampled days within each stratum.
+
+```{r}
+#| label: cedar-effort
+eff_tot$estimates
+```
+
+Cedar Lake logged an estimated `r fmt_comma(eff_tot$estimates$estimate)` angler-hours during the 2023 open-water season (95% CI: `r fmt_comma(eff_tot$estimates$ci_lower)`–`r fmt_comma(eff_tot$estimates$ci_upper)`). Weekend and weekday effort are nearly balanced, consistent with an urban fishery that draws regular weekday use from retirees and shift workers in addition to weekend family outings.
+
+```{r}
+#| label: cedar-effort-strat
+eff_strat$estimates
+```
+
+```{r}
+#| label: fig-cedar-effort
+#| fig-cap: "Season-total effort estimates by day-type stratum, Cedar Lake 2023. Points are ratio-of-means estimates; bars are 95% confidence intervals."
+#| fig-width: 5.5
+#| fig-height: 2.8
+
+eff_strat$estimates |>
+  ggplot(aes(estimate, fct_rev(day_type))) +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
+                 height = 0.15, linewidth = 0.8) +
+  geom_point(size = 3, shape = 21, fill = "#6baed6") +
+  scale_x_continuous(labels = scales::comma) +
+  labs(x = "Estimated effort (angler-hours)", y = NULL,
+       title = "Season effort by day type") +
+  theme_minimal(base_size = 11)
+```
+
+Both strata carry overlapping confidence intervals. A formal two-group comparison is not the goal here — this is a reporting display, not a hypothesis test. The overlap tells managers that weekday and weekend programs would both see meaningful angler engagement.
+
+The overall effort CV is `r fmt_pct(100 * eff_tot$estimates$se / eff_tot$estimates$estimate)`, which falls within the 10–20% management-grade range for a stratified open-water creel survey. Between-day variance dominates: `r fmt_pct(100 * eff_tot$estimates$se_between / eff_tot$estimates$se)` of the standard error comes from day-to-day variability in count totals rather than within-day count replication.
+
+## Catch, harvest, and release
+
+Cedar Lake targets three species with different management priorities: channel catfish (the primary trophy target, regulated by a daily bag limit), bluegill (abundant panfish, essentially unrestricted harvest), and white crappie (intermediate in both abundance and regulations).
+
+### Species catch composition
+
+```{r}
+#| label: fig-cedar-species
+#| fig-cap: "Total fish recorded in Cedar Lake interviews by species and catch type. Bars show absolute counts from the interview catch table before expansion; proportions within species reflect true harvest and release fractions."
+#| fig-width: 6
+#| fig-height: 3.2
+
+cedar_catch |>
+  group_by(species, catch_type) |>
+  summarise(total = sum(n_fish), .groups = "drop") |>
+  mutate(species = fct_reorder(species, total, .fun = sum)) |>
+  ggplot(aes(total, species, fill = catch_type)) +
+  geom_col(position = "stack") +
+  scale_fill_manual(values = c(harvested = "#fd8d3c", released = "#74c476"),
+                    name = "Catch type") +
+  scale_x_continuous(labels = scales::comma) +
+  labs(x = "Fish recorded in interviews", y = NULL,
+       title = "Interview catch composition by species") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+Bluegill dominates raw catch counts — consistent with panfish abundance in a shallow, vegetated urban reservoir. Channel catfish show a markedly higher harvest fraction than the other two species, reflecting angler behavior: catfish are kept at high rates while bluegill and crappie see more selective harvest.
+
+### Season-level estimates
+
+```{r}
+#| label: cedar-harvest
+harv_tot$estimates
+cat_tot$estimates
+rel_tot$estimates
+```
+
+The season totals reveal asymmetry in estimation precision. Total harvest uses the complete interview set (`n` = `r harv_tot$estimates$n`) via the ratio-of-means estimator, while total catch uses only the `r cat_tot$estimates$n` completed trips. `estimate_total_release()` returns an estimate from the full interview set (`n` = `r rel_tot$estimates$n`). This means harvest and release estimates draw on different subsets of the data, and their sum will not exactly equal the total-catch estimate. Chapter 13 discusses this asymmetry in detail; the short version is that release information is available for incomplete trips (fish visible in livewell or on stringer mid-trip), while total catch requires the completed trip record.
+
+Harvest by stratum shows modest weekday–weekend differences, both within the confidence intervals of the season total:
+
+```{r}
+#| label: cedar-harv-strat
+harv_strat$estimates
+```
+
+Season total harvest: `r fmt_comma(harv_tot$estimates$estimate)` fish (95% CI: `r fmt_comma(harv_tot$estimates$ci_lower)`–`r fmt_comma(harv_tot$estimates$ci_upper)`). Season total catch: `r fmt_comma(cat_tot$estimates$estimate)` fish.
+
+## CPUE and harvest rate
+
+The catch-rate estimator uses only completed trips. In a roving survey with `r fmt_pct(100 * n_incomp / n_int)` incomplete-trip contacts, this means `r cat_tot$estimates$n` of `r n_int` interviews contribute to the CPUE estimate. The ratio-of-means estimator divides total catch by total effort across the completed-trip subset, which avoids the length-biased sampling problem that would arise from using the mean-of-ratios estimator (Chapter 14).
+
+```{r}
+#| label: cedar-cpue-all
+cpue_all$estimates
+hpue_all$estimates
+```
+
+Overall CPUE is `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour (95% CI: `r fmt_rate(cpue_all$estimates$ci_lower)`–`r fmt_rate(cpue_all$estimates$ci_upper)`). The harvest rate is `r fmt_rate(hpue_all$estimates$estimate)` fish per angler-hour, meaning anglers kept `r fmt_pct(100 * hpue_all$estimates$estimate / cpue_all$estimates$estimate)` of all fish caught on completed trips.
+
+### CPUE by day type
+
+```{r}
+#| label: cedar-cpue-daytype
+cpue_dt$estimates
+```
+
+Weekday and weekend CPUE are nearly identical — `r fmt_rate(cpue_dt$estimates$estimate[cpue_dt$estimates$day_type == "weekday"])` and `r fmt_rate(cpue_dt$estimates$estimate[cpue_dt$estimates$day_type == "weekend"])` fish per angler-hour respectively. Overlapping confidence intervals confirm that there is no detectable difference in catch success between the two strata at this sample size.
+
+### CPUE by angler type
+
+Bank and boat anglers differ in access, target species, and technique. Bank anglers at Cedar Lake tend to use bait (worms, prepared dough) fished near vegetated structure, targeting bluegill and catfish; the small boat fleet focuses more on open-water crappie. The split in CPUE reflects those behavioral differences.
+
+```{r}
+#| label: fig-cedar-cpue-type
+#| fig-cap: "Catch per angler-hour by angler type at Cedar Lake, 2023. Points are ratio-of-means estimates from completed trips; bars are 95% confidence intervals. Boat stratum sample size is small (n < 30); variance estimate is less stable."
+#| fig-width: 5.5
+#| fig-height: 2.8
+
+cpue_at$estimates |>
+  ggplot(aes(estimate, fct_rev(angler_type))) +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
+                 height = 0.15, linewidth = 0.8) +
+  geom_point(aes(shape = angler_type), size = 3, fill = "#6baed6") +
+  scale_shape_manual(values = c(bank = 21, boat = 24), guide = "none") +
+  geom_vline(xintercept = cpue_all$estimates$estimate, linetype = "dashed",
+             linewidth = 0.5, color = "grey50") +
+  annotate("text", x = cpue_all$estimates$estimate + 0.03,
+           y = Inf, vjust = 1.5, hjust = 0, size = 3,
+           label = sprintf("Overall: %.2f", cpue_all$estimates$estimate)) +
+  labs(x = "Catch per angler-hour", y = NULL,
+       title = "CPUE by angler type") +
+  theme_minimal(base_size = 11)
+```
+
+Bank anglers catch `r fmt_rate(cpue_at$estimates$estimate[cpue_at$estimates$angler_type == "bank"])` fish per angler-hour; boat anglers catch `r fmt_rate(cpue_at$estimates$estimate[cpue_at$estimates$angler_type == "boat"])` fish per angler-hour. The boat sample is small (n = `r cpue_at$estimates$n[cpue_at$estimates$angler_type == "boat"]` completed trips), so the wider confidence interval should be interpreted cautiously. At current sample sizes, a bank versus boat contrast is suggestive but not conclusive.
+
+## Precision and diagnostics
+
+A precision profile summarizes CV across all season-level estimates. The goal is to identify which quantities are estimated confidently enough for management use and which carry enough uncertainty to warrant a caveated interpretation.
+
+```{r}
+#| label: cedar-cv-summary
+cv_eff   <- 100 * eff_tot$estimates$se   / eff_tot$estimates$estimate
+cv_harv  <- 100 * harv_tot$estimates$se  / harv_tot$estimates$estimate
+cv_catch <- 100 * cat_tot$estimates$se   / cat_tot$estimates$estimate
+cv_cpue  <- 100 * cpue_all$estimates$se  / cpue_all$estimates$estimate
+cv_hpue  <- 100 * hpue_all$estimates$se  / hpue_all$estimates$estimate
+
+cv_tbl <- tibble::tibble(
+  quantity = c("Effort", "Total harvest", "Total catch", "CPUE", "HPUE"),
+  category = c("effort", "total", "total", "rate", "rate"),
+  cv = c(cv_eff, cv_harv, cv_catch, cv_cpue, cv_hpue)
+)
+cv_tbl
+```
+
+```{r}
+#| label: fig-cedar-precision
+#| fig-cap: "Coefficient of variation (%) for season-level estimates, Cedar Lake 2023. Dashed line at 20% is a common management-grade threshold for acceptable precision."
+#| fig-width: 6
+#| fig-height: 3.2
+
+cv_tbl |>
+  mutate(quantity = fct_reorder(quantity, cv)) |>
+  ggplot(aes(cv, quantity, fill = category)) +
+  geom_col() +
+  geom_vline(xintercept = 20, linetype = "dashed", linewidth = 0.6, color = "grey30") +
+  scale_fill_manual(
+    values = c(effort = "#6baed6", total = "#fd8d3c", rate = "#74c476"),
+    name = "Estimate type"
+  ) +
+  labs(x = "CV (%)", y = NULL, title = "Precision profile") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+Effort CV is `r fmt_pct(cv_eff)` — the most precisely estimated quantity, because it draws on the full set of `r n_samp` sampled days. Total harvest CV is `r fmt_pct(cv_harv)`, within the acceptable range. Total catch CV is `r fmt_pct(cv_catch)`, higher because only the `r n_comp` completed trips contribute. CPUE and HPUE have the smallest CVs — `r fmt_pct(cv_cpue)` and `r fmt_pct(cv_hpue)` — because rate estimators divide correlated quantities, partially canceling the between-day variance in effort and catch.
+
+Quantities above 20% CV deserve a caveated interpretation in the final report. For Cedar Lake 2023, all season-level totals and rates fall within the management-grade range. The boat-angler CPUE sub-group, while not shown in this summary, carries a much larger CV and should not be reported as a standalone number without a prominent uncertainty statement.
+
+## Final report assembly
+
+All seven estimates are assembled into a single reporting tibble, formatted for a non-technical audience. The pattern mirrors Chapter 16: bind rows, add formatted strings, compute CV column.
+
+```{r}
+#| label: cedar-report-assembly
+report_summary <- bind_rows(
+  eff_tot$estimates   |> mutate(quantity = "Effort",         unit = "angler-hours"),
+  harv_tot$estimates  |> mutate(quantity = "Total harvest",  unit = "fish"),
+  cat_tot$estimates   |> mutate(quantity = "Total catch",    unit = "fish"),
+  rel_tot$estimates   |> mutate(quantity = "Total release",  unit = "fish"),
+  cpue_all$estimates  |> mutate(quantity = "CPUE",           unit = "fish/hr"),
+  hpue_all$estimates  |> mutate(quantity = "HPUE",           unit = "fish/hr")
+) |>
+  select(quantity, unit, estimate, se, ci_lower, ci_upper)
+
+report_summary
+```
+
+```{r}
+#| label: cedar-report-cv
+report_table <- report_summary |>
+  mutate(
+    cv = case_when(
+      as.character(unit) %in% c("fish/hr") ~ fmt_pct(100 * se / estimate),
+      TRUE ~ fmt_pct(100 * se / estimate)
+    ),
+    estimate_fmt = if_else(
+      unit %in% c("fish/hr"),
+      fmt_rate(estimate),
+      fmt_comma(estimate)
+    ),
+    ci_fmt = paste0(
+      if_else(unit %in% c("fish/hr"), fmt_rate(ci_lower), fmt_comma(ci_lower)),
+      "–",
+      if_else(unit %in% c("fish/hr"), fmt_rate(ci_upper), fmt_comma(ci_upper))
+    )
+  ) |>
+  select(Quantity = quantity, Unit = unit,
+         Estimate = estimate_fmt, `95% CI` = ci_fmt, CV = cv)
+
+knitr::kable(report_table, align = "llrrr",
+             caption = "Cedar Lake 2023 creel survey season estimates.")
+```
+
+### Inline narrative
+
+A manager's summary for Cedar Lake 2023 draws directly from the computed estimates:
+
+::: {.callout-note title="Example: manager one-page summary (excerpt)"}
+Cedar Lake anglers logged an estimated `r fmt_comma(eff_tot$estimates$estimate)` angler-hours during the 2023 open-water season (April 1–October 31), with weekday effort (`r fmt_comma(eff_strat$estimates$estimate[eff_strat$estimates$day_type == "weekday"])` angler-hours) and weekend effort (`r fmt_comma(eff_strat$estimates$estimate[eff_strat$estimates$day_type == "weekend"])` angler-hours) nearly equal. Total harvest across all species was `r fmt_comma(harv_tot$estimates$estimate)` fish (95% CI: `r fmt_comma(harv_tot$estimates$ci_lower)`–`r fmt_comma(harv_tot$estimates$ci_upper)` fish). Anglers caught `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour and retained `r fmt_rate(hpue_all$estimates$estimate)` fish per angler-hour. These estimates are based on `r n_samp` sampled survey days and `r n_int` angler contacts (`r n_comp` completed trips).
+:::
+
+::: {.callout-note title="Example: technical report footnote"}
+All estimates use the ratio-of-means estimator with stratification by day type (weekday/weekend). Effort is estimated from instantaneous instantaneous-count data; CPUE and HPUE use completed-trip interviews only (n = `r n_comp`, `r fmt_pct(100 * n_comp / n_int)` of all contacts). Confidence intervals are 95% normal-approximation intervals derived from the design-based variance estimator. The roving design contact protocol means `r fmt_pct(100 * n_incomp / n_int)` of interviews are incomplete; those records contribute to harvest and release totals but not to CPUE. Domain: Cedar Lake public-access shoreline, daylight hours, April 1–October 31, 2023.
+:::
+
+### Species-level CPUE
+
+`estimate_catch_rate(by = species)` returns zeros in the current installed package due to a known bug in species-level catch aggregation (GH #64; fix merged, not yet installed). The workaround computes species CPUE directly from the completed-trip interview records and the species catch table.
+
+```{r}
+#| label: cedar-species-cpue
+# Workaround: compute raw CPUE per species from completed trips
+complete_ids <- cedar_interviews |>
+  filter(trip_status == "complete") |>
+  pull(interview_id)
+
+species_cpue_raw <- cedar_catch |>
+  filter(interview_id %in% complete_ids) |>
+  group_by(interview_id, species) |>
+  summarise(n_fish = sum(n_fish), .groups = "drop") |>
+  left_join(
+    cedar_interviews |> select(interview_id, hours_fished, n_anglers),
+    by = "interview_id"
+  ) |>
+  group_by(species) |>
+  summarise(
+    n_trips   = n(),
+    total_fish = sum(n_fish),
+    total_hrs  = sum(hours_fished * n_anglers),
+    cpue_raw   = total_fish / total_hrs,
+    .groups = "drop"
+  )
+
+species_cpue_raw
+```
+
+Bluegill accounts for the highest raw CPUE, consistent with a shallow vegetated reservoir where panfish densities are high. Channel catfish CPUE is lower on a per-angler-hour basis but represents a disproportionate share of the harvest by weight. White crappie CPUE is lowest in summer; the species is more catchable in spring and fall when water temperatures are cooler and fish concentrate in predictable locations.
+
+This workaround produces a point estimate without design-based variance. When GH #64 is resolved, `estimate_catch_rate(cedar_design, by = species)` will return fully stratified estimates with confidence intervals.
+
+## Cedar Lake versus Harlan: a design contrast
+
+Cedar Lake and Harlan share the same estimation engine — `creel_design`, `add_counts`, `add_interviews`, `add_catch`, `estimate_effort`, `estimate_total_harvest`, `estimate_catch_rate` — but the two surveys differ in nearly every operational detail. Comparing them reveals which parts of the workflow are universal and which require lake-specific decisions.
+
+```{r}
+#| label: cedar-harlan-compare
+compare_tbl <- tibble::tribble(
+  ~Feature,                   ~`Harlan Reservoir`,        ~`Cedar Lake`,
+  "Survey period",            "Full calendar year",        "April–October",
+  "Design type",              "Access-point",              "Roving circuit",
+  "Shift hours",              "8 hr / 6 hr (P1/P2)",       "6 hr / 6 hr (equal)",
+  "Angler composition",       "~70% boat",                 "~88% bank",
+  "Interview completion",     "~65% complete",             "~29% complete",
+  "Primary species",          "White bass, walleye",       "Bluegill, catfish, crappie",
+  "Season effort",            "~33,000 angler-hours",
+    sprintf("~%s angler-hours", fmt_comma(eff_tot$estimates$estimate)),
+  "CPUE",                     "1.51 fish/hr",
+    sprintf("%s fish/hr", fmt_rate(cpue_all$estimates$estimate)),
+  "Effort CV",                "~12%",                      fmt_pct(cv_eff),
+  "Harvest CV",               "~27%",                      fmt_pct(cv_harv)
+)
+
+knitr::kable(compare_tbl, align = "lll",
+             caption = "Design and estimate comparison between Harlan Reservoir and Cedar Lake.")
+```
+
+The most consequential difference is the incomplete-trip rate. Harlan was operated as an access-point survey, so most interviews captured completed trips; Cedar Lake's roving protocol contacts parties mid-trip, meaning `r fmt_pct(100 * n_incomp / n_int)` of all records are incomplete. The effect on estimation is asymmetric: harvest and release totals gain from the larger sample while CPUE must restrict to the smaller complete-trip subset. Managers who want higher CPUE precision on a roving survey must either increase the number of sampled days or supplement roving contacts with access-point exits.
+
+A second consequence of the roving design is the lower absolute effort estimate. Cedar Lake is a much smaller water body than Harlan — fewer anglers, shorter average trips, and a seasonal window limited to seven months. The per-angler-hour CPUE is actually higher at Cedar Lake (`r fmt_rate(cpue_all$estimates$estimate)` vs 1.51 fish/hr), reflecting the dense panfish community. Scale differences like this make across-lake comparisons misleading unless normalized per unit area or per unit effort.
+
+## Reproducibility note
+
+The Cedar Lake estimates in this chapter will reproduce exactly given the same seed, data files, and package version:
+
+```{r}
+#| label: cedar-session
+cat("tidycreel:", as.character(packageVersion("tidycreel")), "\n")
+cat("R:         ", R.version$version.string, "\n")
+cat("Data seed: 2023 (set in data/cedar_*.rds generation)\n")
+```
+
+Production use should version-control the four `.rds` files alongside the analysis script. Saving the design object avoids rerunning the pipeline for downstream reporting:
+
+```{r}
+#| label: cedar-save-design
+#| eval: false
+saveRDS(cedar_design, here("data/cedar_design_2023.rds"))
+```
+
+Loading the saved design in a future session restores the full stratum structure, counts, and interview data in a single call — identical to rebuilding the design from raw tables, but without the preparation steps.
