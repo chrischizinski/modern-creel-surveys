@@ -127,7 +127,7 @@ cat(
 )
 ```
 
-The `r fmt_pct(100 * n_incomp / n_int)` incomplete-trip rate reflects the roving design: every interview happens mid-trip, capturing only elapsed time and fish so far. Complete trips — parties who happened to be finishing when the clerk passed — account for `r fmt_pct(100 * n_comp / n_int)` of contacts. That fraction is used for CPUE estimation because only completed trips record the full trip outcome.
+The `r fmt_pct(100 * n_incomp / n_int)` incomplete-trip rate reflects the roving design: every interview happens mid-trip, capturing only elapsed time and fish so far. Complete trips — parties who happened to be finishing when the clerk passed — account for `r fmt_pct(100 * n_comp / n_int)` of contacts. Total-catch estimation requires the full trip record and uses only this subset; the mean-of-ratios CPUE estimator treats each mid-trip contact as an independent instantaneous catch-rate observation and uses every interview regardless of completion status.
 
 ### Seasonal survey coverage
 
@@ -372,7 +372,7 @@ Season total harvest: `r fmt_comma(harv_tot$estimates$estimate)` fish (95% CI: `
 
 ## CPUE and harvest rate
 
-The catch-rate estimator uses only completed trips. In a roving survey with `r fmt_pct(100 * n_incomp / n_int)` incomplete-trip contacts, this means `r cat_tot$estimates$n` of `r n_int` interviews contribute to the CPUE estimate. The ratio-of-means estimator divides total catch by total effort across the completed-trip subset, which avoids the length-biased sampling problem that would arise from using the mean-of-ratios estimator (Chapter 14).
+Roving designs use the mean-of-ratios (MOR) estimator for catch rate, not the ratio-of-means (ROM) used in access-point surveys. Each mid-trip contact supplies an independent observation of instantaneous catch rate — fish caught so far divided by time fished so far — a valid rate measurement regardless of whether the trip ultimately completes. With `r fmt_pct(100 * n_incomp / n_int)` incomplete contacts at Cedar Lake, the MOR estimator retains `r cpue_all$estimates$n` of `r n_int` interviews (eight very short contacts under 0.5 hours are excluded as unreliable rate observations). Chapter 14 discusses the ROM vs. MOR distinction and when each is appropriate.
 
 ```{r}
 #| label: cedar-cpue-all
@@ -380,7 +380,7 @@ cpue_all$estimates
 hpue_all$estimates
 ```
 
-Overall CPUE is `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour (95% CI: `r fmt_rate(cpue_all$estimates$ci_lower)`–`r fmt_rate(cpue_all$estimates$ci_upper)`). The harvest rate is `r fmt_rate(hpue_all$estimates$estimate)` fish per angler-hour, meaning anglers kept `r fmt_pct(100 * hpue_all$estimates$estimate / cpue_all$estimates$estimate)` of all fish caught on completed trips.
+Overall CPUE is `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour (95% CI: `r fmt_rate(cpue_all$estimates$ci_lower)`–`r fmt_rate(cpue_all$estimates$ci_upper)`). The harvest rate is `r fmt_rate(hpue_all$estimates$estimate)` fish per angler-hour, meaning anglers kept `r fmt_pct(100 * hpue_all$estimates$estimate / cpue_all$estimates$estimate)` of all fish caught.
 
 ### CPUE by day type
 
@@ -397,7 +397,7 @@ Bank and boat anglers differ in access, target species, and technique. Bank angl
 
 ```{r}
 #| label: fig-cedar-cpue-type
-#| fig-cap: "Catch per angler-hour by angler type at Cedar Lake, 2023. Points are ratio-of-means estimates from completed trips; bars are 95% confidence intervals. Boat stratum sample size is small (n < 30); variance estimate is less stable."
+#| fig-cap: "Catch per angler-hour by angler type at Cedar Lake, 2023. Points are mean-of-ratios estimates using all interviewed trips; bars are 95% confidence intervals. Boat stratum sample size is small (n < 50 contacts); variance estimate is less stable."
 #| fig-width: 5.5
 #| fig-height: 2.8
 
@@ -417,7 +417,7 @@ cpue_at$estimates |>
   theme_minimal(base_size = 11)
 ```
 
-Bank anglers catch `r fmt_rate(cpue_at$estimates$estimate[cpue_at$estimates$angler_type == "bank"])` fish per angler-hour; boat anglers catch `r fmt_rate(cpue_at$estimates$estimate[cpue_at$estimates$angler_type == "boat"])` fish per angler-hour. The boat sample is small (n = `r cpue_at$estimates$n[cpue_at$estimates$angler_type == "boat"]` completed trips), so the wider confidence interval should be interpreted cautiously. At current sample sizes, a bank versus boat contrast is suggestive but not conclusive.
+Bank anglers catch `r fmt_rate(cpue_at$estimates$estimate[cpue_at$estimates$angler_type == "bank"])` fish per angler-hour; boat anglers catch `r fmt_rate(cpue_at$estimates$estimate[cpue_at$estimates$angler_type == "boat"])` fish per angler-hour. The boat sample is small (n = `r cpue_at$estimates$n[cpue_at$estimates$angler_type == "boat"]` trips), so the wider confidence interval should be interpreted cautiously. At current sample sizes, a bank versus boat contrast is suggestive but not conclusive.
 
 ## Precision and diagnostics
 
@@ -459,7 +459,7 @@ cv_tbl |>
   theme(legend.position = "bottom")
 ```
 
-Effort CV is `r fmt_pct(cv_eff)` — the most precisely estimated quantity, because it draws on the full set of `r n_samp` sampled days. Total harvest CV is `r fmt_pct(cv_harv)`, within the acceptable range. Total catch CV is `r fmt_pct(cv_catch)`, higher because only the `r n_comp` completed trips contribute. CPUE and HPUE have the smallest CVs — `r fmt_pct(cv_cpue)` and `r fmt_pct(cv_hpue)` — because rate estimators divide correlated quantities, partially canceling the between-day variance in effort and catch.
+Effort CV is `r fmt_pct(cv_eff)` — the most precisely estimated quantity, because it draws on the full set of `r n_samp` sampled days. Total harvest CV is `r fmt_pct(cv_harv)`, within the acceptable range. Total catch CV is `r fmt_pct(cv_catch)`, highest of the group because only the `r n_comp` completed trips contribute to that estimator. CPUE and HPUE have the smallest CVs — `r fmt_pct(cv_cpue)` and `r fmt_pct(cv_hpue)` respectively — reflecting both the large MOR sample (`r cpue_all$estimates$n` contacts) and the correlated-quotient property of rate estimators, which partially cancels between-day variance in effort and catch.
 
 Quantities above 20% CV deserve a caveated interpretation in the final report. For Cedar Lake 2023, all season-level totals and rates fall within the management-grade range. The boat-angler CPUE sub-group, while not shown in this summary, carries a much larger CV and should not be reported as a standalone number without a prominent uncertainty statement.
 
@@ -517,43 +517,27 @@ Cedar Lake anglers logged an estimated `r fmt_comma(eff_tot$estimates$estimate)`
 :::
 
 ::: {.callout-note title="Example: technical report footnote"}
-All estimates use the ratio-of-means estimator with stratification by day type (weekday/weekend). Effort is estimated from instantaneous instantaneous-count data; CPUE and HPUE use completed-trip interviews only (n = `r n_comp`, `r fmt_pct(100 * n_comp / n_int)` of all contacts). Confidence intervals are 95% normal-approximation intervals derived from the design-based variance estimator. The roving design contact protocol means `r fmt_pct(100 * n_incomp / n_int)` of interviews are incomplete; those records contribute to harvest and release totals but not to CPUE. Domain: Cedar Lake public-access shoreline, daylight hours, April 1–October 31, 2023.
+Effort uses ratio-of-means with day-type stratification from instantaneous count data. CPUE and HPUE use the mean-of-ratios estimator with all `r cpue_all$estimates$n` contacts (8 trips under 0.5 hours excluded); total catch uses only the `r n_comp` completed trips (`r fmt_pct(100 * n_comp / n_int)` of all contacts); total harvest and release use the full interview set (n = `r n_int`). Confidence intervals are 95% normal-approximation intervals from the design-based variance estimator. Domain: Cedar Lake public-access shoreline, daylight hours, April 1–October 31, 2023.
 :::
 
 ### Species-level CPUE
 
-`estimate_catch_rate(by = species)` returns zeros in the current installed package due to a known bug in species-level catch aggregation (GH #64; fix merged, not yet installed). The workaround computes species CPUE directly from the completed-trip interview records and the species catch table.
+Cedar Lake targets three species with different catchability profiles.
+`estimate_catch_rate(by = species)` returns design-based estimates with
+stratification weights and confidence intervals for each:
 
 ```{r}
 #| label: cedar-species-cpue
-# Workaround: compute raw CPUE per species from completed trips
-complete_ids <- cedar_interviews |>
-  filter(trip_status == "complete") |>
-  pull(interview_id)
-
-species_cpue_raw <- cedar_catch |>
-  filter(interview_id %in% complete_ids) |>
-  group_by(interview_id, species) |>
-  summarise(n_fish = sum(n_fish), .groups = "drop") |>
-  left_join(
-    cedar_interviews |> select(interview_id, hours_fished, n_anglers),
-    by = "interview_id"
-  ) |>
-  group_by(species) |>
-  summarise(
-    n_trips   = n(),
-    total_fish = sum(n_fish),
-    total_hrs  = sum(hours_fished * n_anglers),
-    cpue_raw   = total_fish / total_hrs,
-    .groups = "drop"
-  )
-
-species_cpue_raw
+estimate_catch_rate(cedar_design, by = species)
 ```
 
-Bluegill accounts for the highest raw CPUE, consistent with a shallow vegetated reservoir where panfish densities are high. Channel catfish CPUE is lower on a per-angler-hour basis but represents a disproportionate share of the harvest by weight. White crappie CPUE is lowest in summer; the species is more catchable in spring and fall when water temperatures are cooler and fish concentrate in predictable locations.
-
-This workaround produces a point estimate without design-based variance. When GH #64 is resolved, `estimate_catch_rate(cedar_design, by = species)` will return fully stratified estimates with confidence intervals.
+Bluegill accounts for the highest CPUE, consistent with shallow vegetated
+habitat where panfish densities are high and contacts are frequent.
+Channel catfish CPUE is lower on a per-angler-hour basis but represents a
+disproportionate share of harvest by weight — catfish are kept at high rates.
+White crappie CPUE is lowest overall, reflecting both lower abundance and
+seasonal availability; crappie concentrate in predictable locations in spring
+and fall but disperse to deeper structure in summer.
 
 ## Cedar Lake versus Harlan: a design contrast
 
@@ -581,7 +565,7 @@ knitr::kable(compare_tbl, align = "lll",
              caption = "Design and estimate comparison between Harlan Reservoir and Cedar Lake.")
 ```
 
-The most consequential difference is the incomplete-trip rate. Harlan was operated as an access-point survey, so most interviews captured completed trips; Cedar Lake's roving protocol contacts parties mid-trip, meaning `r fmt_pct(100 * n_incomp / n_int)` of all records are incomplete. The effect on estimation is asymmetric: harvest and release totals gain from the larger sample while CPUE must restrict to the smaller complete-trip subset. Managers who want higher CPUE precision on a roving survey must either increase the number of sampled days or supplement roving contacts with access-point exits.
+The most consequential difference is the incomplete-trip rate. Harlan was operated as an access-point survey, so most interviews captured completed trips; Cedar Lake's roving protocol contacts parties mid-trip, meaning `r fmt_pct(100 * n_incomp / n_int)` of all records are incomplete. The effect on total-count estimation is asymmetric: total-catch requires the complete trip record (n = `r n_comp`), while harvest and release totals draw on the full interview pool. Catch rates are less affected — the MOR estimator uses every mid-trip contact as an instantaneous rate observation, so CPUE precision is not penalized by the high incomplete-trip rate. The binding precision constraint for roving surveys is total catch, not CPUE; managers who need tighter total-catch confidence intervals must increase sampled days or supplement with access-point exits.
 
 A second consequence of the roving design is the lower absolute effort estimate. Cedar Lake is a much smaller water body than Harlan — fewer anglers, shorter average trips, and a seasonal window limited to seven months. The per-angler-hour CPUE is actually higher at Cedar Lake (`r fmt_rate(cpue_all$estimates$estimate)` vs 1.51 fish/hr), reflecting the dense panfish community. Scale differences like this make across-lake comparisons misleading unless normalized per unit area or per unit effort.
 

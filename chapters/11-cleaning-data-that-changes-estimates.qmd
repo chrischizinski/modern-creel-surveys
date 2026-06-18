@@ -171,28 +171,24 @@ standardize_species(harlan_catch) |>
   arrange(is.na(species_code), species)
 ```
 
-Eight of eleven species resolve to AFS codes. Three do not: Freshwater Drum,
-Wiper, and Crappie.
+Nine of eleven species resolve to AFS codes. Two do not: Wiper and Crappie.
+(Freshwater Drum, which lacked an AFS code in earlier versions, now resolves
+automatically to `"FRD"` in `tidycreel` ≥ 2.2.0.)
 
-Freshwater Drum (*Aplodinotus grunniens*) is a legitimate species with no
-universal AFS freshwater species code in the default lookup. Its absence from
-the lookup does not indicate a data error — it indicates a gap in the lookup
-table. Wiper is a Striped Bass × White Bass hybrid that varies in naming by
-region and lacks a single-code standard. Crappie entered without species
-designation is a data quality issue: Black Crappie and White Crappie are
-distinct management units in many systems, and pooled entries cannot be split
-after the fact.
+Wiper is a Striped Bass × White Bass hybrid that varies in naming by region and
+lacks a single-code standard. Crappie entered without species designation is a
+data quality issue: Black Crappie and White Crappie are distinct management
+units in many systems, and pooled entries cannot be split after the fact.
 
-These three categories represent different problems. Freshwater Drum requires a
-lookup table extension. Wiper requires a project-specific code assignment.
-Crappie requires a conversation with field staff about whether species-level
-identification was attempted and, if so, how to recover it from supplemental
-records.
+These two categories represent different problems. Wiper requires a
+project-specific code assignment. Crappie requires a conversation with field
+staff about whether species-level identification was attempted and, if so, how
+to recover it from supplemental records.
 
 ```{r}
 #| label: fig-species-codes
 #| fig-cap: "Species in the Harlan Reservoir 2022 catch records by AFS code match status. Matched species resolve to standard codes and are ready for cross-survey comparison. Unmatched species require manual resolution before merging with external data."
-#| fig-alt: "Horizontal bar chart showing total catch records for each of 11 species, colored by whether the species matched an AFS code. White Bass, Walleye, and Freshwater Drum have the most records. Three species (Freshwater Drum, Wiper, Crappie) are shown in a different color indicating no AFS match."
+#| fig-alt: "Horizontal bar chart showing total catch records for each of 11 species, colored by whether the species matched an AFS code. White Bass, Walleye, and Freshwater Drum have the most records. Two species (Wiper and Crappie) are shown in a different color indicating no AFS match."
 #| echo: false
 standardize_species(harlan_catch) |>
   mutate(
@@ -220,9 +216,10 @@ When `standardize_species()` returns `NA` for a species, the analyst has three
 options, and the choice should be documented:
 
 1. **Assign a project code** for species that have no universal standard but
-   can be coded consistently (Freshwater Drum, Wiper). Apply a
-   `case_when()` override to the `species_code` column after
-   `standardize_species()` runs.
+   can be coded consistently (Wiper). Pass a named character vector via the
+   `custom_codes` argument — `standardize_species(data, custom_codes = c("Wiper" = "WPR"))` —
+   or apply a `case_when()` override to the `species_code` column after the
+   function runs.
 2. **Create a pooled category** for entries that mix species (Crappie without
    species designation). A project-specific label like `"CRP-POOL"` flags the
    record as unresolved without discarding the catch count.
@@ -230,8 +227,11 @@ options, and the choice should be documented:
    reliably coded without returning to field records. Report species totals only
    for rows where `!is.na(species_code)`.
 
-The `standardize_species()` function does not accept a custom override table
-directly; the correction is applied as a post-processing step:
+A `case_when()` override handles the two remaining unresolved species after
+`standardize_species()` runs. For single-species overrides, `custom_codes =
+c("Wiper" = "WPR")` is equivalent; `case_when()` is used here because `Crappie`
+requires a pooled label (`"CRP-POOL"`) that warrants explicit documentation in
+the code:
 
 ```{r}
 #| label: species-code-override
@@ -239,10 +239,9 @@ directly; the correction is applied as a post-processing step:
 harlan_catch_coded <- harlan_catch |>
   standardize_species() |>
   mutate(species_code = case_when(
-    species == "Freshwater Drum" ~ "FRD",      # project code; FWS uses FRD
-    species == "Wiper"           ~ "WPR",      # project code; no AFS standard
-    species == "Crappie"         ~ "CRP-POOL", # pooled: species unknown
-    TRUE                         ~ species_code
+    species == "Wiper"   ~ "WPR",      # project code; no AFS standard
+    species == "Crappie" ~ "CRP-POOL", # pooled: species unknown
+    TRUE                 ~ species_code
   ))
 
 harlan_catch_coded |>
@@ -251,7 +250,7 @@ harlan_catch_coded |>
   arrange(is.na(species_code), species)
 ```
 
-After the override, all 11 species in the Harlan dataset have a code. The
+After the override, all 11 species in the Harlan dataset have a code. (Nine resolved automatically via the AFS lookup; two required the `case_when()` step.) The
 `"CRP-POOL"` label is a signal to downstream reporting code that this entry
 should not be summed with species-level Crappie totals from other sources.
 Any consistent, documented label works; what matters is that the convention is

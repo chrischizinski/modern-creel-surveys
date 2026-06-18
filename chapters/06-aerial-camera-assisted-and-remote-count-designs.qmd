@@ -2,93 +2,657 @@
 title: "Aerial, Camera-Assisted, and Remote Count Designs"
 ---
 
-## Purpose
+```{r}
+#| label: ch06-setup
+#| include: false
+library(tidycreel)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(lubridate)
+```
 
-Remote count designs extend creel logic beyond the traditional access-point crew.
+## Why remote counts? {#sec-remote-why}
 
-They are practical when effort can be observed from the air, from cameras, or from other proxy sensors that cover the fishery more efficiently or more consistently than a manual count alone.
+Standard creel survey designs — access-point (@sec-access-point) and roving
+(@sec-roving) — assume a field crew can stand at an access point or travel a
+route and count anglers directly. That assumption fails when the waterbody is
+too large for crew coverage, when weather prevents reliable manual counts, when
+budget limits staffing to only a few days per week, or when the survey requires
+higher temporal resolution than a crew can provide.
 
-The important shift is not just technological. The observation process changes from a person standing in the fishery to a sensor or remote observer that records a narrower or noisier signal about activity. That changes what counts as evidence and what still needs ground validation.
+Remote and technology-assisted count methods solve the coverage problem by
+replacing or supplementing the human observer with a sensor — a camera at a
+boat ramp, an aircraft flying a systematic route, a vehicle counter at a road
+crossing. Coverage goes up, field labor goes down, and the record becomes
+persistent: a camera image can be reviewed; a flight log can be audited.
 
-## Key ideas
+The estimation logic does not change. Effort is still the product of a count
+of anglers and the hours those anglers were available to fish. What changes is
+how the count is collected and how timing uncertainty is handled. An aerial
+flight covers the entire waterbody in thirty minutes but captures only a
+snapshot at the flight time. A boat-ramp camera records every ingress event
+but produces a vehicle count, not a direct angler-hour measurement. Both
+require a link between the count and total effort — through a model, through
+a calibration ratio, or through mean trip length from interviews.
 
-- Aerial counts
-- Camera systems
-- Vehicle counters and other proxies
-- Detection limits and downtime
-- Validation against ground truth
+`tidycreel` provides dedicated design types and estimators for each major
+remote-count approach: `design_type = "aerial"` with
+`estimate_effort_aerial_glmm()` for time-of-day-adjusted aerial surveys, and
+`design_type = "camera"` with `est_effort_camera()` for ingress/egress counter
+designs. The same `creel_design()` → `add_counts()` → `add_interviews()` →
+estimate pipeline applies to both, with a few additional required arguments
+that capture the characteristics of the observation system.
 
-## What these designs add
+## Aerial surveys {#sec-aerial}
 
-Remote and proxy counts expand coverage, reduce field costs, and enable high-frequency monitoring. These designs also help when weather, staffing, or access limitations make a fully manual count impractical.
+### The observation problem {#sec-aerial-obs}
 
-The tradeoff is that a sensor or remote observer mediates the count process. This requires the analyst to evaluate what the sensor detects, what is missed during downtime, how false positives and negatives are handled, and how the proxy relates to true effort.
+An aerial survey produces one count per flight, and the count reflects the
+number of anglers visible at a single moment in time. Angler density on a lake
+changes continuously across the fishing day: low at first light, building
+through midmorning as anglers arrive, peaking around midday or early afternoon,
+then declining as anglers leave and daylight wanes. A single flight at 10:00
+captures a different density than a flight at 14:00 on the same day.
 
-In practice, that means a remote-count design is usually best understood as a measurement system with error, not as a perfect substitute for field observation. The estimate can still be strong, but only if the analyst knows how the sensor behaves across the conditions that matter for the reporting domain.
+The naive expansion — count × hours_open — assumes the observed density is
+representative of the full day, which it is only if the flight happens exactly
+at the time when mean daily density occurs. If flights are consistently timed
+early or late relative to peak use, the effort estimate is biased in a
+predictable direction.
 
-## Aerial counts
+The standard fix is a **time-of-day model** that predicts how angler density
+varies across the fishing day. Multiple flights on the same days, spaced at
+different times, provide the data to fit that model. The fitted curve is then
+integrated across the full open-water period to recover total daily effort.
+`estimate_effort_aerial_glmm()` fits this model as a generalized linear mixed
+model (GLMM) with a quadratic time-of-day effect and a day-level random
+intercept:
 
-Aerial surveys are often attractive for large waterbodies or dispersed fisheries. They can be excellent for broad coverage, but they can also be sensitive to:
+$$
+\text{count}_{d,t} = \exp\bigl(\beta_0 + \beta_1 t + \beta_2 t^2 + u_d\bigr)
+$$
 
-- flight timing;
-- visibility conditions;
-- duplicate or missed observations;
-- matching the aerial count to the correct time window for effort estimation.
+where $t$ is flight time, $u_d \sim N(0, \sigma^2)$ is a day-level random
+effect that absorbs day-to-day variation in total use, and the exponential
+link keeps predictions non-negative. Integrating the fitted curve over the
+$h_{\text{open}}$ open hours of the fishing day recovers a day-specific total
+angler-hours estimate, which is then expanded to the full season using the
+stratified ratio estimator.
 
-Aerial work is especially vulnerable to timing mismatch. A flight may observe a short window that does not line up with the count period used in the final estimator. If the survey domain depends on daypart, weather, or rapid turnover in use, the count has to be aligned carefully with the inference target.
+### Data structure {#sec-aerial-data}
 
-## Camera-assisted counts
+An aerial survey dataset contains one row per flight observation — not one row
+per day. Multiple flights on the same day appear as separate rows, linked by
+date and distinguished by `time_of_flight`. The `tidycreel` bundled dataset
+`example_aerial_glmm_counts` illustrates this structure:
 
-Cameras can make counts more repeatable and can create a persistent audit trail. But cameras introduce their own issues:
+```{r}
+#| label: aerial-data-structure
+#| echo: true
+example_aerial_glmm_counts |>
+  arrange(date, time_of_flight) |>
+  head(12)
+```
 
-- occlusion;
-- weather;
-- lighting;
-- power or network outages;
-- ambiguous frames that require human review.
+Four flights per day at hours 7, 10, 13, and 16. The counts rise from early
+morning to a midday peak, then fall — exactly the pattern the GLMM is designed
+to capture. With four time points per day, the quadratic curve is well
+constrained.
 
-The audit trail is useful because the analyst can inspect the same count again, but repeatability does not automatically mean correctness. If the camera misses activity outside its view or records the same boat twice as it moves through the frame, the count can still be biased even though the image is permanent.
+### Building the aerial design {#sec-aerial-design}
 
-## Remote counts as proxies
+An aerial design requires three additions to the standard `creel_design()` call:
 
-Vehicle counters, gate sensors, and other proxies can be helpful when they are strongly related to actual effort. The analyst still needs to ask whether the proxy tracks the fishing activity well enough to support the estimate.
+- `design_type = "aerial"` — routes count data to the GLMM estimator
+- `h_open` — total fishing hours per day (daylight hours accessible to anglers)
+- Raw, unaggregated counts passed to `add_counts()` without `count_time_col`,
+  so `time_of_flight` is preserved in `design$counts` for the model
 
-That question is empirical. A gate counter might correlate well with fishing effort on a busy summer weekend and poorly on a cold weekday with very low use. The proxy therefore has to be validated in the same kinds of conditions that the report will cover.
+```{r}
+#| label: aerial-design-build
+#| echo: true
+aerial_calendar <- tibble(
+  date     = seq(min(example_aerial_glmm_counts$date),
+                 max(example_aerial_glmm_counts$date), by = "day"),
+  day_type = if_else(wday(date) %in% c(1L, 7L), "weekend", "weekday")
+)
 
-## Validation logic
+design_aerial <- creel_design(
+  calendar    = aerial_calendar,
+  date        = "date",
+  strata      = "day_type",
+  design_type = "aerial",
+  h_open      = 14
+) |>
+  add_counts(example_aerial_glmm_counts) |>
+  add_interviews(
+    interviews    = example_aerial_interviews,
+    catch         = "walleye_catch",
+    harvest       = "walleye_kept",
+    effort        = "hours_fished",
+    trip_status   = "trip_status",
+    trip_duration = "hours_fished"
+  )
+```
 
-Validation is what turns a convenient sensor into a defensible part of the workflow.
+The contrast with a standard instantaneous design is in `design_type` and
+`h_open`. Everything else — `add_interviews()`, estimation calls — follows
+the same pattern. The GLMM handles the time-of-day adjustment internally;
+the analyst provides the data and the open-water window.
 
-Useful checks include:
+### Time-of-day pattern {#sec-aerial-tod}
 
-- comparing remote counts to ground counts on a subset of days;
-- checking whether detection changes by weather, light, or traffic;
-- documenting downtime and missing intervals;
-- and confirming that the proxy still performs well in the most important parts of the reporting domain.
+Before estimating effort, it is worth visualizing what the GLMM is fitting.
+@fig-aerial-tod shows mean count by flight time across both day types, with
+the quadratic pattern that drives the model.
 
-Without that step, the analyst may end up reporting a proxy measure as if it were a direct count.
+```{r}
+#| label: fig-aerial-tod
+#| echo: true
+#| fig-cap: "Mean aerial count by time of flight and day type. Points show stratum means across sampled days; the curve is a loess smoother that approximates the quadratic GLMM fit. Counts peak in early afternoon and are consistently higher on weekends, reflecting higher recreational use."
+#| fig-alt: "Scatter plot with time of flight (hours) on the x axis from 7 to 16, mean angler count on the y axis. Two smooth curves, one per day type, both arching upward then downward with weekends higher than weekdays."
+example_aerial_glmm_counts |>
+  group_by(day_type, time_of_flight) |>
+  summarise(mean_count = mean(n_anglers), .groups = "drop") |>
+  ggplot(aes(time_of_flight, mean_count, colour = day_type, group = day_type)) +
+  geom_point(size = 3) +
+  geom_smooth(method = "loess", se = FALSE, linewidth = 1) +
+  scale_colour_manual(
+    values = c(weekday = "#2171b5", weekend = "#e6550d"),
+    labels = c(weekday = "Weekday", weekend = "Weekend"),
+    name   = NULL
+  ) +
+  labs(
+    x = "Time of flight (hour of day)",
+    y = "Mean angler count"
+  ) +
+  theme_bw(base_size = 12) +
+  theme(legend.position = "bottom")
+```
 
-## `tidycreel` support
+The inverted-U shape confirms that a single flight at 07:00 would
+underestimate total daily effort, while a flight at 13:00 would overestimate
+it. The GLMM integrates the full curve rather than multiplying one snapshot
+count by hours_open.
 
-Implemented:
-- Later chapters describe which proxy and count workflows are supported directly.
+### Estimating effort {#sec-aerial-estimate}
 
-Partially supported:
-- The conceptual role of remote counts is covered here; estimator implementation comes later.
+`estimate_effort_aerial_glmm()` fits the negative-binomial GLMM, integrates
+the fitted curve across `h_open` hours, and expands to the full season using
+the stratified frame. The result is a total angler-hours estimate for the
+survey period with a delta-method standard error.
 
-Manual or conceptual:
-- Remote count validation and coverage review.
-- Comparing proxy counts against ground-truth samples.
-- Deciding whether a proxy is adequate for the reporting domain.
+```{r}
+#| label: aerial-effort-estimate
+#| echo: true
+effort_aerial <- estimate_effort_aerial_glmm(design_aerial, time_col = time_of_flight)
+effort_aerial
+```
 
-The package can later organize these data, but it cannot decide whether a sensor should be trusted. That judgment has to come from the field evidence.
+The GLMM estimates
+`r round(effort_aerial$estimates$estimate)` total angler-hours
+(95% CI: `r round(effort_aerial$estimates$ci_lower)`–`r round(effort_aerial$estimates$ci_upper)`).
+The total and its standard error reflect two sources of variance: between-day
+variation in total use (absorbed by the GLMM day-level random effect) and
+between-stratum variation in sampling intensity (handled by the stratified
+expansion). The ratio of `se_between` to total `se` indicates how much of the
+uncertainty comes from which-days-were-sampled versus which-time-flights-were-
+conducted.
 
-## Example focus
+The GLMM requires `lme4`. If the package is not installed, `tidycreel` will
+prompt installation before the call proceeds.
 
-A boat-ramp camera used to support effort estimation, with ground counts on a subset of days for validation.
+### Naive estimate vs GLMM {#sec-aerial-naive}
 
-That setup works best when the camera and the ground counts overlap on the same time windows. If the camera is used for daily totals but the validation counts only cover midday, the evidence is thinner than it first looks.
+To see what the time-of-day correction buys, it helps to compare the GLMM
+result against the naive single-flight expansion. `example_aerial_counts`
+contains one count per day — a midmorning flight — that can be treated as a
+standard instantaneous-count design using `estimate_effort()`:
 
-## Takeaway
+```{r}
+#| label: aerial-naive-compare
+#| echo: true
+#| warning: false
+# Standard instantaneous design with one flight per day
+# h_open goes into creel_design(), not estimate_effort()
+design_naive <- creel_design(
+  calendar = aerial_calendar,
+  date     = "date",
+  strata   = "day_type",
+  h_open   = 14
+) |>
+  add_counts(example_aerial_counts) |>
+  add_interviews(
+    interviews    = example_aerial_interviews,
+    catch         = "walleye_catch",
+    harvest       = "walleye_kept",
+    effort        = "hours_fished",
+    trip_status   = "trip_status",
+    trip_duration = "hours_fished"
+  )
 
-Remote counts do not remove the need for design logic. They change how effort is observed, not whether the estimate still needs a frame, a domain, and a defensible link to the fishery.
+effort_naive <- estimate_effort(design_naive)
+effort_naive$estimates
+```
+
+```{r}
+#| label: fig-aerial-compare
+#| echo: true
+#| fig-cap: "Aerial effort estimates from a naive single-flight expansion versus the GLMM time-of-day model. The naive estimate treats a midmorning count as representative of the full day; the GLMM integrates a fitted density curve. The difference illustrates the timing bias that motivates multi-flight designs."
+#| fig-alt: "Point-and-range plot with two rows, one per method. Both show total angler-hours with 95% confidence intervals. The naive estimate is higher than the GLMM estimate, indicating upward bias from the midmorning flight timing."
+bind_rows(
+  effort_naive$estimates  |> mutate(method = "Naive (single flight × h_open)"),
+  effort_aerial$estimates |> mutate(method = "GLMM (multi-flight, time-of-day model)")
+) |>
+  ggplot(aes(estimate, method)) +
+  geom_pointrange(aes(xmin = ci_lower, xmax = ci_upper), size = 0.8) +
+  labs(
+    x = "Total angler-hours (season estimate)",
+    y = NULL
+  ) +
+  theme_bw(base_size = 12)
+```
+
+The midmorning flight catches anglers near the daily peak, so the naive
+expansion inflates the estimate relative to the GLMM, which integrates the
+full day including early-morning and late-afternoon periods of lower activity.
+The confidence intervals also differ: the naive estimate has wider uncertainty
+because it does not leverage the within-day temporal structure to constrain
+the daily total.
+
+### Catch rate from an aerial design {#sec-aerial-cpue}
+
+Remote count designs change how effort is estimated but leave the catch-rate
+pipeline unchanged. `estimate_catch_rate()` on an aerial design object behaves
+identically to Ch04 and Ch13:
+
+```{r}
+#| label: aerial-cpue
+#| echo: true
+estimate_catch_rate(design_aerial)
+```
+
+The CPUE estimate uses completed-trip interviews only, exactly as in a
+standard access-point design. The `design_type = "aerial"` flag affects only
+effort estimation; catch rate, harvest, and release estimation are design-type
+agnostic.
+
+## Camera-assisted designs {#sec-camera}
+
+### Access-point counters {#sec-camera-counter}
+
+Boat-ramp cameras and vehicle counters take a different approach to remote
+counting: instead of a snapshot of who is on the water, they record every
+arrival (ingress) and, when configured to capture both directions, every
+departure (egress). The count is not a density at a moment in time — it is a
+cumulative total of use-events for the day.
+
+The challenge this introduces is **downtime**: cameras fail. Batteries die,
+memory cards fill, lenses ice over, and power outages interrupt recording.
+A day with camera downtime is a day where the count is missing or
+underrepresented. If those days are disproportionately high-use days —
+weekends, good-weather days — excluding them biases the effort estimate
+downward.
+
+`impute_camera_counts()` handles missing counts using a stratum-specific
+generalized linear model fitted to the operational days. The imputed values
+carry a flag (`.imputed = TRUE`) that allows downstream diagnostics to
+distinguish observed from modeled counts.
+
+### Camera data and downtime {#sec-camera-data}
+
+The bundled `example_camera_counts` dataset has one day with `NA` ingress
+count due to battery failure:
+
+```{r}
+#| label: camera-data
+#| echo: true
+example_camera_counts
+```
+
+`impute_camera_counts()` fills the missing value using a within-stratum
+GLM fitted to the operational rows. The imputed count is flagged in the
+`.imputed` column:
+
+```{r}
+#| label: camera-impute
+#| echo: true
+camera_counts_clean <- impute_camera_counts(
+  example_camera_counts,
+  count_col  = "ingress_count",
+  strata_col = "day_type",
+  status_col = "camera_status"
+)
+camera_counts_clean
+```
+
+Weekday mean ingress on operational days is 51 vehicles; the imputed value
+for June 11 (weekday, battery failure) is 51 — the stratum mean. With more
+operational weekdays in the training set, the GLM would use day-of-week or
+environmental covariates if they were present in the data.
+
+@fig-camera-counts shows the ingress counts across the survey period, with
+the imputed observation visually distinguished.
+
+```{r}
+#| label: fig-camera-counts
+#| echo: true
+#| fig-cap: "Daily boat-ramp camera ingress counts over the survey period. Observed counts (solid points) are distinguished from the imputed value on June 11 (open triangle, battery failure). Weekend counts are consistently higher than weekday counts, reflecting the typical recreational fishing pattern."
+#| fig-alt: "Scatter plot with date on the x axis and ingress count on the y axis. Points are coloured by day type (weekday blue, weekend orange) and shaped by imputed status (solid circles for observed, open triangle for imputed). Weekend points cluster around 80-100; weekday points cluster around 45-60."
+camera_counts_clean |>
+  mutate(date = as.Date(date)) |>
+  ggplot(aes(date, ingress_count, colour = day_type, shape = .imputed)) +
+  geom_point(size = 3.5) +
+  scale_colour_manual(
+    values = c(weekday = "#2171b5", weekend = "#e6550d"),
+    labels = c(weekday = "Weekday", weekend = "Weekend"),
+    name   = NULL
+  ) +
+  scale_shape_manual(
+    values = c(`FALSE` = 16, `TRUE` = 2),
+    labels = c(`FALSE` = "Observed", `TRUE` = "Imputed (battery failure)"),
+    name   = NULL
+  ) +
+  labs(
+    x = NULL,
+    y = "Ingress count (vehicles)"
+  ) +
+  theme_bw(base_size = 12) +
+  theme(legend.position = "bottom")
+```
+
+### Building the camera design {#sec-camera-design}
+
+Camera designs use `design_type = "camera"` and require `camera_mode` to
+specify what the counter records. The current supported modes are:
+
+- `"counter"` — a simple ingress counter (vehicles or anglers entering)
+- `"ingress_egress"` — paired ingress and egress timestamps, from which
+  `preprocess_camera_timestamps()` computes trip-level effort
+
+The `counter` mode is the most common and requires only the imputed count
+table passed to `add_counts()`:
+
+```{r}
+#| label: camera-design-build
+#| echo: true
+camera_calendar <- tibble(
+  date     = seq(min(example_camera_counts$date),
+                 max(example_camera_counts$date), by = "day"),
+  day_type = if_else(wday(date) %in% c(1L, 7L), "weekend", "weekday")
+)
+
+design_camera <- creel_design(
+  calendar    = camera_calendar,
+  date        = "date",
+  strata      = "day_type",
+  design_type = "camera",
+  camera_mode = "counter",
+  h_open      = 14
+) |>
+  add_counts(camera_counts_clean) |>
+  add_interviews(
+    interviews    = example_camera_interviews,
+    catch         = "walleye",
+    harvest       = "walleye_kept",
+    effort        = "hours_fished",
+    trip_status   = "trip_status",
+    trip_duration = "hours_fished"
+  )
+```
+
+### Ratio-calibrated effort estimation {#sec-camera-estimate}
+
+`est_effort_camera()` uses the ratio of mean interview trip duration to the
+camera count — a ratio estimator that converts ingress events to angler-hours.
+The intuition: if the camera records 60 vehicles entering and the mean trip
+length from interviews is 3.5 hours, the day-level effort is approximately
+60 × 3.5 = 210 angler-hours. The ratio is estimated within strata and
+expanded to the full survey period:
+
+```{r}
+#| label: camera-effort-estimate
+#| echo: true
+effort_camera <- est_effort_camera(
+  design_camera,
+  interviews = example_camera_interviews,
+  effort_col = "hours_fished"
+)
+effort_camera
+```
+
+The result is a total angler-hours estimate with a Taylor-linearization
+standard error. For the example data,
+`r round(effort_camera$estimates$estimate, 1)` angler-hours
+(95% CI: `r round(effort_camera$estimates$ci_lower, 1)`–`r round(effort_camera$estimates$ci_upper, 1)`)
+across the 10-day window. The `se_between` component reflects between-day
+variation in the ingress × trip-length product; `se_within` reflects within-day
+interview variance in trip duration.
+
+As with the aerial design, catch rate estimation is unchanged:
+
+```{r}
+#| label: camera-cpue
+#| echo: true
+estimate_catch_rate(design_camera)
+```
+
+The `design_type` affects only how effort is estimated. From
+`estimate_catch_rate()` onward, camera and access-point designs use identical
+code paths.
+
+### Ingress-egress timestamps {#sec-camera-timestamps}
+
+When cameras record both arrival and departure times for individual vehicles,
+`preprocess_camera_timestamps()` converts the raw timestamp pairs into
+daily effort totals. This requires a data frame with one row per vehicle
+event and `ingress_time` and `egress_time` columns as `POSIXct` values:
+
+```{r}
+#| label: camera-timestamps
+#| echo: true
+example_camera_timestamps
+
+daily_effort <- preprocess_camera_timestamps(
+  example_camera_timestamps,
+  date_col    = "date",
+  ingress_col = "ingress_time",
+  egress_col  = "egress_time"
+)
+daily_effort
+```
+
+The output is a daily summary of total recorded angler-hours from timestamp
+differences. This can substitute for or supplement the interview-based mean
+trip duration estimate — the camera itself measures effort directly, rather
+than inferring it from a count and a mean duration.
+
+## Sample size for camera designs {#sec-camera-n}
+
+Once a pilot camera season establishes the stratum-level mean and variance of
+the ingress × trip-length product, `creel_n_camera()` returns the number of
+sampled days needed to achieve a target coefficient of variation. The
+required inputs mirror those of `creel_n_effort()`: target CV, total days in
+the stratum, and stratum-level mean and variance from the pilot:
+
+```{r}
+#| label: camera-sample-size
+#| echo: true
+#| warning: false
+# Compute stratum summary from operational days only
+cam_summary <- camera_counts_clean |>
+  filter(!.imputed) |>
+  group_by(day_type) |>
+  summarise(
+    N_h    = n(),
+    ybar_h = mean(ingress_count),
+    s2_h   = var(ingress_count),
+    .groups = "drop"
+  )
+cam_summary
+
+# Days needed per stratum to achieve CV = 0.15
+# creel_n_camera() requires named numeric vectors
+creel_n_camera(
+  cv_target = 0.15,
+  N_h    = setNames(cam_summary$N_h,    cam_summary$day_type),
+  ybar_h = setNames(cam_summary$ybar_h, cam_summary$day_type),
+  s2_h   = setNames(cam_summary$s2_h,   cam_summary$day_type)
+)
+```
+
+With only five operational weekday observations and four weekend observations,
+the within-stratum variance is too small to constrain the sample-size
+calculation — both strata return n = 1, the floor. This is a toy-data
+artifact: real pilot seasons with 20–30 operational days per stratum produce
+the spread in ingress counts needed to estimate variance reliably. The
+interpretation of a real result is identical to `creel_n_effort()`: sample at
+least this many camera-days per stratum to keep the effort CV below the target.
+`creel_n_camera()` also emits a warning when the pilot falls below the
+empirical minimum recommended by Feltz–Middaugh (2025); that warning is
+suppressed here because the example data intentionally fall below it.
+
+## Proxy counts and validation {#sec-proxy}
+
+### Vehicle counters and gate sensors {#sec-proxy-types}
+
+Aerial counts and camera-monitored ramps are the most thoroughly supported
+remote-count methods in `tidycreel`, but other proxy systems appear in
+practice: pneumatic road tubes at boat launch entrances, infrared gate sensors
+at trailheads, acoustic hydrophone arrays that detect boat motors in
+restricted channels. Each records a correlated signal of fishing activity
+rather than a direct observation of anglers.
+
+The key question for any proxy is **how strongly it tracks what the survey
+domain requires**. A pneumatic tube at a single-access boat ramp on a lake
+with no bank fishing likely correlates nearly 1:1 with launched boats. A
+road-tube counter at a multi-access reservoir where some anglers walk in from
+informal paths captures only the trailered-boat fraction. The correlation
+structure — and therefore the calibration factor — depends on access geometry,
+angler behavior, and whether the proxy integrates the full reporting domain.
+
+### Calibration against ground truth {#sec-proxy-calibration}
+
+Paired sampling is the standard validation approach: on a subset of days,
+both the proxy count and a direct ground count are collected on the same time
+window. The ratio of ground count to proxy count on paired days becomes the
+calibration factor applied to proxy-only days.
+
+A calibration regression extends this: `ground = a + b × proxy` with the
+slope $b$ estimated from paired days. The intercept accounts for baseline
+angler activity not captured by the proxy (walk-in anglers, for example),
+and the slope converts proxy units to ground-count equivalents.
+
+```{r}
+#| label: proxy-calibration
+#| echo: true
+# Paired calibration: road-tube counter vs direct creel-crew count on the same days
+# Simulated paired data: 15 days where both methods were deployed simultaneously
+set.seed(42)
+paired_days <- tibble(
+  date        = seq.Date(as.Date("2024-06-03"), by = "2 days", length.out = 15),
+  tube_count  = as.integer(rpois(15, lambda = 55)),
+  crew_count  = as.integer(round(0.82 * tube_count + rnorm(15, 0, 4)))
+)
+
+cal_fit <- lm(crew_count ~ tube_count, data = paired_days)
+coef(cal_fit)
+```
+
+The intercept (`r round(coef(cal_fit)[1], 1)`) captures angler activity not
+counted by the road tube — walk-in anglers, kayak launches from an unmonitored
+site. The slope (`r round(coef(cal_fit)[2], 3)`) converts tube-count units to
+crew-count equivalents. On proxy-only days, multiply the tube count by this
+slope and add the intercept to recover the calibrated angler count before
+applying mean trip length.
+
+A slope near 1.0 indicates the proxy and direct count are on the same scale;
+a slope below 1 indicates systematic undercounting — the tube misses some
+fraction of the angler population — that the calibration corrects. The
+regression diagnostic ($R^2$, residual plot) should be checked before trusting
+the calibration: if the relationship is noisy or nonlinear, a simple ratio
+calibration will not transfer reliably to proxy-only days.
+
+### Documenting downtime and coverage gaps {#sec-proxy-downtime}
+
+No remote monitoring system has perfect uptime. Effective survey documentation
+requires a record of:
+
+- Days when the system was fully operational
+- Days with partial downtime (camera down for X of Y hours)
+- Days with complete failure (no data)
+- Known failure modes (battery, connectivity, vandalism, weather)
+
+The `camera_status` column in `example_camera_counts` illustrates the minimum
+required record. In practice, richer downtime records allow the imputation
+model to condition on failure type — battery failures cluster by temperature
+and season; connectivity failures cluster by storm events.
+
+```{r}
+#| label: downtime-summary
+#| echo: true
+example_camera_counts |>
+  count(camera_status, day_type) |>
+  arrange(desc(n))
+```
+
+A camera with 90% uptime over a 30-day survey loses roughly 3 operational
+days. If those failures are random relative to angler activity, imputation
+introduces only noise. If failures correlate with weather — cameras fail in
+cold rain, which also suppresses fishing — the imputed values reflect
+low-use conditions, and the estimate is biased downward. Understanding the
+failure mechanism matters as much as the imputation method.
+
+## `tidycreel` support summary {#sec-remote-tidycreel}
+
+The three major remote-count workflows and their `tidycreel` entry points:
+
+| Design | `design_type` | Count function | Estimate function |
+|--------|---------------|---------------|-------------------|
+| Aerial GLMM | `"aerial"` | `add_counts()` (raw flights) | `estimate_effort_aerial_glmm()` |
+| Camera counter | `"camera"` | `add_counts()` (imputed) | `est_effort_camera()` |
+| Camera ingress/egress | `"camera"` + timestamps | `preprocess_camera_timestamps()` | `est_effort_camera()` |
+| Proxy count (manual calibration) | any | calibration regression | ratio applied to standard estimate |
+
+All four share the same downstream pipeline: design object → `add_interviews()`
+→ `estimate_catch_rate()` / `estimate_total_harvest()`. The remote-count
+method changes how effort is estimated; catch rate and harvest estimation
+proceed identically to access-point and roving designs.
+
+## Key considerations {#sec-remote-considerations}
+
+**Frame alignment.** The camera or aircraft must cover the same spatial
+domain as the reporting unit. A ramp camera that misses an informal carry-in
+launch is not counting the full angler population. Aerial coverage that
+excludes a productive back bay leaves effort in that bay unrecorded. Frame
+gaps in remote designs are harder to detect than in creel-crew designs
+because there is no field crew to notice unexpected activity outside the
+monitored area.
+
+**Timing alignment.** For aerial designs, `h_open` must match what the GLMM
+integrates over. If the model integrates from 06:00 to 20:00 (14 hours) but
+fishing in the reporting domain occurs only between 07:00 and 18:00, the
+integration window overestimates effort. Setting `h_open` conservatively from
+local sunrise-to-sunset tables avoids this bias.
+
+**Sensor resolution.** A camera that counts vehicles counts launched boats
+(typically one to four anglers per boat). Converting vehicle counts to
+angler-hours requires an estimate of mean party size from interviews — an
+additional ratio estimator step with its own variance. The standard error
+from `est_effort_camera()` propagates this uncertainty automatically when
+party-size information is included in `add_interviews()`.
+
+**Uptime documentation.** Effort estimates from camera designs are only as
+reliable as the imputation model for failed days. More operational days in
+the calibration sample → better imputation. Effort estimates should report
+the fraction of days that were imputed alongside the estimate and standard
+error, so users can assess how much of the result rests on modeled versus
+observed counts.
+
+Remote count designs extend the creel survey toolkit substantially — larger
+waterbodies become tractable, high-frequency temporal monitoring becomes
+affordable, and record-keeping becomes auditable. What they cannot do is
+relax the foundational requirements: a defined frame, a defensible sampling
+design, and documented assumptions about what the sensor measures and what
+it misses.

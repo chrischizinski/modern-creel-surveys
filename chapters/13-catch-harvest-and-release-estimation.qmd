@@ -145,8 +145,9 @@ $$
 $$
 
 where $h_i$ is fish harvested on trip $i$ and $l_i$ is hours fished. Unlike
-the CPUE estimator — which is restricted to completed trips because only those
-have a known total catch — HPUE uses all interviews. Harvest from an incomplete
+the ratio-of-means CPUE estimator used in access-point surveys — which is
+restricted to completed trips because only those have a known total catch —
+HPUE uses all interviews. Harvest from an incomplete
 trip is observable: what is in the livewell at interview time is harvested
 regardless of whether the angler keeps fishing. An angler with three walleye
 in the livewell has harvested three walleye, whether or not the trip is
@@ -156,10 +157,11 @@ to the HPUE denominator and numerator.
 The same product structure applies to the release estimator:
 $\widehat{R}_j = \widehat{E}_j \times \widehat{\text{RPUE}}_j$, and to total
 catch: $\widehat{C}_j = \widehat{E}_j \times \widehat{\text{CPUE}}_j$, where
-CPUE uses completed trips only. The three season totals are not arithmetically
+At Harlan (an access-point design), CPUE uses completed trips only. The three season totals are not arithmetically
 guaranteed to satisfy $\widehat{C} = \widehat{H} + \widehat{R}$ exactly
 because the component estimators differ in their interview pools, but in
-practice they are close.
+practice they are close. Roving designs use a mean-of-ratios estimator that can
+incorporate all interviews; see Chapter 17 for that case.
 
 ## Preparing catch data for estimation {#sec-catch-prep}
 
@@ -498,12 +500,11 @@ species-specific quantity not estimated by the creel.
 
 The estimates above report totals across all species combined. Species-specific
 harvest estimates require species-level catch rates from
-`estimate_catch_rate(by = species)`. A known issue in the current version of
-`tidycreel` (GitHub issue #64) causes that function to return zeros for all
-species because the internal species-catch lookup filters for a catch type that
-does not match Harlan's field values. Until that fix is available,
-species-level composition can be characterized through the raw catch table,
-which records the true species and catch type for every fish.
+`estimate_catch_rate(by = species)`, which Chapter 14 covers in detail.
+For composition analysis — understanding which species anglers encounter and
+what fraction they retain — the raw catch table is the right tool. It records
+the actual species and catch type for every fish without expansion to the
+population level.
 
 ```{r}
 #| label: species-comp-table
@@ -566,9 +567,9 @@ ggplot(species_comp, aes(x = n_fish, y = species, fill = catch_type)) +
 
 The species composition in raw catch records accurately describes which species
 anglers encounter and what they do with them. It does not, by itself, produce
-an expanded season total per species — that requires species-level CPUE
-estimates applied to total effort, which is covered in Chapter 14 once the
-`by = species` functionality is restored.
+an expanded season total per species — that requires design-based species-level
+CPUE estimates applied to total effort, which Chapter 14 covers using
+`estimate_catch_rate(by = species)`.
 
 ## What the creel can and cannot measure {#sec-ch13-limits}
 
@@ -613,9 +614,11 @@ all downstream estimation functions.
 
 The HPUE and RPUE estimators use all interviews — including incomplete trips —
 because what is harvested or released at the time of interview is directly
-observable. CPUE uses completed trips only because the final catch total of an
+observable. For access-point designs, CPUE uses completed trips only because the final catch total of an
 in-progress trip is unknown. This is not an inconsistency in the workflow; it
-reflects what each quantity actually measures.
+reflects what each quantity actually measures. Roving designs use a
+mean-of-ratios estimator that treats each mid-trip contact as an instantaneous
+rate observation, sidestepping the need for a completed trip record.
 
 At Harlan in 2022, roughly 60% of all fish caught were released. The harvest
 rate on weekends was substantially higher than on weekdays, but weekday

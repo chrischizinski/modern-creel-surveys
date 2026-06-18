@@ -424,63 +424,48 @@ bind_rows(
 ## Species-level CPUE {#sec-cpue-by-species}
 
 Management decisions often require species-specific catch rates: walleye CPUE
-is relevant to minimum-size regulations, white bass CPUE to bag limits. The
-natural call is `estimate_catch_rate(by = species)`, but a known issue in the
-current version of `tidycreel` (GitHub issue #64) causes this to return zeros
-for all species. The internal species-catch lookup matches on a catch type label
-that does not align with the field values in the Harlan dataset.
+is relevant to minimum-size regulations, white bass CPUE to bag limits.
+`estimate_catch_rate(by = species)` produces design-based species CPUE with
+proper stratification weights and confidence intervals:
 
 ```{r}
-#| label: cpue-species-issue
+#| label: cpue-by-species
 #| echo: true
 estimate_catch_rate(harlan_design_ch14, by = species)
 ```
 
-All estimates are zero. This is not a property of the Harlan data; it is a package
-limitation. Until issue #64 is resolved, species-level CPUE must be approximated
-from the raw catch table rather than from the estimation pipeline.
+White bass and walleye dominate the catch rate, consistent with the Harlan
+fishery's reputation as a mixed-species reservoir with high white bass density
+and a targetable walleye population. Freshwater drum, yellow perch, and channel
+catfish register lower but meaningful rates. Species with near-zero estimates
+(common carp, gizzard shad, muskellunge) are rarely targeted and largely absent
+from completed-trip catch records.
 
-The raw approach computes an approximate catch rate per species by pooling catch
-and effort across completed-trip interviews:
+The standard errors reflect the same Taylor linearization variance used for
+overall CPUE. Confidence intervals for rarer species are wide — for common
+carp and gizzard shad they span zero — because few completed trips report
+those species, making the ratio estimator unstable. Species-level CPUE is most
+reliable when a species appears in at least 15–20% of completed trips.
+
+## Comparing estimators {#sec-cpue-compare-estimators}
+
+`compare_cpue_estimators()` runs all three supported CPUE estimators on the same design object and returns a tidy table, making it straightforward to assess estimator sensitivity:
 
 ```{r}
-#| label: species-cpue-approx
+#| label: cpue-compare-estimators
 #| echo: true
-species_catch <- harlan_catch |>
-  filter(catch_type %in% c("harvested", "released")) |>
-  group_by(interview_id, species) |>
-  summarise(n_fish = sum(n_fish), .groups = "drop")
-
-completed_ids <- harlan_interviews |>
-  filter(trip_status == "complete") |>
-  pull(interview_id)
-
-species_catch |>
-  filter(interview_id %in% completed_ids) |>
-  left_join(
-    harlan_interviews |> select(interview_id, hours_fished),
-    by = "interview_id"
-  ) |>
-  group_by(species) |>
-  summarise(
-    total_fish  = sum(n_fish),
-    total_hours = sum(hours_fished),
-    approx_cpue = round(total_fish / total_hours, 3),
-    n_interviews = n_distinct(interview_id),
-    .groups = "drop"
-  ) |>
-  arrange(desc(approx_cpue))
+compare_cpue_estimators(harlan_design_ch14)
 ```
 
-This is a descriptive approximation, not a design-based estimate. It ignores
-stratification weights and does not produce a standard error. The values should
-be read as a relative ranking — white bass dominate the catch rate, walleye are
-the second most frequently encountered species — rather than as calibrated
-population estimates.
+The three methods agree within approximately 20% of each other, which is typical for access-point designs with moderate sample sizes. Disagreement narrows when samples are large and individual trip rates are tightly distributed; it widens when a few high-catch trips dominate the record.
 
-When issue #64 is resolved in a future package version,
-`estimate_catch_rate(by = species)` will replace this workaround and produce
-design-based species CPUE with proper confidence intervals.
+**Ratio-of-means (ROM, default):** divides the total catch across all completed trips by the total effort. A single angler catching twenty fish in two hours contributes 20 fish and 2 hours to the numerator and denominator separately. The estimate is pulled toward trips with long effort because they contribute more hours.
+
+**Mean-of-ratios (MOR):** computes each completed trip's catch rate independently (fish/hour for that trip), then takes the mean. Every trip gets equal weight regardless of duration. MOR is the natural estimator for roving surveys where mid-trip contacts are observations of instantaneous rate; here it is computed on completed trips for comparison, which the package flags as non-standard. The MOR estimate is higher than ROM because short trips with high per-hour catch rates receive full weight.
+
+**Regression CPUE:** fits a linear model of catch on effort and reads off the slope as the CPUE estimate. It is less sensitive to the few high-effort, high-catch trips that can inflate ROM, and it also adjusts for between-trip correlation between catch and effort. The regression estimate is typically the most conservative.
+
+For the Harlan access-point survey, the ROM estimate of `r sprintf("%.2f", compare_cpue_estimators(harlan_design_ch14)$estimate[compare_cpue_estimators(harlan_design_ch14)$cpue_method == "rom"])` fish/hr is the standard reporting value. The MOR and regression estimates are useful robustness checks: if all three methods give similar results, confidence in the ROM estimate is higher; if they diverge, the analyst should investigate whether a distributional anomaly (a few outlier trips) is driving the difference. Chapter 17 shows a roving survey where MOR is the primary estimator and ROM is the check.
 
 ## What CPUE implies and what it does not {#sec-cpue-interpretation}
 
