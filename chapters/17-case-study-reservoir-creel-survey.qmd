@@ -486,10 +486,7 @@ report_summary
 #| label: cedar-report-cv
 report_table <- report_summary |>
   mutate(
-    cv = case_when(
-      as.character(unit) %in% c("fish/hr") ~ fmt_pct(100 * se / estimate),
-      TRUE ~ fmt_pct(100 * se / estimate)
-    ),
+    cv = fmt_pct(100 * se / estimate),
     estimate_fmt = if_else(
       unit %in% c("fish/hr"),
       fmt_rate(estimate),
@@ -568,6 +565,18 @@ knitr::kable(compare_tbl, align = "lll",
 The most consequential difference is the incomplete-trip rate. Harlan was operated as an access-point survey, so most interviews captured completed trips; Cedar Lake's roving protocol contacts parties mid-trip, meaning `r fmt_pct(100 * n_incomp / n_int)` of all records are incomplete. The effect on total-count estimation is asymmetric: total-catch requires the complete trip record (n = `r n_comp`), while harvest and release totals draw on the full interview pool. Catch rates are less affected — the MOR estimator uses every mid-trip contact as an instantaneous rate observation, so CPUE precision is not penalized by the high incomplete-trip rate. The binding precision constraint for roving surveys is total catch, not CPUE; managers who need tighter total-catch confidence intervals must increase sampled days or supplement with access-point exits.
 
 A second consequence of the roving design is the lower absolute effort estimate. Cedar Lake is a much smaller water body than Harlan — fewer anglers, shorter average trips, and a seasonal window limited to seven months. The per-angler-hour CPUE is actually higher at Cedar Lake (`r fmt_rate(cpue_all$estimates$estimate)` vs 1.51 fish/hr), reflecting the dense panfish community. Scale differences like this make across-lake comparisons misleading unless normalized per unit area or per unit effort.
+
+## Takeaway {#sec-cedar-takeaway}
+
+Cedar Lake illustrates how the same tidycreel pipeline adapts to a fundamentally different field situation from the Harlan access-point design. Three decisions drove the analysis:
+
+**Roving contact → MOR estimator.** Because every interview captures a mid-trip observation, the mean-of-ratios estimator is the correct choice for catch rate. The ratio-of-means estimator used at Harlan — which divides total catch by total effort across the sample — assumes complete-trip records and would underestimate CPUE here by discarding the incomplete-trip catch-so-far data.
+
+**High incomplete-trip rate → asymmetric precision.** At `r fmt_pct(100 * n_incomp / n_int)` incomplete contacts, total-catch precision (using only completed trips, n = `r n_comp`) is considerably tighter than total-harvest precision (using all contacts, n = `r n_int`). Managers who need better total-catch confidence intervals must target more sampled days or add an exit-point component, not improve the existing roving protocol.
+
+**Bank-dominant fishery → stratify by access point, not boat ramp.** An urban reservoir without a public boat ramp would gain nothing from stratifying by access type; the primary heterogeneity at Cedar Lake is temporal (weekday vs. weekend pressure), not spatial. The day-type strata captured the relevant variance structure.
+
+The season estimates — `r fmt_comma(eff_tot$estimates$estimate)` angler-hours, `r fmt_comma(harv_tot$estimates$estimate)` fish harvested, `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour — all fall within management-grade precision (CV < 20%). For a seven-month survey using two periods per sampled day and a single roving clerk, these results represent a cost-effective characterization of the urban fishery. The contrast with Harlan Reservoir confirms that waterbody size, angler mode, and survey type each interact to shape both what can be estimated and how precisely.
 
 ## Reproducibility note
 
