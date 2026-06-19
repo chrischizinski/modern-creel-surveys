@@ -1,0 +1,506 @@
+---
+title: "Trend Detection and Multi-Year Comparisons"
+---
+
+```{r}
+#| label: setup-trend
+#| include: false
+library(tidycreel)
+library(tidyverse)
+library(here)
+
+harlan_annual <- readRDS(here("data/harlan_annual_estimates.rds"))
+
+theme_creel <- function(base_size = 11) {
+  theme_minimal(base_size = base_size) +
+    theme(
+      panel.grid.minor = element_blank(),
+      axis.line        = element_line(colour = "grey70"),
+      axis.ticks       = element_line(colour = "grey70")
+    )
+}
+```
+
+Chapters 12 through 16 covered the estimation and reporting workflow for a single survey season. Most management decisions, however, are not made from a single season's data. Is angling effort increasing or declining? Did a new size-limit regulation reduce harvest pressure on a targeted species? Has catch rate recovered to the level observed before a year of high fishing mortality? These questions require comparing estimates across years — and comparing estimates with uncertainty requires more care than comparing two point estimates.
+
+This chapter covers multi-year analysis of creel survey data. The central challenge is that each year's estimates carry their own uncertainty, and that uncertainty must be propagated into any comparison or trend test. A catch rate that appears to double from one year to the next may or may not represent a statistically meaningful change, depending on the precision of both estimates. Ignoring the confidence intervals and comparing only the point estimates produces conclusions the data cannot actually support.
+
+The running example uses a simulated six-year (2018–2023) Harlan Reservoir Walleye dataset built with `simulate_creel_data()`. The management context: Walleye at Harlan experienced declining catch rates from 2018 to 2020 under moderate harvest pressure. In 2021, the Nebraska Game and Parks Commission raised the Walleye minimum size limit from 305 mm (12 in) to 381 mm (15 in). The question is whether catch rates and harvest show a statistically detectable recovery in the post-regulation period.
+
+## Why multi-year analysis requires propagated uncertainty {#sec-trend-why}
+
+Each creel survey estimate is accompanied by a standard error that quantifies how much the estimate could vary across repeated surveys with the same design. When you compare two estimates — 2020 CPUE versus 2023 CPUE — the difference is itself a random quantity with its own standard error. Treating the two point estimates as exact values and declaring a change if they differ ignores this uncertainty entirely.
+
+The correct approach is a contrast test on the difference:
+
+$$\hat{\delta} = \hat{\theta}_{2023} - \hat{\theta}_{2020}$$
+
+with standard error
+
+$$\text{SE}(\hat{\delta}) = \sqrt{\text{SE}(\hat{\theta}_{2023})^2 + \text{SE}(\hat{\theta}_{2020})^2}$$
+
+when the two surveys are independent (which they are — separate samples in separate years). A 95% confidence interval for the difference follows directly. If that interval excludes zero, the change is statistically detectable at the 5% level. If it includes zero, the data are consistent with no change even if the point estimates differ.
+
+For trend analysis across many years, the same logic extends to a weighted linear regression where each year's estimate is weighted by its precision (inverse squared standard error). Years with tight confidence intervals contribute more information about the trend than years with wide intervals.
+
+## Simulating a multi-year creel dataset {#sec-trend-sim}
+
+`simulate_creel_data()` generates one season of synthetic creel data at a time. Building a multi-year dataset means calling it once per year with parameters that vary across years. Here is the setup for the 2023 Harlan season, the last year of the post-regulation period:
+
+```{r}
+#| label: sim-one-year
+params_2023 <- list(
+  effort         = list(gamma_shape = 2, gamma_rate = 0.5),
+  party          = list(mean = 1.5),
+  catch_per_trip = list(mean = 3.9, nb_size = 2),
+  harvest        = list(mean_pct = 34),
+  counts         = list(mean_total_anglers = 28)
+)
+
+sim_2023 <- simulate_creel_data(
+  params           = params_2023,
+  season_days      = 120,
+  n_sampled_days   = 48,
+  day_types        = c(weekday = 5/7, weekend = 2/7),
+  species          = "Walleye",
+  n_counts_per_day = 2,
+  seed             = 2023
+)
+
+# Shift dates to the 2023 survey season
+offset_2023 <- as.integer(as.Date("2023-04-01") - min(sim_2023$schedule$date))
+sim_2023$schedule$date   <- sim_2023$schedule$date   + offset_2023
+sim_2023$counts$date     <- sim_2023$counts$date     + offset_2023
+sim_2023$interviews$date <- sim_2023$interviews$date + offset_2023
+
+glimpse(sim_2023$schedule)
+```
+
+Repeating this for six years, varying `catch_per_trip$mean`, `mean_total_anglers`, and `harvest$mean_pct` to reflect the fishery trajectory, produces the full simulated dataset. The estimation pipeline for each year follows the same pattern established in Chapters 12–14:
+
+```{r}
+#| label: pipeline-2023
+#| message: false
+counts_2023 <- sim_2023$counts |>
+  group_by(date) |>
+  mutate(count_time = row_number()) |>
+  ungroup()
+
+interviews_2023 <- sim_2023$interviews |>
+  mutate(total_catch = catch_total, harvested = catch_kept)
+
+design_2023 <- creel_design(sim_2023$schedule, date = "date", strata = "day_type") |>
+  add_counts(counts_2023, count_time_col = "count_time") |>
+  add_interviews(
+    interviews     = interviews_2023,
+    catch          = "total_catch",
+    harvest        = "harvested",
+    effort         = "hours_fished",
+    trip_status    = "trip_status",
+    n_anglers      = "n_anglers",
+    interview_type = "access"
+  )
+
+cpue_2023 <- estimate_catch_rate(design_2023)
+cpue_2023$estimates
+```
+
+Running this loop six times — once per year, 2018 through 2023 — and collecting the results into a single data frame gives the multi-year summary table. The pre-computed estimates are loaded here to avoid repeating six simulation runs in the chapter rendering:
+
+```{r}
+#| label: load-annual
+harlan_annual
+```
+
+The table shows both point estimates and standard errors for each metric. Effort (angler-hours) was relatively stable across years, ranging from `r round(min(harlan_annual$effort_est))` to `r round(max(harlan_annual$effort_est))` angler-hours. Walleye CPUE declined from `r round(harlan_annual$cpue_est[1], 3)` fish/hr in 2018 to `r round(min(harlan_annual$cpue_est), 3)` fish/hr in 2021, then recovered to `r round(harlan_annual$cpue_est[6], 3)` fish/hr by 2023. Estimated harvest dropped sharply after the regulation change and remained below pre-regulation levels through 2023.
+
+## Visualizing the time series with uncertainty {#sec-trend-ts}
+
+The first step in any multi-year analysis is plotting the time series with confidence intervals. A trend that is clearly visible in the point estimates may disappear entirely when uncertainty bands are added — or a seemingly flat series may show a detectable directional trend once precision is accounted for.
+
+@fig-cpue-ts shows the six-year Walleye CPUE trajectory at Harlan Reservoir with 95% confidence intervals. The declining pre-regulation trend (2018–2020) and recovery post-regulation (2022–2023) are visible in the point estimates, but the wide uncertainty bands confirm that year-to-year differences are noisy. The 2021 transition year — when fish that previously would have been "legal" under the old limit were released rather than harvested — shows the lowest estimated catch rate of the series.
+
+```{r}
+#| label: fig-cpue-ts
+#| fig-cap: "Walleye catch rate (CPUE, fish/hr) at Harlan Reservoir, 2018–2023. Points show annual point estimates from the stratified creel survey; error bars show 95% confidence intervals. The dashed vertical line marks the 2021 regulation change (minimum size limit raised from 305 mm to 381 mm). CPUE declined across the pre-regulation period, dipped further in the first post-regulation year, then recovered as the population responded to reduced harvest pressure on large fish."
+#| fig-alt: "Line chart with error bars showing Walleye CPUE declining 2018-2020, dipping in 2021, then recovering 2022-2023, with a dashed vertical line at 2021."
+
+ggplot(harlan_annual, aes(x = year, y = cpue_est)) +
+  geom_vline(xintercept = 2020.5, linetype = "dashed",
+             colour = "#cb181d", linewidth = 0.6) +
+  geom_errorbar(aes(ymin = cpue_lo, ymax = cpue_hi),
+                width = 0.25, linewidth = 0.6, colour = "grey50") +
+  geom_line(linewidth = 0.8, colour = "#2171b5") +
+  geom_point(aes(colour = regulation), size = 3.5) +
+  scale_colour_manual(
+    values = c(before = "#9ecae1", after = "#2171b5"),
+    labels = c(before = "Pre-regulation (2018–2020)",
+               after  = "Post-regulation (2021–2023)"),
+    guide  = guide_legend(title = NULL)
+  ) +
+  scale_x_continuous(breaks = 2018:2023) +
+  annotate("text", x = 2020.6, y = max(harlan_annual$cpue_hi) * 0.95,
+           label = "Size limit\nraised", hjust = 0, size = 3, colour = "#cb181d") +
+  labs(x = NULL, y = "CPUE (fish / angler-hour)") +
+  theme_creel() +
+  theme(legend.position = "bottom")
+```
+
+@fig-harvest-ts shows the corresponding harvest trajectory. Estimated annual harvest fell from `r round(harlan_annual$harvest_est[1])` fish in 2018 to `r round(harlan_annual$harvest_est[4])` fish in 2021, a reduction of `r round((1 - harlan_annual$harvest_est[4]/harlan_annual$harvest_est[1])*100)`% from the pre-regulation peak. This pattern — declining harvest alongside declining CPUE — is consistent with a fishery operating above sustainable yield prior to the regulation change.
+
+```{r}
+#| label: fig-harvest-ts
+#| fig-cap: "Estimated total Walleye harvest at Harlan Reservoir, 2018–2023. Error bars show 95% confidence intervals. Harvest declined sharply in 2021 following the minimum size limit increase (dashed line), reflecting both reduced legal harvest (fewer fish above the new limit) and lower overall catch rates. Harvest in 2022–2023 remained below 2018–2019 levels despite partial CPUE recovery, consistent with the regulation reducing per-trip harvest."
+#| fig-alt: "Line chart with error bars showing Walleye harvest declining from ~124 fish in 2018 to ~62 in 2021, then partially recovering to ~84 by 2023."
+
+ggplot(harlan_annual, aes(x = year, y = harvest_est)) +
+  geom_vline(xintercept = 2020.5, linetype = "dashed",
+             colour = "#cb181d", linewidth = 0.6) +
+  geom_errorbar(aes(ymin = harvest_lo, ymax = harvest_hi),
+                width = 0.25, linewidth = 0.6, colour = "grey50") +
+  geom_line(linewidth = 0.8, colour = "#2171b5") +
+  geom_point(aes(colour = regulation), size = 3.5) +
+  scale_colour_manual(
+    values = c(before = "#9ecae1", after = "#2171b5"),
+    labels = c(before = "Pre-regulation (2018–2020)",
+               after  = "Post-regulation (2021–2023)"),
+    guide  = guide_legend(title = NULL)
+  ) +
+  scale_x_continuous(breaks = 2018:2023) +
+  labs(x = NULL, y = "Estimated harvest (fish)") +
+  theme_creel() +
+  theme(legend.position = "bottom")
+```
+
+## Comparing two years with compare_designs() {#sec-trend-compare}
+
+For a direct two-year comparison, `compare_designs()` takes a named list of `creel_estimates` objects and returns a tidy table of point estimates, SEs, and CIs with a built-in forest-plot autoplot. The 2020 and 2023 estimates — the end of the pre-regulation period and the most recent post-regulation year — are the natural comparison pair.
+
+```{r}
+#| label: two-year-designs
+#| message: false
+
+# Re-run 2020 estimation inline using the same simulation parameters
+params_2020 <- list(
+  effort         = list(gamma_shape = 2, gamma_rate = 0.5),
+  party          = list(mean = 1.5),
+  catch_per_trip = list(mean = 2.85, nb_size = 2),
+  harvest        = list(mean_pct = 43),
+  counts         = list(mean_total_anglers = 27)
+)
+sim_2020 <- simulate_creel_data(params_2020, season_days = 120, n_sampled_days = 48,
+  day_types = c(weekday = 5/7, weekend = 2/7), species = "Walleye",
+  n_counts_per_day = 2, seed = 2020)
+offset_2020 <- as.integer(as.Date("2020-04-01") - min(sim_2020$schedule$date))
+sim_2020$schedule$date   <- sim_2020$schedule$date   + offset_2020
+sim_2020$counts$date     <- sim_2020$counts$date     + offset_2020
+sim_2020$interviews$date <- sim_2020$interviews$date + offset_2020
+
+design_2020 <- creel_design(sim_2020$schedule, date = "date", strata = "day_type") |>
+  add_counts(
+    sim_2020$counts |> group_by(date) |> mutate(count_time = row_number()) |> ungroup(),
+    count_time_col = "count_time"
+  ) |>
+  add_interviews(
+    interviews     = sim_2020$interviews |>
+      mutate(total_catch = catch_total, harvested = catch_kept),
+    catch          = "total_catch",
+    harvest        = "harvested",
+    effort         = "hours_fished",
+    trip_status    = "trip_status",
+    n_anglers      = "n_anglers",
+    interview_type = "access"
+  )
+
+cpue_2020 <- estimate_catch_rate(design_2020)
+```
+
+```{r}
+#| label: compare-two-years
+comparison <- compare_designs(
+  list(`2020 (pre-reg)` = cpue_2020, `2023 (post-reg)` = cpue_2023)
+)
+comparison
+```
+
+The comparison table extracts the key precision metrics from each `creel_estimates` object — estimate, SE, RSE, CI width — into a single row per year, making it easy to see whether the two point estimates differ by more than the combined uncertainty allows.
+
+```{r}
+#| label: fig-compare-forest
+#| fig-cap: "Forest plot comparing Walleye CPUE estimates for 2020 (pre-regulation) and 2023 (post-regulation) at Harlan Reservoir. Points show CPUE point estimates; horizontal error bars show 95% confidence intervals. The 2023 estimate is higher than 2020, but the overlapping intervals indicate the difference is not statistically clear-cut from these two years alone — the full six-year trend analysis provides stronger evidence."
+#| fig-alt: "Forest plot with two rows: 2020 pre-reg CPUE with wide CI, 2023 post-reg CPUE with slightly higher point estimate and overlapping CI."
+
+ggplot2::autoplot(comparison, title = "CPUE: 2020 vs 2023") +
+  theme_creel() +
+  labs(x = "CPUE (fish / angler-hour)", y = NULL)
+```
+
+## Before-after contrast {#sec-trend-ba}
+
+A before-after design pools estimates within each period and tests whether the post-regulation mean is distinguishable from the pre-regulation mean, accounting for the uncertainty in each annual estimate.
+
+The contrast is computed as the difference of the period-level weighted means, where each year's weight is its inverse squared standard error.
+
+```{r}
+#| label: ba-contrast
+ba <- harlan_annual |>
+  group_by(regulation) |>
+  summarise(
+    # Precision-weighted mean CPUE for each period
+    w           = sum(1 / cpue_se^2),
+    cpue_wmean  = sum(cpue_est / cpue_se^2) / w,
+    cpue_wse    = sqrt(1 / w),           # SE of the weighted mean
+    n_years     = n(),
+    .groups     = "drop"
+  )
+ba
+```
+
+```{r}
+#| label: ba-difference
+# Difference: post-regulation minus pre-regulation
+delta_cpue <- ba$cpue_wmean[ba$regulation == "after"] -
+              ba$cpue_wmean[ba$regulation == "before"]
+se_delta   <- sqrt(ba$cpue_wse[ba$regulation == "after"]^2 +
+                   ba$cpue_wse[ba$regulation == "before"]^2)
+z_score    <- delta_cpue / se_delta
+p_value    <- 2 * pnorm(-abs(z_score))
+
+cat("Before-regulation mean CPUE:", round(ba$cpue_wmean[ba$regulation == "before"], 4),
+    "\nAfter-regulation mean CPUE: ", round(ba$cpue_wmean[ba$regulation == "after"],  4),
+    "\nDifference (after - before):", round(delta_cpue, 4),
+    "\nSE of difference:           ", round(se_delta, 4),
+    "\nz-score:                    ", round(z_score, 2),
+    "\np-value:                    ", round(p_value, 3), "\n")
+```
+
+The before-after contrast assesses whether the average post-regulation CPUE differs from the average pre-regulation CPUE after accounting for the standard errors in both periods. A p-value below 0.05 indicates the data are unlikely to show this pattern by chance if the regulation had no effect; a p-value above 0.05 means the signal is present in the point estimates but the precision is insufficient to rule out sampling variability as the explanation.
+
+This two-period contrast is the simplest appropriate test for regulatory evaluation. It does not account for autocorrelation across years (fish populations in adjacent years are not independent), and it treats all pre-regulation years as exchangeable and all post-regulation years as exchangeable — assumptions that are reasonable here but would break down in a fishery with strong interannual environmental variation.
+
+## Linear trend detection {#sec-trend-linear}
+
+Across the full six-year series, a weighted linear regression detects whether there is a directional trend in CPUE over time. Weighting by precision ($w_t = 1/\text{SE}_t^2$) gives years with tighter estimates more influence on the estimated slope, which is appropriate because imprecise years should not anchor the trend line as much as well-measured ones.
+
+```{r}
+#| label: trend-lm
+cpue_trend <- lm(
+  cpue_est ~ year,
+  data    = harlan_annual,
+  weights = 1 / cpue_se^2
+)
+summary(cpue_trend)
+```
+
+```{r}
+#| label: trend-coefs
+coefs <- coef(summary(cpue_trend))
+slope_est <- coefs["year", "Estimate"]
+slope_se  <- coefs["year", "Std. Error"]
+slope_p   <- coefs["year", "Pr(>|t|)"]
+
+cat("Estimated annual change in CPUE:", round(slope_est, 5), "fish/hr/yr\n",
+    "95% CI: [", round(slope_est - 1.96*slope_se, 5), ",",
+                 round(slope_est + 1.96*slope_se, 5), "]\n",
+    "p-value:", round(slope_p, 3), "\n")
+```
+
+@fig-trend-fit overlays the weighted regression line on the observed time series. The linear model is a simplification — the true trajectory is not linear (there is a dip in 2021 followed by recovery) — but it summarizes the net direction over the full six-year window. A more flexible model (polynomial, piecewise, or GAM) would better represent the non-linear trajectory but requires more data points to estimate reliably.
+
+```{r}
+#| label: fig-trend-fit
+#| fig-cap: "Walleye CPUE trend at Harlan Reservoir, 2018–2023, with precision-weighted linear regression line (blue) and 95% confidence band (shaded). Points show annual estimates; vertical error bars show 95% CIs. The linear trend captures the net directional change across the full six-year window; the non-linear year-to-year trajectory (dip in 2021, recovery in 2022–2023) is not captured by the linear model but is visible in the point estimates."
+#| fig-alt: "Scatter plot with error bars and linear regression trend line with confidence band overlaid, showing overall trend across 2018-2023 Walleye CPUE."
+
+pred_df <- data.frame(year = seq(2018, 2023, by = 0.1))
+pred_ci <- predict(cpue_trend, newdata = pred_df,
+                   interval = "confidence", level = 0.95)
+pred_df <- cbind(pred_df, pred_ci)
+
+ggplot(harlan_annual, aes(x = year, y = cpue_est)) +
+  geom_vline(xintercept = 2020.5, linetype = "dashed",
+             colour = "#cb181d", linewidth = 0.5, alpha = 0.7) +
+  geom_ribbon(data = pred_df, aes(y = fit, ymin = lwr, ymax = upr),
+              alpha = 0.15, fill = "#2171b5") +
+  geom_line(data = pred_df, aes(y = fit),
+            colour = "#2171b5", linewidth = 0.9) +
+  geom_errorbar(aes(ymin = cpue_lo, ymax = cpue_hi),
+                width = 0.2, linewidth = 0.5, colour = "grey50") +
+  geom_point(aes(colour = regulation), size = 3.5) +
+  scale_colour_manual(
+    values = c(before = "#9ecae1", after = "#2171b5"),
+    guide  = guide_legend(title = NULL)
+  ) +
+  scale_x_continuous(breaks = 2018:2023) +
+  labs(x = NULL, y = "CPUE (fish / angler-hour)") +
+  theme_creel() +
+  theme(legend.position = "bottom")
+```
+
+## Piecewise trend: separate slopes by regulation period {#sec-trend-piecewise}
+
+The linear model treats the entire six-year window as a single trend. Given the known regulatory break in 2021, a more informative model fits separate slopes for the pre-regulation (2018–2020) and post-regulation (2021–2023) periods. This distinguishes a declining trend that was arrested from one that continued or reversed.
+
+The interaction model includes a period indicator and an interaction between period and year, giving each period its own slope:
+
+```{r}
+#| label: piecewise-trend
+cpue_piece <- lm(
+  cpue_est ~ year * regulation,
+  data    = harlan_annual,
+  weights = 1 / cpue_se^2
+)
+summary(cpue_piece)
+```
+
+```{r}
+#| label: piecewise-slopes
+pc <- coef(cpue_piece)
+
+slope_before <- pc["year"]
+slope_after  <- pc["year"] + pc["year:regulationafter"]
+
+cat("Pre-regulation slope (fish/hr/yr): ", round(slope_before, 4), "\n",
+    "Post-regulation slope (fish/hr/yr):", round(slope_after,  4), "\n",
+    "Difference in slopes:              ", round(pc["year:regulationafter"], 4), "\n",
+    "p-value for slope change:          ",
+    round(coef(summary(cpue_piece))["year:regulationafter", "Pr(>|t|)"], 3), "\n")
+```
+
+The sign and magnitude of each period-specific slope tells a cleaner story than the single linear slope. A negative pre-regulation slope combined with a positive post-regulation slope confirms that the trend direction reversed, not merely that the level changed. @fig-piecewise shows the predicted trajectories from the interaction model overlaid on the data.
+
+```{r}
+#| label: fig-piecewise
+#| fig-cap: "Walleye CPUE at Harlan Reservoir, 2018–2023, with separate precision-weighted regression lines for pre-regulation (2018–2020, light blue) and post-regulation (2021–2023, dark blue) periods. Slopes are estimated independently for each period, allowing the model to detect a reversal in trend direction — not just a level shift — following the 2021 minimum size limit increase."
+#| fig-alt: "Scatter plot with two separate regression lines, one declining for 2018-2020 and one rising for 2021-2023."
+
+pred_piece <- harlan_annual |>
+  group_by(regulation) |>
+  reframe(year = seq(min(year), max(year), by = 0.05)) |>
+  bind_cols(as.data.frame(predict(
+    cpue_piece,
+    newdata = harlan_annual |>
+      group_by(regulation) |>
+      reframe(year = seq(min(year), max(year), by = 0.05)),
+    interval = "confidence"
+  )))
+
+ggplot(harlan_annual, aes(x = year, y = cpue_est)) +
+  geom_vline(xintercept = 2020.5, linetype = "dashed",
+             colour = "#cb181d", linewidth = 0.5, alpha = 0.7) +
+  geom_ribbon(data = pred_piece,
+              aes(y = fit, ymin = lwr, ymax = upr, group = regulation),
+              alpha = 0.15, fill = "#2171b5") +
+  geom_line(data = pred_piece,
+            aes(y = fit, group = regulation, colour = regulation),
+            linewidth = 0.9) +
+  geom_errorbar(aes(ymin = cpue_lo, ymax = cpue_hi),
+                width = 0.2, linewidth = 0.5, colour = "grey50") +
+  geom_point(aes(colour = regulation), size = 3.5) +
+  scale_colour_manual(
+    values = c(before = "#9ecae1", after = "#2171b5"),
+    labels = c(before = "Pre-regulation", after = "Post-regulation"),
+    guide  = guide_legend(title = NULL)
+  ) +
+  scale_x_continuous(breaks = 2018:2023) +
+  labs(x = NULL, y = "CPUE (fish / angler-hour)") +
+  theme_creel() +
+  theme(legend.position = "bottom")
+```
+
+With only three years in each period, individual slope estimates are imprecise — the confidence bands are wide. The interaction p-value tests whether the slopes differ, not whether either slope is individually significant. Even when the p-value exceeds 0.05, the direction of the estimated slopes is informative: a negative pre-regulation slope and a positive post-regulation slope, even if imprecisely estimated, is consistent with a regulatory benefit. A ten-year time series would substantially improve slope precision and the ability to detect the trend reversal.
+
+## Autocorrelation diagnostic {#sec-trend-autocorr}
+
+Annual creel estimates are not fully independent even when the surveys themselves are independent samples. Fish populations carry demographic momentum: year-class strength, growth, and survival persist across years, so CPUE in 2022 is positively correlated with CPUE in 2021 through the shared cohorts in the population. This autocorrelation does not bias the regression slope estimates, but it does make the standard errors overly optimistic — the regression model's assumption of independent residuals is violated, so the p-values are anti-conservative.
+
+A diagnostic check examines the residuals from the weighted regression for autocorrelation:
+
+```{r}
+#| label: autocorr-check
+residuals_wt <- residuals(cpue_trend)
+n_yrs        <- length(residuals_wt)
+
+# Lag-1 autocorrelation of residuals
+if (n_yrs > 2) {
+  lag1_cor <- cor(residuals_wt[-n_yrs], residuals_wt[-1])
+} else {
+  lag1_cor <- NA_real_
+}
+
+cat("Lag-1 residual autocorrelation:", round(lag1_cor, 3), "\n",
+    "N years:", n_yrs, "\n",
+    "Note: With only", n_yrs,
+    "data points, formal autocorrelation tests have low power.\n",
+    "Use directional guidance only.\n")
+```
+
+With six data points, the lag-1 autocorrelation estimate is noisy and formal tests (Durbin-Watson) have almost no power. The practical guidance is: if the lag-1 autocorrelation is positive (which it typically is in fisheries data), the regression p-values understate the uncertainty. The appropriate response is to interpret marginal results (p = 0.04–0.10) cautiously, require longer time series before declaring trends significant, and use the confidence interval on the slope rather than a binary significance test.
+
+When twelve or more years of data are available, generalized least squares with an AR(1) correlation structure (via `MASS::rlm()` or `nlme::gls()`) provides a more honest standard error for the trend slope. At six years, the weighted linear model with honest interpretation of the precision is the practical limit of what the data can support.
+
+## Assembling a multi-year report table with season_summary() {#sec-trend-table}
+
+For regulatory reporting, the raw annual estimates tibble is often restructured into a wide table with one row per year and columns for each metric. `season_summary()` assembles pre-computed `creel_estimates` objects into this wide format automatically. For years where the full design objects are not available — as in the pre-saved data here — the same table can be constructed directly from the estimates data frame:
+
+```{r}
+#| label: annual-report-table
+report_table <- harlan_annual |>
+  mutate(
+    effort_cv   = round(100 * effort_se  / effort_est,  1),
+    cpue_cv     = round(100 * cpue_se    / cpue_est,    1),
+    harvest_cv  = round(100 * harvest_se / harvest_est, 1),
+    effort_est  = round(effort_est),
+    cpue_est    = round(cpue_est, 3),
+    harvest_est = round(harvest_est)
+  ) |>
+  select(
+    Year              = year,
+    Period            = regulation,
+    `Effort (hr)`     = effort_est,
+    `Effort CV%`      = effort_cv,
+    `CPUE (fish/hr)`  = cpue_est,
+    `CPUE CV%`        = cpue_cv,
+    `Harvest (n)`     = harvest_est,
+    `Harvest CV%`     = harvest_cv
+  )
+report_table
+```
+
+This format — point estimate alongside CV% for each metric, by year — is the standard annual reporting table for creel programs. The CV column is essential: it tells the reader how much weight to place on the point estimate. A harvest estimate of 90 fish with CV = 8% is far more informative than one with CV = 45%.
+
+## Design continuity and year-to-year comparability {#sec-trend-design}
+
+Multi-year analysis carries a critical assumption that is easy to overlook: the survey designs must be comparable across years [@pollock1994]. A change in the number of sampled days, the stratum boundaries, the count periods, or the interview protocol between years introduces a methodological break that can produce spurious trends. A real decline in CPUE is indistinguishable from a design change that reduced sampling intensity during peak fishing periods if the design history is not documented.
+
+The best protection against this problem is design immutability within the analysis window. Before fitting a trend model, document the following for each year:
+
+- Total season days ($N_h$ per stratum)
+- Number of sampled days ($n_h$ per stratum)
+- Number of count periods per sampled day
+- Interview type (access-point vs. roving)
+- Any changes in species targeted or length-measurement protocols
+
+The six-year Harlan simulation used the same design parameters (48 sampled days, 120-day season, two counts per day, same strata) throughout. A simple consistency check tabulates the effective sample sizes and season lengths across years to confirm no structural break occurred:
+
+```{r}
+#| label: design-consistency
+harlan_annual |>
+  mutate(
+    effort_cv  = round(100 * effort_se  / effort_est,  1),
+    cpue_cv    = round(100 * cpue_se    / cpue_est,    1),
+    harvest_cv = round(100 * harvest_se / harvest_est, 1)
+  ) |>
+  select(year, regulation, effort_cv, cpue_cv, harvest_cv) |>
+  arrange(year)
+```
+
+Stable CV patterns across years — without a systematic jump in one year — are indirect evidence that sampling intensity did not change. A sudden increase in CV in one year is a flag to check whether that season had fewer sampled days, higher stratification error, or changed protocols. If design metadata are stored with each year's estimates (recommended: include `n_sampled_days`, `n_strata`, `season_days` as attributes), this check can be made direct rather than inferred from CV patterns.
+
+If a design change occurred mid-series, the data should be analyzed in two separate windows (before and after the change) rather than as a single trend. The before-after contrast from the previous section provides a model for how to handle this: treat the change point as a break and estimate the level shift, rather than fitting a single trend line across an incompatible series.
+
+## Takeaway {#sec-trend-takeaway}
+
+Multi-year analysis of creel survey data requires treating each year's estimate as a quantity with uncertainty, not as a fixed datum. The contrast between two specific years uses a standard-error-propagated difference; trend analysis across many years uses precision-weighted regression. `compare_designs()` supports the two-year comparison with a tidy interface and forest-plot visualization. For the full multi-year table, either `season_summary()` (when design objects are available for all years) or a direct summarization of the estimates data frame produces the standard regulatory reporting format.
+
+At simulated Harlan Reservoir, the before-after contrast on Walleye CPUE showed a decline in the transition period followed by partial recovery — a pattern consistent with the biological expectation for a size-limit change that temporarily removes larger fish from the "catchable" pool before the newly protected cohort grows into legal size. Whether that recovery is statistically distinguishable from year-to-year variability depends on the precision of the annual estimates, and the confidence intervals throughout this chapter make that uncertainty explicit rather than hiding it behind the point estimates alone.
