@@ -18,13 +18,19 @@ book:
         - chapters/01-why-creel-surveys-matter.qmd
         - chapters/02-estimands-units-and-domains.qmd
         - chapters/03-design-based-logic-of-creel-estimation.qmd
+        - chapters/quick-start.qmd
     - part: Survey Designs
       chapters:
         - chapters/04-access-point-creel-surveys.qmd
         - chapters/05-roving-creel-surveys.qmd
         - chapters/06-aerial-camera-assisted-and-remote-count-designs.qmd
         - chapters/07-stratification-and-allocation.qmd
+        - chapters/pre-survey-planning.qmd
         - chapters/08-bias-and-failure-modes.qmd
+    - part: From Field to R
+      chapters:
+        - chapters/field-protocols.qmd
+        - chapters/creel-connect.qmd
     - part: Data Structures and Validation
       chapters:
         - chapters/09-creel-data-as-linked-tables.qmd

@@ -1,0 +1,591 @@
+---
+title: "Connecting to Your Data with tidycreel.connect"
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(tidycreel)
+library(tidycreel.connect)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(forcats)
+library(readr)
+
+harlan_interviews <- readRDS(here::here("data/harlan_interviews.rds"))
+harlan_counts     <- readRDS(here::here("data/harlan_counts.rds"))
+harlan_catch      <- readRDS(here::here("data/harlan_catch.rds"))
+```
+
+Raw creel data rarely arrives in the column names that `tidycreel` expects. Agency database exports use names shaped by legacy systems — `SurveyDate` instead of `date`, `InterviewID` instead of `interview_id`, `EffortHours` instead of `hours_fished`. Before any estimation can begin, these raw names must be translated to the canonical form the package understands.
+
+`tidycreel.connect` handles this translation. It is a companion package that wraps a connection to your data source — flat CSV files, a SQL Server database, or a REST API — and renames columns to tidycreel's canonical names automatically. The rest of your analysis code never needs to know where the data came from.
+
+This chapter covers:
+
+- Creating a column-mapping schema with `creel_schema()`
+- Connecting to CSV files with `creel_connect()` and `creel_connect_from_yaml()`
+- Connecting to a SQL Server database with `creel_connect_from_yaml()`
+- Connecting to a REST API with `creel_connect_api()`
+- Fetching interview, count, catch, and length data
+- Validating loaded data before analysis begins
+
+```{r}
+#| label: install-note
+#| echo: true
+#| eval: false
+# Install tidycreel.connect from source alongside tidycreel
+# R CMD INSTALL /path/to/tidycreel/tidycreel.connect
+#
+# Or from GitHub after the package is published:
+# remotes::install_github("chrischizinski/tidycreel", subdir = "tidycreel.connect")
+```
+
+## The translation problem {#sec-translation}
+
+Every agency that runs creel surveys has its own database schema. A decade of Microsoft Access, SQL Server, and flat-file exports produces column names like `CD_Date`, `II_UID`, `Num`, and `ii_TripType`. These are meaningful in context, but they are not what `estimate_effort()` or `add_interviews()` expect.
+
+Manual renaming with `dplyr::rename()` is fragile. It must be repeated every time data are loaded, it is invisible to collaborators who receive only the R scripts, and it breaks silently when the agency renames a field. A schema-based connection layer solves all three problems: the mapping is declared once, in a readable configuration file, and applied consistently every time data are fetched.
+
+The schema-to-connection-to-fetch workflow is:
+
+1. Declare the column mapping in `creel_schema()` — once per project
+2. Create a connection with `creel_connect()`, `creel_connect_from_yaml()`, or `creel_connect_api()`
+3. Load data with `fetch_interviews()`, `fetch_counts()`, `fetch_catch()`, etc.
+4. All downstream `tidycreel` calls use canonical column names
+
+## The schema as column map {#sec-schema-map}
+
+`creel_schema()` takes two kinds of arguments: the survey type and a set of column mapping arguments that translate agency names to tidycreel canonical names. Each mapping argument has the form `canonical_name_col = "AgencyColumnName"`.
+
+The example below builds the schema for a hypothetical agency export of Harlan Reservoir data. In this export, the agency uses `InterviewID`, `SurveyDate`, `HoursFished`, and `TripStatus` instead of tidycreel's canonical `interview_id`, `date`, `hours_fished`, and `trip_status`.
+
+```{r}
+#| label: schema-build
+#| echo: true
+schema <- creel_schema(
+  survey_type = "instantaneous",
+  # Interview table column mapping (agency name on right, canonical name implied by argument)
+  interview_uid_col = "InterviewID",
+  date_col          = "SurveyDate",
+  effort_col        = "HoursFished",
+  catch_col         = "TotalCatch",
+  trip_status_col   = "TripStatus",
+  # Count table
+  bank_anglers_col  = "BankAnglers",
+  angler_boats_col  = "AnglerBoats",
+  # Catch table
+  catch_uid_col     = "CatchUID",
+  species_col       = "SpeciesCode",
+  catch_count_col   = "CatchCount",
+  catch_type_col    = "CatchType",
+  # Lengths table
+  length_uid_col    = "LengthUID",
+  length_mm_col     = "LengthMM",
+  length_type_col   = "LengthType"
+)
+
+schema
+```
+
+The schema prints as a readable mapping: each canonical name appears on the left with its agency counterpart on the right. Any slot left as `NULL` — such as `angler_type_col` here — means that field is not present in the agency data and will not be available for domain analysis (see Chapter 14 for the estimation consequences of missing fields).
+
+```{r}
+#| label: tbl-schema-mapping
+#| tbl-cap: "Column name mapping from agency export format to tidycreel canonical names. The canonical name is the column name returned by fetch functions and expected by tidycreel estimation functions. The schema argument is the creel_schema() parameter that declares the mapping. Only columns with a non-NULL mapping are extracted."
+#| echo: false
+tibble::tribble(
+  ~`Canonical name (fetch output)`, ~`Schema argument`,    ~`Agency export name`, ~`Table`,
+  "interview_uid",                  "interview_uid_col",   "InterviewID",         "interviews, catch, lengths",
+  "date",                           "date_col",            "SurveyDate",          "interviews, counts",
+  "effort",                         "effort_col",          "HoursFished",         "interviews",
+  "catch_count",                    "catch_col",           "TotalCatch",          "interviews",
+  "trip_status",                    "trip_status_col",     "TripStatus",          "interviews",
+  "bank_anglers",                   "bank_anglers_col",    "BankAnglers",         "counts",
+  "angler_boats",                   "angler_boats_col",    "AnglerBoats",         "counts",
+  "catch_uid",                      "catch_uid_col",       "CatchUID",            "catch",
+  "species",                        "species_col",         "SpeciesCode",         "catch, lengths",
+  "catch_count",                    "catch_count_col",     "CatchCount",          "catch",
+  "catch_type",                     "catch_type_col",      "CatchType",           "catch",
+  "length_uid",                     "length_uid_col",      "LengthUID",           "lengths",
+  "length_mm",                      "length_mm_col",       "LengthMM",            "lengths",
+  "length_type",                    "length_type_col",     "LengthType",          "lengths"
+) |>
+  knitr::kable(align = c("l","l","l","l"))
+```
+
+With the schema declared, the next step is creating a connection to the actual data source. The sections below cover the three backends in turn: CSV files, SQL Server, and REST API.
+
+## The CSV backend {#sec-csv}
+
+### Creating CSV files from an agency export
+
+The most common starting point is a set of CSV exports from an agency database. To demonstrate the full workflow, the code below simulates this scenario: it takes the Harlan Reservoir data (which already uses canonical column names) and renames columns to agency-style names before writing to CSV. In a real project, your agency provides these files directly.
+
+```{r}
+#| label: write-agency-csvs
+#| echo: true
+# Summarize catch per interview for the interview-level total
+catch_per_interview <- harlan_catch |>
+  group_by(interview_id) |>
+  summarise(TotalCatch = sum(n_fish, na.rm = TRUE), .groups = "drop")
+
+# Rename Harlan interview columns to agency-style names
+agency_interviews <- harlan_interviews |>
+  left_join(catch_per_interview, by = "interview_id") |>
+  mutate(TotalCatch = coalesce(TotalCatch, 0L)) |>
+  rename(
+    InterviewID = interview_id,
+    SurveyDate  = date,
+    HoursFished = hours_fished,
+    TripStatus  = trip_status
+  )
+
+# Rename count columns
+agency_counts <- harlan_counts |>
+  rename(
+    SurveyDate  = date,
+    BankAnglers = bank_anglers,
+    AnglerBoats = angler_boats
+  )
+
+# Rename catch columns
+agency_catch <- harlan_catch |>
+  rename(
+    InterviewID = interview_id,
+    SpeciesCode = species,
+    CatchCount  = n_fish,
+    CatchType   = catch_type
+  ) |>
+  mutate(CatchUID = row_number(), .before = 1)
+
+# Write to a temporary directory (in practice, use your project's data/ folder)
+data_dir <- tempdir()
+
+write_csv(agency_interviews, file.path(data_dir, "harlan_interviews.csv"))
+write_csv(agency_counts,     file.path(data_dir, "harlan_counts.csv"))
+write_csv(agency_catch,      file.path(data_dir, "harlan_catch.csv"))
+
+# Empty length tables — Harlan 2022 did not collect length data
+empty_lengths <- tibble(
+  LengthUID   = integer(0), InterviewID = character(0),
+  SpeciesCode = character(0), LengthMM = numeric(0), LengthType = character(0)
+)
+write_csv(empty_lengths, file.path(data_dir, "harlan_harvest_lengths.csv"))
+write_csv(empty_lengths, file.path(data_dir, "harlan_release_lengths.csv"))
+```
+
+### Connecting with `creel_connect()`
+
+With the agency CSV files in place and the schema defined, create a connection by passing a named list of file paths:
+
+```{r}
+#| label: csv-connect
+#| echo: true
+conn <- creel_connect(
+  con = list(
+    interviews      = file.path(data_dir, "harlan_interviews.csv"),
+    counts          = file.path(data_dir, "harlan_counts.csv"),
+    catch           = file.path(data_dir, "harlan_catch.csv"),
+    harvest_lengths = file.path(data_dir, "harlan_harvest_lengths.csv"),
+    release_lengths = file.path(data_dir, "harlan_release_lengths.csv")
+  ),
+  schema = schema
+)
+
+conn
+```
+
+The `conn` object holds the file paths, the schema, and the backend type. It does not read any data yet. File existence is checked at connection time so that missing files surface immediately — before you have run several processing steps and then hit an error.
+
+## Fetching data {#sec-fetch}
+
+### fetch_interviews()
+
+`fetch_interviews()` reads the interviews CSV, renames columns using the schema, coerces types, and validates the result. Only columns with a non-NULL schema mapping are kept; all other agency columns are dropped.
+
+```{r}
+#| label: fetch-interviews
+#| echo: true
+interviews <- fetch_interviews(conn)
+interviews
+```
+
+The returned data frame has canonical column names (`interview_uid`, `date`, `catch_count`, `effort`, `trip_status`) regardless of what the agency CSV called them.
+
+### fetch_counts()
+
+`fetch_counts()` follows the same pattern: reads, renames, coerces, and returns a data frame with canonical column names.
+
+```{r}
+#| label: fetch-counts
+#| echo: true
+counts <- fetch_counts(conn)
+counts
+```
+
+Each row is one count event. The `bank_anglers` and `angler_boats` columns retain the same names regardless of what the agency CSV called them — the schema mapping applied on read.
+
+### fetch_catch()
+
+`fetch_catch()` returns the long-format catch table: one row per species × catch type × interview. The `catch_uid` column is synthesized as a row index when the source data does not include one.
+
+```{r}
+#| label: fetch-catch
+#| echo: true
+catch <- fetch_catch(conn)
+catch
+```
+
+Species codes arrive as character even when the source stores them as integers — the fetch function coerces on read so downstream `standardize_species()` calls receive consistent input.
+
+### fetch_harvest_lengths() and fetch_release_lengths()
+
+Length data follow the same pattern. When the lengths table is empty — as in Harlan 2022 — the fetch functions return a zero-row data frame with the correct column types, which is the expected input to `add_lengths()`.
+
+```{r}
+#| label: fetch-lengths
+#| echo: true
+harvest_lengths <- fetch_harvest_lengths(conn)
+release_lengths <- fetch_release_lengths(conn)
+
+nrow(harvest_lengths)  # 0 — no length data for Harlan 2022
+```
+
+@fig-fetch-summary shows the row counts across all five fetched tables, confirming that the agency export was read completely and the empty length tables are structurally correct.
+
+```{r}
+#| label: fig-fetch-summary
+#| fig-cap: "Row counts per table fetched from the Harlan Reservoir 2022 agency export via tidycreel.connect. The 987 catch records link to 600 interviews via interview_uid. Empty length tables reflect that biological measurements were not collected in this survey."
+#| fig-alt: "Horizontal bar chart showing fetched row counts: interviews = 600, counts = 236, catch = 987, harvest lengths = 0, release lengths = 0."
+#| echo: true
+
+tibble(
+  table = c("interviews", "counts", "catch", "harvest_lengths", "release_lengths"),
+  rows  = c(nrow(interviews), nrow(counts), nrow(catch),
+            nrow(harvest_lengths), nrow(release_lengths))
+) |>
+  mutate(table = fct_inorder(table)) |>
+  ggplot(aes(x = rows, y = fct_rev(table))) +
+  geom_col(fill = "#4E9CC2", width = 0.6) +
+  geom_text(aes(label = rows), hjust = -0.1, size = 3.5) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.15))) +
+  labs(
+    x = "Rows fetched",
+    y = "Table"
+  ) +
+  theme_creel()
+```
+
+## YAML-based connections {#sec-yaml}
+
+For reproducible workflows, declare the data source and schema in a YAML configuration file rather than inline R code. `creel_connect_from_yaml()` reads the file and builds the connection object. The schema and file paths live in version control; credentials do not.
+
+### CSV backend config
+
+Create a file named `creel-config.yml` in your project root:
+
+```yaml
+default:
+  backend: csv
+  files:
+    interviews:      data/harlan_interviews.csv
+    counts:          data/harlan_counts.csv
+    catch:           data/harlan_catch.csv
+    harvest_lengths: data/harlan_harvest_lengths.csv
+    release_lengths: data/harlan_release_lengths.csv
+  schema:
+    survey_type:       instantaneous
+    interview_uid_col: InterviewID
+    date_col:          SurveyDate
+    effort_col:        HoursFished
+    catch_col:         TotalCatch
+    trip_status_col:   TripStatus
+    bank_anglers_col:  BankAnglers
+    angler_boats_col:  AnglerBoats
+    catch_uid_col:     CatchUID
+    species_col:       SpeciesCode
+    catch_count_col:   CatchCount
+    catch_type_col:    CatchType
+    length_uid_col:    LengthUID
+    length_mm_col:     LengthMM
+    length_type_col:   LengthType
+```
+
+Then connect with one line:
+
+```{r}
+#| label: yaml-csv-connect
+#| echo: true
+#| eval: false
+conn <- creel_connect_from_yaml("creel-config.yml")
+```
+
+### SQL Server backend config
+
+For SQL Server connections, add a `sqlserver` block with connection details. Credentials must never appear as plain text in the YAML file — use environment variables with the `config` package's `!expr` tag:
+
+```yaml
+default:
+  backend:   sqlserver
+  server:    myserver.agency.gov
+  database:  CreelDatabase
+  auth_type: password
+  username:  !expr Sys.getenv("CREEL_USER")
+  password:  !expr Sys.getenv("CREEL_PASS")
+  schema:
+    survey_type:       instantaneous
+    interviews_table:  vwInterviews
+    counts_table:      vwCounts
+    catch_table:       vwCatch
+    lengths_table:     vwLengths
+    interview_uid_col: InterviewID
+    date_col:          SurveyDate
+    effort_col:        EffortHours
+    catch_col:         TotalCatch
+    trip_status_col:   TripStatus
+```
+
+Set the environment variables before connecting:
+
+```{r}
+#| label: sqlserver-creds
+#| echo: true
+#| eval: false
+# In ~/.Renviron (never commit this file to version control):
+# CREEL_USER=your_agency_username
+# CREEL_PASS=your_password
+#
+# Or set programmatically in the session:
+Sys.setenv(CREEL_USER = "your_username", CREEL_PASS = "your_password")
+conn_prod <- creel_connect_from_yaml("creel-config.yml")
+```
+
+`creel_connect_from_yaml()` validates the YAML before attempting any network connection. If required keys are missing, if the backend value is unrecognized, or if the environment variables resolve to empty strings, the function aborts immediately with a descriptive error listing every problem at once.
+
+### Multiple environments
+
+The `config` argument lets you switch between a CSV development environment and a SQL Server production environment using a single YAML file:
+
+```yaml
+default:
+  backend: csv
+  files:
+    interviews: data/test_interviews.csv
+    # ...
+
+production:
+  backend:   sqlserver
+  server:    prod.agency.gov
+  # ...
+```
+
+```{r}
+#| label: multi-env
+#| echo: true
+#| eval: false
+# Local CSV for development
+conn_dev  <- creel_connect_from_yaml("creel-config.yml")
+
+# Production SQL Server
+conn_prod <- creel_connect_from_yaml("creel-config.yml", config = "production")
+```
+
+This pattern ensures that the analysis code remains identical across environments — only the connection changes.
+
+## SQL Server authentication {#sec-auth}
+
+Two authentication modes are supported:
+
+| `auth_type` | Platforms         | Notes |
+|-------------|-------------------|-------|
+| `password`  | Windows, macOS, Linux | Requires `username` + `password` |
+| `windows`   | Windows only      | Uses domain credentials; no password needed |
+
+Windows integrated authentication (`auth_type: windows`) is the most secure option for Windows users on a domain. On macOS or Linux, use `auth_type: password` with credentials from environment variables.
+
+The SQL Server backend requires the `odbc` R package and a native ODBC driver. Call `creel_check_driver()` to confirm the driver is installed and registered before attempting a connection:
+
+```{r}
+#| label: check-driver
+#| echo: true
+#| eval: false
+creel_check_driver()
+# ✔ ODBC Driver 17 for SQL Server found
+# ✔ odbc package available
+```
+
+Installation instructions for the ODBC Driver 17 for SQL Server are in the tidycreel.connect README (Windows, macOS, and Linux).
+
+For agencies that serve creel data over HTTP rather than through a database, `tidycreel.connect` provides a third backend described in the next section.
+
+## The REST API backend {#sec-api}
+
+Some state agencies expose creel data through a REST API rather than a database or flat files. `tidycreel.connect` supports this with `creel_connect_api()`, which queries a JSON-returning endpoint and applies the same `fetch_*()` interface used by the CSV and SQL Server backends.
+
+The default endpoint paths are designed for the UNL/NGPC creel survey API. Agencies running a compatible service can connect with no configuration beyond a base URL and a survey UID. Agencies with different endpoint paths can override them individually.
+
+### No-auth connection
+
+The simplest API connection requires only a base URL, one or more creel survey UIDs, and a schema. The schema here supplies only the `survey_type` — the API backend uses hardcoded field name mappings for the NGPC response format, not the column-mapping arguments used by the CSV backend.
+
+```{r}
+#| label: api-no-auth
+#| echo: true
+#| eval: false
+schema <- creel_schema(survey_type = "instantaneous")
+
+conn_api <- creel_connect_api(
+  base_url   = "http://creelsurvey.unl.edu/api/",
+  creel_uids = "90f5375c-afe0-e511-80bf-0050568372f9",
+  schema     = schema
+)
+
+conn_api
+```
+
+The `creel_uids` argument accepts a character vector when you need to pull data for multiple surveys simultaneously:
+
+```{r}
+#| label: api-multi-uid
+#| echo: true
+#| eval: false
+conn_api <- creel_connect_api(
+  base_url   = "http://creelsurvey.unl.edu/api/",
+  creel_uids = c(
+    "90f5375c-afe0-e511-80bf-0050568372f9",
+    "a1b2c3d4-0000-1111-2222-333344445555"
+  ),
+  schema     = schema
+)
+```
+
+### Authenticated connections
+
+Two authentication modes are supported via the `auth` argument.
+
+**Bearer token** — used by most modern agency REST APIs:
+
+```{r}
+#| label: api-bearer
+#| echo: true
+#| eval: false
+# Add to ~/.Renviron (never store tokens as plain strings in R scripts):
+#   CREEL_API_TOKEN=your_token_here
+# Then restart R so Sys.getenv() resolves it.
+
+conn_api <- creel_connect_api(
+  base_url   = "https://api.example.com/creel/",
+  creel_uids = "survey-uid-001",
+  schema     = schema,
+  auth       = list(type = "bearer", token = Sys.getenv("CREEL_API_TOKEN"))
+)
+```
+
+**API key** — passed as a custom request header:
+
+```{r}
+#| label: api-key-auth
+#| echo: true
+#| eval: false
+conn_api <- creel_connect_api(
+  base_url   = "https://api.example.com/creel/",
+  creel_uids = "survey-uid-001",
+  schema     = schema,
+  auth       = list(
+    type   = "api_key",
+    key    = Sys.getenv("CREEL_API_KEY"),
+    header = "X-API-Key"   # header name your agency requires
+  )
+)
+```
+
+Store credentials in `~/.Renviron` (never commit that file to version control):
+
+```
+CREEL_API_TOKEN=your_token_here
+CREEL_API_KEY=your_key_here
+```
+
+### Custom endpoint paths
+
+If your agency runs a REST API that returns the same JSON structure but at different paths, override specific endpoints without changing the others:
+
+```{r}
+#| label: api-custom-endpoints
+#| echo: true
+#| eval: false
+conn_api <- creel_connect_api(
+  base_url   = "https://api.example.com/",
+  creel_uids = "survey-001",
+  schema     = schema,
+  uid_param  = "survey_id",          # query parameter name your API expects
+  endpoints  = list(
+    interviews = "v2/interviews",
+    counts     = "v2/counts",
+    catch      = "v2/catch"
+  )
+)
+```
+
+Valid endpoint names are `interviews`, `counts`, `catch`, `harvest_lengths`, and `release_lengths`. Unspecified endpoints retain the NGPC defaults.
+
+### Fetching from an API connection
+
+After creating the connection, the `fetch_*()` calls are identical to the CSV workflow:
+
+```{r}
+#| label: api-fetch
+#| echo: true
+#| eval: false
+interviews      <- fetch_interviews(conn_api)
+counts          <- fetch_counts(conn_api)
+catch           <- fetch_catch(conn_api)
+harvest_lengths <- fetch_harvest_lengths(conn_api)
+release_lengths <- fetch_release_lengths(conn_api)
+```
+
+The returned data frames have the same canonical column names regardless of backend. Code written for CSV development runs against an API connection in production without modification.
+
+Note: `creel_connect_from_yaml()` does not currently support the API backend. API connections must be constructed with `creel_connect_api()` directly.
+
+## After fetching: validate before analyzing {#sec-validate-after-fetch}
+
+After fetching all tables, run `validate_creel_data()` to confirm cross-table integrity. This catches problems that single-table fetch validation cannot detect: interview IDs in the catch table that have no matching interview record, dates that fall outside the schedule frame, and count records on days with no corresponding interviews.
+
+```{r}
+#| label: validate-after-fetch
+#| echo: true
+validate_creel_data(counts = counts, interviews = interviews)
+```
+
+The validator returns a structured report, not a silent pass/fail. Each check is named, and failures include the offending rows. Review the report before proceeding to `creel_design()`.
+
+## From connection to analysis {#sec-connection-to-analysis}
+
+The fetch functions return plain data frames with canonical `tidycreel` column names. These are the same objects that Chapters 9–11 use directly from `.rds` files. The only difference is origin: CSV files through a connection vs. pre-packaged R data objects.
+
+```{r}
+#| label: handoff
+#| echo: true
+#| eval: false
+# After fetch, the data are identical to what creel_design() expects
+harlan_schedule <- readRDS("data/harlan_schedule.rds")
+
+design <- creel_design(harlan_schedule, date = date, strata = day_type)
+
+design <- add_interviews(
+  design,
+  interviews,   # fetched from CSV via tidycreel.connect
+  catch       = catch_count,
+  effort      = effort,
+  trip_status = trip_status
+)
+```
+
+Chapters 9 and 10 walk through the complete construction of a `creel_design` object. Chapter 12 begins the estimation sequence. The connection layer described in this chapter is the upstream step that ensures all of those functions receive data in the shape they expect.
+
+## Takeaway {#sec-connect-takeaway}
+
+Data in a SQL Server table, a folder of CSV files, or a REST API endpoint is not yet ready for `tidycreel`. `tidycreel.connect` provides the translation layer — schema-based column renaming, type coercion, and validation — that converts agency data formats into the canonical input that all estimation functions expect. Declaring the translation once, in a `creel_schema()` call or a YAML file, keeps the mapping explicit, version-controllable, and reusable across seasons.
