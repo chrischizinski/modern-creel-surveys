@@ -115,6 +115,8 @@ design_bio <- creel_design(harlan_schedule, date = "date", strata = "day_type") 
 design_bio
 ```
 
+Printing `design_bio` confirms that the `$lengths` slot is now populated. The design object carries the length column mapping internally — `species`, `length`, `length_type`, and `count` are registered at attachment time so that `summarize_length_freq()` and `est_length_distribution()` can locate the right columns without requiring the analyst to re-specify them.
+
 `add_lengths()` validates that every interview ID in `harlan_lengths` exists in `design_bio$interviews` — interviews with no length records are valid (not every angler's catch is measured), but lengths cannot appear for interviews that are absent from the design. The function registers the column mapping internally so subsequent calls to `summarize_length_freq()` and `est_length_distribution()` know which column holds lengths and which identifies the interview link.
 
 ## Raw length-frequency distributions {#sec-bio-raw}
@@ -123,17 +125,16 @@ The first look at biological data should always be the unweighted sample frequen
 
 ```{r}
 #| label: lf-raw
-summarize_length_freq(design_bio, type = "harvest", by = species, bin_width = 25)
+lf_raw <- summarize_length_freq(design_bio, type = "harvest", by = species, bin_width = 25)
+lf_raw
 ```
 
-@fig-length-freq-raw shows these distributions side by side. The three species have strikingly different shapes: White Bass form a compact, near-symmetric distribution around 265 mm; Walleye are right-skewed with a mode near 450 mm and a visible left tail below the 381-mm size limit; Channel Catfish are right-skewed with a broad range reflecting the wide size structure typical of catfish populations.
+@fig-length-freq-raw shows these distributions side by side. The three species have strikingly different shapes: White Bass form a compact, near-symmetric distribution around 265 mm; Walleye are spread broadly from 300 mm to 550 mm with a mode near 425 mm and a visible left tail below the 381-mm size limit; Channel Catfish span the widest range, 250–625 mm, reflecting the wide age and size structure typical of catfish populations.
 
 ```{r}
 #| label: fig-length-freq-raw
-#| fig-cap: "Sample length-frequency distributions for three species at Harlan Reservoir. Bars show raw counts of individually measured harvest fish in 25-mm bins. Vertical dashed line on the Walleye panel marks the Nebraska 381-mm minimum size limit. Distributions are unweighted and reflect the composition of the sampled interviews, not the population-weighted harvest."
+#| fig-cap: "Sample length-frequency distributions for three species at Harlan Reservoir. Bars show raw counts of individually measured harvest fish in 25-mm bins. Vertical dashed line on the Walleye panel marks the Nebraska 381-mm minimum size limit. White Bass have the tightest distribution; Channel Catfish the widest. Distributions are unweighted sample frequencies, not population-weighted estimates."
 #| fig-alt: "Faceted histogram showing White Bass concentrated 225–325mm, Walleye broadly distributed 300–550mm with dashed size-limit line at 381mm, and Channel Catfish 250–625mm."
-
-lf_raw <- summarize_length_freq(design_bio, type = "harvest", by = species, bin_width = 25)
 
 size_limits <- tibble(
   species   = "Walleye",
@@ -222,19 +223,15 @@ ggplot(lw_walleye, aes(x = bin_mid, y = estimate, fill = legal)) +
 
 The confidence intervals in @fig-length-dist-weighted are wide — a natural consequence of the modest number of interviews with length records and the across-interview variability in fish size. This uncertainty should accompany any regulatory reporting that relies on these estimates.
 
-### Quick visualization with autoplot {#sec-bio-autoplot}
-
-The `creel_length_distribution` object returned by `est_length_distribution()` has an `autoplot()` method via `ggplot2::autoplot()`. This renders a bar chart with confidence interval ribbons without requiring a manual ggplot construction — useful for rapid inspection during analysis.
+The `creel_length_distribution` object has an `autoplot()` method that renders a quick faceted bar chart with error bars across all grouping levels — useful for exploring all three species simultaneously before deciding which to examine more closely.
 
 ```{r}
-#| label: fig-autoplot-walleye
-#| fig-cap: "Harvest length distribution for Walleye produced by `ggplot2::autoplot()` on the `creel_length_distribution` object. Groups (species) are faceted automatically. Error bars show 95% confidence intervals. This is a quick diagnostic plot; the custom figure in @fig-length-dist-weighted adds size-limit annotation and compliance shading."
-#| fig-alt: "Autoplot output showing faceted bar chart of harvest length distributions for three species with error bars."
+#| label: fig-autoplot-harvest
+#| fig-cap: "Design-weighted harvest length distributions for all three species at Harlan Reservoir, produced by `ggplot2::autoplot()`. Error bars show 95% confidence intervals. The faceted layout reveals that White Bass have the narrowest distribution, Channel Catfish the widest, and Walleye straddle the 381-mm size limit. Use this plot for rapid exploration; @fig-length-dist-weighted provides the annotated version for reporting."
+#| fig-alt: "Three-panel bar chart from autoplot showing harvest length distributions by species with confidence interval error bars."
 
 ggplot2::autoplot(lf_weighted, theme = "creel")
 ```
-
-The `theme = "creel"` argument applies the book-standard `theme_creel()` styling. The default (`theme = "default"`) uses `theme_bw()`. For exploratory work during a season, `autoplot()` is the fastest path from an estimated length distribution to a reviewable figure; for outputs destined for a management report, constructing the plot manually gives full control over annotations, labels, and colour.
 
 ## Interview coverage and subsampling intensity {#sec-bio-coverage}
 
@@ -242,9 +239,6 @@ Before relying on a length distribution estimate, it is worth asking how many in
 
 ```{r}
 #| label: bio-coverage
-interviews_with_lengths <- harlan_lengths |>
-  distinct(interview_id)
-
 coverage <- harlan_interviews |>
   left_join(
     harlan_lengths |>
@@ -255,17 +249,19 @@ coverage <- harlan_interviews |>
   replace_na(list(has_lengths = FALSE)) |>
   group_by(day_type) |>
   summarise(
-    n_interviews      = n(),
-    n_with_lengths    = sum(has_lengths),
-    pct_with_lengths  = round(100 * mean(has_lengths), 1),
-    .groups           = "drop"
+    n_interviews     = n(),
+    n_with_lengths   = sum(has_lengths),
+    pct_with_lengths = round(100 * mean(has_lengths), 1),
+    .groups          = "drop"
   )
 coverage
 ```
 
 Length records were collected from approximately `r round(mean(coverage$pct_with_lengths))`% of interviews in each stratum. Coverage that is roughly equal across strata — as it is here — means that subsampling is not systematically biasing the length distribution toward one day type. If weekday interviews had dramatically lower coverage than weekend interviews, the estimated distribution would lean toward the weekend fish composition, which could differ in size structure if fishing pressure and selectivity differ by day type.
 
-The subsample rate also has a direct effect on precision. More measured fish within an interview reduces within-interview variability in the length column; more interviews with any length records reduces between-interview variability. For a fixed field budget, measuring more fish per interview is less efficient than measuring a few fish across more interviews, because between-interview variance dominates the total variance in stratified survey estimators (a pattern visible in Chapter 15's variance decomposition for effort).
+The subsample rate also has a direct effect on precision. More measured fish within an interview reduces within-interview variability in the length column; more interviews with any length records reduces between-interview variability. For a fixed field budget, measuring a few fish across more interviews is more efficient than measuring many fish in fewer interviews, because between-interview variance dominates total variance in stratified survey estimators — a pattern visible in the variance decomposition for effort in Chapter 15.
+
+`est_length_distribution()` offers three variance estimation methods (set via the `variance` argument): `"taylor"` (default, delta-method), `"bootstrap"`, and `"jackknife"`. For small biological subsamples — fewer than twenty to thirty interviews with length records — the bootstrap or jackknife approaches often give more conservative and reliable uncertainty bounds than the delta-method approximation.
 
 ## Released fish: binned length distributions {#sec-bio-release}
 
@@ -357,7 +353,7 @@ mean_length_raw <- harlan_lengths |>
 mean_length_raw
 ```
 
-When the two means agree closely, the interview subsampling was roughly self-weighting with respect to mean fish size — interviews that measured more fish did not systematically measure larger or smaller fish than interviews that measured fewer. A discrepancy between the two means signals a correlation between interview-level subsampling intensity and fish size, which can arise, for example, if clerks measured more fish during periods when anglers were catching larger individuals (peak season, favorable conditions). In that case, the survey-weighted mean from `est_length_distribution()` is the more defensible estimate.
+When the two means agree closely, the interview subsampling was roughly self-weighting with respect to mean fish size — interviews that measured more fish did not systematically measure larger or smaller fish than interviews that measured fewer. A discrepancy between the two means signals a correlation between interview-level subsampling intensity and fish size, which can arise, for example, if clerks measured more fish during periods when anglers were catching larger individuals (peak season, favorable conditions). In that case, the survey-weighted mean from `est_length_distribution()` is the more defensible estimate. For Harlan Walleye, the two means should be close, consistent with the balanced subsampling coverage shown in the previous section.
 
 ## Size-limit compliance analysis {#sec-bio-compliance}
 
@@ -387,7 +383,7 @@ Of the `r compliance_summary$n_measured` individually measured harvested Walleye
 
 ```{r}
 #| label: fig-compliance-angler
-#| fig-cap: "Walleye harvest size compliance by angler type at Harlan Reservoir. Bars show the percentage of individually measured harvested Walleye that met or exceeded the 381-mm (15-in) minimum size limit. Numbers above bars indicate the sample size of measured fish. Both angler types show high compliance, with boat anglers harvesting a modestly larger fraction of legal fish."
+#| fig-cap: "Walleye harvest size compliance by angler type at Harlan Reservoir. Bars show the percentage of individually measured harvested Walleye that met or exceeded the 381-mm (15-in) minimum size limit. Labels to the right of each bar show the percentage and the sample size of measured fish. Both angler types show high compliance, with boat anglers harvesting a modestly larger fraction of legal-size fish."
 #| fig-alt: "Horizontal bar chart comparing Walleye size-limit compliance between boat and bank anglers, both exceeding 70%, with sample sizes labeled."
 
 compliance_by_angler <- harlan_int_bio |>
@@ -422,13 +418,15 @@ ggplot(compliance_by_angler,
   theme_creel()
 ```
 
+Boat anglers show marginally higher compliance than bank anglers, consistent with their ability to target deeper water where larger fish concentrate. The difference is not statistically tested here — a formal comparison would require a design-weighted contrast — but the pattern is biologically plausible and worth noting in a regulatory report alongside the overall compliance figure.
+
 These compliance numbers are computed from the *observed sample* of measured fish, not from a design-weighted estimate. A design-weighted compliance proportion — analogous to the interview-level estimate of catch rate — would require treating each interview's proportion of legal fish as a survey observation and propagating that through the stratified design weights. That approach is correct in theory but requires that most interviews have at least a few measured fish so the within-interview proportion is not dominated by measurement noise. When the biological subsample is sparse, the sample-level proportion from all measured fish is often the practical reporting choice, accompanied by an honest description of the subsampling procedure.
 
 ## Estimating biomass from the length distribution {#sec-bio-biomass}
 
 Total harvested biomass — kilograms of fish removed from the population — combines the estimated harvest total from Chapter 13 with the length-weight relationship. `tidycreel` does not automate this calculation, but the components are available from the standard workflow.
 
-For Walleye, a commonly used length-weight relationship in Nebraska is $W = a \cdot L^b$ where $a = 0.0000106$ and $b = 3.093$ for weight in grams and total length in mm [@pollock1994]. Apply this at the bin midpoint for each length class to approximate a distribution-weighted mean weight, then multiply by the estimated harvest total.
+For Walleye, a commonly used length-weight relationship takes the form $W = a \cdot L^b$ where $W$ is weight in grams and $L$ is total length in mm. Example parameters ($a = 0.0000106$, $b = 3.093$) are illustrative; programs should fit species- and water-body-specific coefficients from their own biological sampling data. Apply the relationship at each bin midpoint to approximate a distribution-weighted mean weight, then multiply by the estimated harvest total.
 
 ```{r}
 #| label: bio-biomass
@@ -478,13 +476,9 @@ Several biological estimation workflows common in creel programs have no `tidycr
 
 These gaps are documented in `.planning/TIDYCREEL-WISHLIST.md`. For programs that need these workflows now, the design-weighted framework from `est_length_distribution()` provides a template: the key principle is to express the biological quantity as an interview-level observation, attach it to the design, and let the stratified estimator propagate uncertainty.
 
-## Takeaway {#sec-bio-takeaway}
+## QA check: combined catch distribution {#sec-bio-qa}
 
-Biological data from creel interviews require a two-stage estimation approach: fish are subsampled within interviews, which are themselves sampled as part of a stratified survey. Treating measured fish as a simple random sample ignores the survey structure and produces length distributions that reflect sampler convenience rather than angler harvest. `add_lengths()` attaches the length table to the `creel_design` object so that `est_length_distribution()` can apply interview-level survey weights to recover a design-based estimate of the harvested size composition.
-
-At Harlan Reservoir, the Walleye harvest length distribution was concentrated well above the 381-mm minimum size limit, with `r compliance_summary$pct_legal`% of measured fish in the legal range. The complementary release distribution — concentrated below the size limit — confirms that anglers at Harlan were returning sublegal fish rather than harvesting them. Together, these two distributions provide the regulatory evidence base that effort and catch totals alone cannot supply.
-
-A useful final check before any biological results leave the analyst's desk is to compare the combined catch distribution (harvest + release together, `type = "catch"`) against the harvest-only and release-only estimates. The total should equal the sum of the two components, and the size structure of the combined distribution should fall between the two — more legal-sized fish than the release distribution, fewer than the harvest distribution.
+A useful final check before any biological results leave the analyst's desk is to compare the combined catch distribution (`type = "catch"`, which includes harvest and release together) against the harvest-only and release-only distributions. The combined total should equal the sum of the two components, and the size structure should fall between them — more large fish than the release distribution, fewer than the harvest distribution alone.
 
 ```{r}
 #| label: bio-catch-all
@@ -493,7 +487,15 @@ summarize_length_freq(design_bio, type = "catch", by = species, bin_width = 25) 
   select(species, length_bin, N, percent, cumulative_percent)
 ```
 
-The combined Walleye distribution reflects both sublegal released fish (concentrated below 381 mm) and legal harvested fish (concentrated above 381 mm), producing a bimodal shape that is not visible in either component alone. This is the size structure of all Walleye contacted at Harlan Reservoir — the population the fishery is drawing on — and it confirms that the regulation is working as intended: anglers are selectively retaining fish that have grown past the minimum length while returning the smaller cohort to continue growing.
+The combined Walleye distribution is distinctly bimodal: a left mode from sublegal released fish concentrated below 381 mm, and a right mode from legal harvested fish concentrated above 381 mm. Neither component alone shows this bimodality. This is the full size structure of Walleye contacted at Harlan Reservoir — the population the fishery is drawing on — and it confirms that the regulation is achieving its intended selectivity: anglers are retaining fish that have grown past the minimum length while returning the smaller cohort to continue growing.
+
+If the combined distribution were unimodal and concentrated above the size limit, it would suggest either that sublegal fish were present but not being reported as released, or that the fish population lacks a strong sublegal cohort — both worth documenting. If it were concentrated entirely below the limit, it would indicate a recruitment failure or harvest of sublegal fish.
+
+## Takeaway {#sec-bio-takeaway}
+
+Biological data from creel interviews require a two-stage estimation approach: fish are subsampled within interviews, which are themselves sampled as part of a stratified survey. Treating measured fish as a simple random sample ignores the survey structure and produces length distributions that reflect sampler convenience rather than angler harvest. `add_lengths()` attaches the length table to the `creel_design` object so that `est_length_distribution()` can apply interview-level survey weights to recover a design-based estimate of the harvested size composition.
+
+At Harlan Reservoir, the Walleye harvest length distribution was concentrated well above the 381-mm minimum size limit, with `r compliance_summary$pct_legal`% of measured fish in the legal range. The complementary release distribution — concentrated below the size limit — confirms that anglers at Harlan were returning sublegal fish rather than harvesting them. Together, these two distributions provide the regulatory evidence base that effort and catch totals alone cannot supply.
 
 Chapter 15 covers precision diagnostics for effort and catch-rate estimates; the same CV-based framework applies to length distribution estimates, where the coefficient of variation on key bins (the sublegal fraction, the modal bin) is the natural precision target for planning biological subsampling intensity in future seasons.
 
