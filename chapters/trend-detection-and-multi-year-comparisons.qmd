@@ -43,6 +43,8 @@ when the two surveys are independent (which they are — separate samples in sep
 
 For trend analysis across many years, the same logic extends to a weighted linear regression where each year's estimate is weighted by its precision (inverse squared standard error). Years with tight confidence intervals contribute more information about the trend than years with wide intervals.
 
+A concrete illustration: suppose CPUE in 2020 is $0.197 \pm 0.040$ fish/hr and in 2023 is $0.288 \pm 0.044$ fish/hr. The difference is $0.288 - 0.197 = 0.091$ fish/hr, and its standard error is $\sqrt{0.040^2 + 0.044^2} = 0.059$ fish/hr. The 95% confidence interval for the difference is $[0.091 - 1.96 \times 0.059,\; 0.091 + 1.96 \times 0.059] = [-0.025, 0.207]$. The interval includes zero, so the data are consistent with no change even though the point estimates differ by 46%. Without the standard errors, that 46% apparent increase would seem compelling. With them, it is noise.
+
 ## Simulating a multi-year creel dataset {#sec-trend-sim}
 
 `simulate_creel_data()` generates one season of synthetic creel data at a time. Building a multi-year dataset means calling it once per year with parameters that vary across years. Here is the setup for the 2023 Harlan season, the last year of the post-regulation period:
@@ -67,7 +69,10 @@ sim_2023 <- simulate_creel_data(
   seed             = 2023
 )
 
-# Shift dates to the 2023 survey season
+# Shift dates to the 2023 survey season.
+# Note: only 3 of the 4 components have a date column.
+# The catch component (species-level counts per interview) has no date —
+# its rows link to interviews via interview_id, not directly to calendar dates.
 offset_2023 <- as.integer(as.Date("2023-04-01") - min(sim_2023$schedule$date))
 sim_2023$schedule$date   <- sim_2023$schedule$date   + offset_2023
 sim_2023$counts$date     <- sim_2023$counts$date     + offset_2023
@@ -225,7 +230,7 @@ comparison <- compare_designs(
 comparison
 ```
 
-The comparison table extracts the key precision metrics from each `creel_estimates` object — estimate, SE, RSE, CI width — into a single row per year, making it easy to see whether the two point estimates differ by more than the combined uncertainty allows.
+The comparison table extracts key precision metrics from each `creel_estimates` object into a single row per year. RSE (relative standard error) is SE divided by the estimate, expressed as a percentage — equivalent to CV%. CI width is the full width of the 95% confidence interval ($2 \times 1.96 \times \text{SE}$). These two columns together characterize how much of the apparent difference between years could plausibly be sampling noise: if the CI widths are large relative to the difference in point estimates, the two surveys are consistent with an unchanged population.
 
 ```{r}
 #| label: fig-compare-forest
@@ -276,13 +281,36 @@ cat("Before-regulation mean CPUE:", round(ba$cpue_wmean[ba$regulation == "before
     "\np-value:                    ", round(p_value, 3), "\n")
 ```
 
+@fig-ba-contrast plots the precision-weighted period means with 95% confidence intervals, making the contrast visual. The horizontal gap between the two points is the estimated effect of the regulation; whether the intervals overlap determines whether the difference is statistically distinguishable.
+
+```{r}
+#| label: fig-ba-contrast
+#| fig-cap: "Before-after contrast for Walleye CPUE at Harlan Reservoir. Points show precision-weighted mean CPUE for the pre-regulation (2018–2020) and post-regulation (2021–2023) periods; error bars show 95% confidence intervals on the period-level weighted means. The gap between periods represents the estimated regulatory effect; overlapping intervals indicate the difference is not statistically clear-cut at the 5% level."
+#| fig-alt: "Dot plot with two points and error bars: pre-regulation CPUE on left, post-regulation on right, error bars overlapping."
+
+ba |>
+  mutate(
+    cpue_lo = cpue_wmean - 1.96 * cpue_wse,
+    cpue_hi = cpue_wmean + 1.96 * cpue_wse,
+    label   = c("Pre-regulation\n(2018–2020)", "Post-regulation\n(2021–2023)")
+  ) |>
+  ggplot(aes(x = label, y = cpue_wmean, colour = regulation)) +
+  geom_errorbar(aes(ymin = cpue_lo, ymax = cpue_hi),
+                width = 0.12, linewidth = 0.9) +
+  geom_point(size = 5) +
+  scale_colour_manual(values = c(before = "#9ecae1", after = "#2171b5"),
+                      guide = "none") +
+  labs(x = NULL, y = "Weighted mean CPUE (fish / angler-hour)") +
+  theme_creel()
+```
+
 The before-after contrast assesses whether the average post-regulation CPUE differs from the average pre-regulation CPUE after accounting for the standard errors in both periods. A p-value below 0.05 indicates the data are unlikely to show this pattern by chance if the regulation had no effect; a p-value above 0.05 means the signal is present in the point estimates but the precision is insufficient to rule out sampling variability as the explanation.
 
 This two-period contrast is the simplest appropriate test for regulatory evaluation. Two assumptions are worth stating explicitly. First, it treats all pre-regulation years as exchangeable and all post-regulation years as exchangeable — that is, any year within a period is equally representative of that period's true mean. This breaks down in a fishery with strong interannual environmental variation (e.g., a drought year that suppressed fish availability regardless of regulation). Second, it does not account for positive autocorrelation between adjacent years, which makes the z-test overly liberal. The autocorrelation diagnostic in @sec-trend-autocorr addresses this caveat and explains when it matters most.
 
 ## Linear trend detection {#sec-trend-linear}
 
-Across the full six-year series, a weighted linear regression detects whether there is a directional trend in CPUE over time. Weighting by precision ($w_t = 1/\text{SE}_t^2$) gives years with tighter estimates more influence on the estimated slope, which is appropriate because imprecise years should not anchor the trend line as much as well-measured ones.
+Across the full six-year series, a weighted linear regression detects whether there is a directional trend in CPUE over time. Weighting by precision ($w_t = 1/\text{SE}_t^2$) gives years with tighter estimates more influence on the estimated slope. This weighting is not arbitrary — it is the generalized least squares (GLS) optimal solution when the error variance for each observation is known, which is precisely the situation here: the creel survey standard errors are estimates of the sampling variance, not nuisance parameters to be modeled. An unweighted regression would treat a high-CV year the same as a low-CV year, biasing the trend estimate toward the nosier data.
 
 ```{r}
 #| label: trend-lm
@@ -301,9 +329,11 @@ slope_est <- coefs["year", "Estimate"]
 slope_se  <- coefs["year", "Std. Error"]
 slope_p   <- coefs["year", "Pr(>|t|)"]
 
+t_crit <- qt(0.975, df = cpue_trend$df.residual)   # t, not z — only 4 df
 cat("Estimated annual change in CPUE:", round(slope_est, 5), "fish/hr/yr\n",
-    "95% CI: [", round(slope_est - 1.96*slope_se, 5), ",",
-                 round(slope_est + 1.96*slope_se, 5), "]\n",
+    "95% CI (t =", round(t_crit, 2), "): [",
+                 round(slope_est - t_crit * slope_se, 5), ",",
+                 round(slope_est + t_crit * slope_se, 5), "]\n",
     "p-value:", round(slope_p, 3), "\n")
 ```
 
@@ -369,7 +399,7 @@ cat("Pre-regulation slope (fish/hr/yr): ", round(slope_before, 4), "\n",
     round(coef(summary(cpue_piece))["year:regulationafter", "Pr(>|t|)"], 3), "\n")
 ```
 
-The sign and magnitude of each period-specific slope tells a cleaner story than the single linear slope. A negative pre-regulation slope combined with a positive post-regulation slope confirms that the trend direction reversed, not merely that the level changed. @fig-piecewise shows the predicted trajectories from the interaction model overlaid on the data.
+The sign and magnitude of each period-specific slope tells a cleaner story than the single linear slope. The pre-regulation slope is `r round(slope_before, 4)` fish/hr/yr (`r if(slope_before < 0) "declining" else "increasing"`) and the post-regulation slope is `r round(slope_after, 4)` fish/hr/yr (`r if(slope_after > 0) "recovering" else "continuing to decline"`). A reversal from negative to positive slope — even if imprecisely estimated — is qualitatively consistent with a regulatory benefit, independent of the interaction p-value. @fig-piecewise shows the predicted trajectories from the interaction model overlaid on the data.
 
 ```{r}
 #| label: fig-piecewise
@@ -435,6 +465,23 @@ cat("Lag-1 residual autocorrelation:", round(lag1_cor, 3), "\n",
     "Note: With only", n_yrs,
     "data points, formal autocorrelation tests have low power.\n",
     "Use directional guidance only.\n")
+```
+
+@fig-residuals plots the residuals over time. Positive-followed-by-positive or negative-followed-by-negative runs — where residuals of the same sign cluster in adjacent years — are the visual signature of positive autocorrelation. With only six points any pattern is anecdotal, but the plot gives a quick sanity check.
+
+```{r}
+#| label: fig-residuals
+#| fig-cap: "Residuals from the precision-weighted linear CPUE trend model, plotted by year. Positive residuals (CPUE above the trend line) and negative residuals (below) that cluster in adjacent years indicate positive autocorrelation, which makes p-values from the regression model overly optimistic. With only six years, any visible pattern should be interpreted cautiously."
+#| fig-alt: "Needle plot of regression residuals by year, showing year-to-year variation around the weighted trend line."
+
+tibble(year = harlan_annual$year, residual = residuals_wt) |>
+  ggplot(aes(x = year, y = residual)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_segment(aes(xend = year, yend = 0), linewidth = 0.8, colour = "#2171b5") +
+  geom_point(size = 3.5, colour = "#2171b5") +
+  scale_x_continuous(breaks = 2018:2023) +
+  labs(x = NULL, y = "Residual (fish / angler-hour)") +
+  theme_creel()
 ```
 
 With six data points, the lag-1 autocorrelation estimate is noisy and formal tests (Durbin-Watson) have almost no power. The practical guidance is: if the lag-1 autocorrelation is positive (which it typically is in fisheries data), the regression p-values understate the uncertainty. The appropriate response is to interpret marginal results (p = 0.04–0.10) cautiously, require longer time series before declaring trends significant, and use the confidence interval on the slope rather than a binary significance test.
@@ -508,7 +555,9 @@ harlan_annual |>
   arrange(year)
 ```
 
-Stable CV patterns across years — without a systematic jump in one year — are indirect evidence that sampling intensity did not change. A sudden increase in CV in one year is a flag to check whether that season had fewer sampled days, higher stratification error, or changed protocols. If design metadata are stored with each year's estimates (recommended: include `n_sampled_days`, `n_strata`, `season_days` as attributes), this check can be made direct rather than inferred from CV patterns.
+CV is a function of both design intensity (number of sampled days, $n_h$) and population variability (fish aggregation, within-stratum variance). A sudden *increase* in CV in one year could mean fewer sampled days — or it could mean a year with unusually patchy fish distribution that made catch rates more variable across interviews, even with the same design. Conversely, a year with unusually high abundance often produces *lower* CV because catch rates are more consistent when fish are widespread. These biological effects on CV are not design breaks and do not invalidate year-to-year comparisons. Only a CV jump coinciding with a documented design change (e.g., half the scheduled trips were cancelled mid-season) warrants treating that year separately.
+
+If design metadata are stored alongside each year's estimates — recommended practice is to include `n_sampled_days`, `n_strata`, and `season_days` as named attributes of the estimates object — this check can be made directly rather than inferred from CV patterns.
 
 If a design change occurred mid-series, the data should be analyzed in two separate windows (before and after the change) rather than as a single trend. The before-after contrast from the previous section provides a model for how to handle this: treat the change point as a break and estimate the level shift, rather than fitting a single trend line across an incompatible series.
 
