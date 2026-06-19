@@ -41,6 +41,7 @@ book:
         - chapters/12-effort-estimation.qmd
         - chapters/13-catch-harvest-and-release-estimation.qmd
         - chapters/14-cpue-estimation.qmd
+        - chapters/biological-data-from-interviews.qmd
         - chapters/15-uncertainty-diagnostics-and-precision.qmd
         - chapters/16-reporting-and-interpretation.qmd
     - part: Case Studies
