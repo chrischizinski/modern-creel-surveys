@@ -177,6 +177,16 @@ When setting up a new creel program, the unit decisions above should appear expl
 
 The `validate_creel_data()` function in `tidycreel` checks for these conditions and returns a structured report with any flagged inconsistencies. It should be run on every season's data before estimation begins.
 
+```{r}
+#| label: validate-ch2
+validate_creel_data(
+  counts     = harlan_counts,
+  interviews = harlan_interviews
+)
+```
+
+The Harlan data passes all checks cleanly. A pass here means the unit decisions recorded in the data — party-level, angler-hours, consistent access-type coding — are internally consistent and the tables are ready for domain-restricted estimation. Chapter 9 covers the full validation battery and what to do when checks fail.
+
 ## Reporting domains {#sec-domains}
 
 An estimand without a domain is incomplete. "Total harvest" is undefined unless it specifies harvest of which species, by which anglers, at which locations, during which period. The reporting domain is the set of fishing events to which an estimate is claimed to apply.

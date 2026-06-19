@@ -374,6 +374,16 @@ head(harlan_interviews)
 head(harlan_catch)
 ```
 
+Before any analysis proceeds, `validate_creel_data()` confirms the tables are internally consistent — correct column types, no impossible values, no missing identifiers. This one call is the first step in every reproducible creel workflow. Chapter 9 covers the full validation battery.
+
+```{r}
+#| label: validate-ch1
+validate_creel_data(
+  counts     = harlan_counts,
+  interviews = harlan_interviews
+)
+```
+
 The `schedule` table has one row per calendar day in the survey season, recording the day type (weekday or weekend) and whether that day was sampled. The `counts` table has one row per instantaneous count observation, linked to a day and period. The `interviews` table has one row per angler party per sampled day, recording trip characteristics and fishing effort. The `catch` table records the species composition of each party's catch — one row per species per party per catch type (harvested or released), linked back to the interview record by `interview_id`.
 
 This structure — four linked tables, not one wide spreadsheet — is the organizing principle of every chapter that follows. Understanding why these streams stay separate until the estimation step is the conceptual foundation of creel analysis in `tidycreel`. It is also the reason creel databases built from wide spreadsheets are difficult to analyze correctly: the joins required at estimation time are not obvious from a flat record, and the denominator for catch-rate calculations lives in a different table than the numerator.

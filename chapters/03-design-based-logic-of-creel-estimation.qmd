@@ -186,6 +186,33 @@ strata <- harlan_schedule |>
 strata
 ```
 
+@fig-sampling-fractions translates these frame and sample sizes into the inclusion probabilities and expansion weights that drive the HT estimator. Each sampled day stands in for $N_h / n_h$ similar days in the stratum.
+
+```{r}
+#| label: fig-sampling-fractions
+#| fig-cap: "Sampling fractions and expansion weights by stratum at Harlan Reservoir. Light bars show total eligible days per stratum (N_h); solid bars show sampled days (n_h). The expansion weight w = N_h / n_h, printed above each bar, is the factor applied to each sampled day in the HT estimator. Both strata were sampled at similar rates (~55%), so their weights are comparable."
+#| fig-alt: "Bar chart showing total versus sampled days for weekday and weekend strata, with expansion weight annotations above each bar."
+
+strata |>
+  mutate(
+    label = c(weekday = "Weekday", weekend = "Weekend")[day_type],
+    w     = round(N / n_sampled, 2)
+  ) |>
+  ggplot(aes(x = label)) +
+  geom_col(aes(y = N),         fill = "#c6dbef", colour = "#2171b5", linewidth = 0.5) +
+  geom_col(aes(y = n_sampled), fill = "#2171b5",  alpha  = 0.85) +
+  geom_text(
+    aes(y = N + 1.5, label = paste0("w = ", w)),
+    size = 3.8, fontface = "bold"
+  ) +
+  labs(
+    x       = NULL,
+    y       = "Days",
+    caption = "Solid: sampled days (n_h).  Faded: all eligible days (N_h).  w = N_h / n_h (expansion weight)."
+  ) +
+  theme_creel()
+```
+
 The daily $y_i$ values — the quantity we want to total over all days — are the sums of anglers counted per sampled day. Here we use the sum of boat and bank anglers across all count periods within each day as a measure of daily fishing activity.
 
 ```{r}
@@ -382,6 +409,72 @@ daily_y |>
     y = "Total anglers counted (sum across count periods)"
   ) +
   theme_creel()
+```
+
+@fig-variance-decomp quantifies how variance decomposes into between-period and within-period components for both strata. The dominance of between-period variance confirms that the priority for improving seasonal precision is more sampled days, not more counts per day already in the sample.
+
+```{r}
+#| label: fig-variance-decomp
+#| fig-cap: "Variance decomposition by stratum at Harlan Reservoir. Between-period variance (day-to-day variability in angler activity) accounts for nearly all total variance in both the weekday and weekend strata. Within-period variance (variability in counts across time periods within a sampled day) is negligible. Adding sampled days directly reduces the dominant component; adding count periods per day addresses only the minor component."
+#| fig-alt: "Stacked bar chart with weekday and weekend on the x-axis showing between-period variance far exceeding within-period variance in both strata."
+
+var_decomp <- lapply(c("weekday", "weekend"), function(st) {
+  ys  <- daily_y |> filter(day_type == st) |> pull(y)
+  D   <- strata  |> filter(day_type == st) |> pull(N)
+  d   <- length(ys)
+  bv  <- D^2 / d * (1 - d / D) * var(ys)
+  wvs <- harlan_counts |>
+    inner_join(
+      harlan_schedule |> filter(sampled, day_type == st) |> select(date),
+      by = "date"
+    ) |>
+    group_by(date) |>
+    summarise(v = var(boat_anglers + bank_anglers), .groups = "drop") |>
+    pull(v)
+  wv <- D / d * sum(replace(wvs, is.na(wvs), 0))
+  data.frame(
+    label     = c(weekday = "Weekday", weekend = "Weekend")[st],
+    component = c("Between-period", "Within-period"),
+    variance  = c(bv, wv)
+  )
+}) |>
+  bind_rows() |>
+  mutate(component = factor(component, levels = c("Within-period", "Between-period"))) |>
+  # add percentage labels for annotation
+  group_by(label) |>
+  mutate(pct = round(100 * variance / sum(variance))) |>
+  ungroup()
+
+# label positions: mid-point of between-period bar (the dominant component)
+labels_df <- var_decomp |>
+  filter(component == "Between-period") |>
+  group_by(label) |>
+  mutate(y_pos = sum(var_decomp$variance[var_decomp$label == label]) - variance / 2) |>
+  ungroup()
+
+ggplot(var_decomp, aes(x = label, y = variance, fill = component)) +
+  geom_col(position = "stack") +
+  geom_text(
+    data      = labels_df,
+    aes(y = y_pos, label = paste0(pct, "%")),
+    colour    = "white",
+    fontface  = "bold",
+    size      = 3.5
+  ) +
+  scale_fill_manual(
+    values = c("Between-period" = "#2171b5", "Within-period" = "#9ecae1"),
+    labels = c(
+      "Between-period" = "Between-period (day-to-day)",
+      "Within-period"  = "Within-period (count-to-count)"
+    )
+  ) +
+  labs(
+    x    = NULL,
+    y    = "Variance (count-index scale)",
+    fill = NULL
+  ) +
+  theme_creel() +
+  theme(legend.position = "bottom")
 ```
 
 ### The design effect
