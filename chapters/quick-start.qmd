@@ -1,0 +1,449 @@
+---
+title: "A First Creel Analysis"
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(tidycreel)
+library(ggplot2)
+library(dplyr)
+library(here)
+
+harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
+harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
+harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
+harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
+```
+
+## Purpose {#sec-qs-purpose}
+
+Chapters 1–3 established the *why* — why creel surveys exist, what they estimate, and what makes the estimators statistically defensible. This chapter establishes the *how* before the theory goes deeper.
+
+A complete `tidycreel` analysis has four steps: load the data, build a design object that encodes the survey structure, run the estimators, and summarize the results. This chapter walks through all four on the Harlan Reservoir dataset and produces defensible estimates of effort, harvest, and catch rate by the end. No theory not already in Chapters 1–3; just the pipeline running on real data.
+
+If you want to see the complete sequence in one view, it fits in about forty lines:
+
+```r
+# ── 1. Load ──────────────────────────────────────────────────────────────────
+schedule   <- readRDS(here("data/harlan_schedule.rds"))
+counts     <- readRDS(here("data/harlan_counts.rds"))
+interviews <- readRDS(here("data/harlan_interviews.rds"))
+catch      <- readRDS(here("data/harlan_catch.rds"))
+
+# ── 2. Pre-process ───────────────────────────────────────────────────────────
+interviews <- interviews |>
+  left_join(
+    catch |> group_by(interview_id) |>
+      summarise(
+        total_catch = sum(n_fish),
+        harvested   = sum(n_fish[catch_type == "harvested"]),
+        .groups     = "drop"
+      ),
+    by = "interview_id"
+  ) |>
+  mutate(across(c(total_catch, harvested), \(x) if_else(is.na(x), 0L, as.integer(x))))
+
+# ── 3. Build design object ───────────────────────────────────────────────────
+design <- creel_design(schedule, date = "date", strata = "day_type") |>
+  add_counts(counts, count_time_col = "count_time") |>
+  add_interviews(interviews,
+    catch = "total_catch", harvest = "harvested", effort = "hours_fished",
+    trip_duration = "hours_fished", trip_status = "trip_status",
+    n_anglers = "n_anglers", angler_type = "angler_type",
+    angler_method = "angler_method", interview_type = "access"
+  ) |>
+  add_catch(catch,
+    catch_uid = "interview_id", interview_uid = "interview_id",
+    species = "species", count = "n_fish", catch_type = "catch_type"
+  )
+
+# ── 4. Estimate ──────────────────────────────────────────────────────────────
+effort  <- estimate_effort(design,          target = "stratum_total")
+harvest <- estimate_total_harvest(design,   target = "stratum_total")
+cpue    <- estimate_catch_rate(design)
+```
+
+The rest of this chapter works through each block in detail, explaining what each function expects and what its output means. Chapters 9–16 go deeper into every step.
+
+## The Harlan data {#sec-qs-data}
+
+Four tables form the Harlan Reservoir dataset. They are linked by `date` and `interview_id` and must stay separate until the estimation step — collapsing them prematurely discards the information needed to apply the correct expansion weights. Chapter 9 covers the linked-table structure in detail; for now, looking at each table's shape is enough.
+
+```{r}
+#| label: load-data-qs
+harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
+harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
+harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
+harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
+```
+
+```{r}
+#| label: peek-qs
+head(harlan_schedule, 3)
+head(harlan_counts,   3)
+head(harlan_interviews, 3)
+head(harlan_catch,    3)
+```
+
+The four tables represent four levels of resolution: which days were in the survey and which were sampled (`schedule`), instantaneous counts of anglers on sampled days (`counts`), one record per angler party per sampled day (`interviews`), and one record per species per catch type per party (`catch`). Every downstream estimate traces back to this structure.
+
+Before building the design, confirm the tables are internally consistent:
+
+```{r}
+#| label: validate-qs
+validate_creel_data(
+  counts     = harlan_counts,
+  interviews = harlan_interviews
+)
+```
+
+A clean pass here means no column-type errors, no impossible values, and no missing identifiers. If any check fails, `validate_creel_data()` returns the specific failing rows — investigate and fix before proceeding.
+
+## Building the design object {#sec-qs-design}
+
+The `creel_design` object is the central data structure in `tidycreel`. Every estimation function takes a design object as its first argument. The object encodes the survey structure — which days were eligible, which were sampled, and at what rate — so that estimators can apply the correct expansion weights automatically. The analyst does not supply expansion factors manually; they are derived from the design.
+
+Construction proceeds in four steps, each adding one layer of information.
+
+### Step 1: schedule {#sec-qs-schedule}
+
+`creel_design()` initializes the object from the sampling calendar. The `date` argument names the date column; `strata` names the column that defines sampling strata.
+
+```{r}
+#| label: qs-design-base
+#| message: false
+harlan_design <- creel_design(
+  calendar = harlan_schedule,
+  date     = "date",
+  strata   = "day_type"
+)
+
+harlan_design
+```
+
+At this stage the design knows the stratum structure and how many days were sampled in each stratum. The inclusion probability for each stratum — the ratio of sampled to eligible days — is implicit in these counts. Weekend days were sampled at roughly the same rate as weekdays, so their expansion weights are similar.
+
+### Step 2: counts {#sec-qs-counts}
+
+`add_counts()` attaches the count observations and identifies the column recording the time of each count. The count time matters because the instantaneous-count estimator weights each observation by its position in the sampling shift; a count at 8:00 AM represents a different portion of the day than one at 14:30.
+
+```{r}
+#| label: qs-design-counts
+#| message: false
+harlan_design <- add_counts(
+  design         = harlan_design,
+  counts         = harlan_counts,
+  count_time_col = "count_time"
+)
+
+harlan_design
+```
+
+The design now holds `r nrow(harlan_counts)` count observations linked to `r n_distinct(harlan_counts$date)` sampled days. A `survey.design2` object is constructed internally — this is the weighted survey object that estimation functions operate on.
+
+### Step 3: interviews {#sec-qs-interviews}
+
+`add_interviews()` requires a single column recording total catch (or harvest) per party. The Harlan interviews table does not include a precomputed catch total, so the needed column is derived from the catch table first. The join must start from `harlan_interviews` to preserve parties that caught nothing — they must appear as zeros, not as missing rows.
+
+```{r}
+#| label: qs-harvest-totals
+# Both columns in one pass: total_catch (all fish) and harvested (retained only)
+catch_by_party <- harlan_catch |>
+  group_by(interview_id) |>
+  summarise(
+    total_catch = sum(n_fish),
+    harvested   = sum(n_fish[catch_type == "harvested"]),
+    .groups     = "drop"
+  )
+
+harlan_interviews_prep <- harlan_interviews |>
+  left_join(catch_by_party, by = "interview_id") |>
+  mutate(across(c(total_catch, harvested), \(x) if_else(is.na(x), 0L, as.integer(x))))
+
+# Confirm no rows were lost
+nrow(harlan_interviews_prep) == nrow(harlan_interviews)
+```
+
+Two columns are needed: `total_catch` (all fish encountered, harvested + released) and `harvested` (fish retained). The `catch_rate` estimator uses `total_catch`; `estimate_total_harvest()` uses `harvested`. Parties with zero catch appear in `harlan_interviews` but not in `harlan_catch`; starting the join from the interviews table ensures those parties contribute zeros, not missing rows.
+
+```{r}
+#| label: qs-design-interviews
+#| message: false
+harlan_design <- add_interviews(
+  design         = harlan_design,
+  interviews     = harlan_interviews_prep,
+  catch          = "total_catch",
+  harvest        = "harvested",
+  effort         = "hours_fished",
+  trip_duration  = "hours_fished",
+  trip_status    = "trip_status",
+  n_anglers      = "n_anglers",
+  angler_type    = "angler_type",
+  angler_method  = "angler_method",
+  interview_type = "access"
+)
+
+harlan_design
+```
+
+The `interview_type = "access"` argument signals that these are access-point interviews — parties intercepted at a fixed exit location at the end of their trip, or occasionally mid-trip. This affects how incomplete trips are handled during estimation (Chapter 11).
+
+### Step 4: species-level catch {#sec-qs-catch}
+
+`add_catch()` links the species-level records to the design. These are used by `estimate_total_catch()`, `estimate_total_harvest()`, and related functions that need to disaggregate catch by species.
+
+```{r}
+#| label: qs-design-catch
+#| message: false
+harlan_design <- add_catch(
+  design        = harlan_design,
+  data          = harlan_catch,
+  catch_uid     = "interview_id",
+  interview_uid = "interview_id",
+  species       = "species",
+  count         = "n_fish",
+  catch_type    = "catch_type"
+)
+
+harlan_design
+```
+
+The full design object is complete. It holds the calendar, count observations, interview records, and species-level catch — everything the estimators need.
+
+### The full pipe chain {#sec-qs-pipe}
+
+In practice the four-step build is written as a single pipe chain. The intermediate objects are never needed separately, so there is no reason to name them:
+
+```{r}
+#| label: qs-full-pipeline
+#| message: false
+harlan_design <- creel_design(
+  calendar = harlan_schedule,
+  date     = "date",
+  strata   = "day_type"
+) |>
+  add_counts(
+    counts         = harlan_counts,
+    count_time_col = "count_time"
+  ) |>
+  add_interviews(
+    interviews     = harlan_interviews_prep,
+    catch          = "total_catch",
+    harvest        = "harvested",
+    effort         = "hours_fished",
+    trip_duration  = "hours_fished",
+    trip_status    = "trip_status",
+    n_anglers      = "n_anglers",
+    angler_type    = "angler_type",
+    angler_method  = "angler_method",
+    interview_type = "access"
+  ) |>
+  add_catch(
+    data          = harlan_catch,
+    catch_uid     = "interview_id",
+    interview_uid = "interview_id",
+    species       = "species",
+    count         = "n_fish",
+    catch_type    = "catch_type"
+  )
+
+harlan_design
+```
+
+`harlan_design` now holds the full survey structure and is ready for estimation.
+
+## Running the estimates {#sec-qs-estimates}
+
+Three estimation functions cover the most common creel survey outputs: total effort, total harvest, and catch rate. All take the design object as their first argument.
+
+### Effort {#sec-qs-effort}
+
+`estimate_effort()` applies the stratified Horvitz-Thompson estimator to the count data, expanding sampled-day observations to season totals. The `target = "stratum_total"` argument requests the full-season expansion (as opposed to a summary of sampled days only).
+
+```{r}
+#| label: qs-effort
+effort <- estimate_effort(harlan_design, target = "stratum_total")
+effort$estimates
+```
+
+Total seasonal effort at Harlan is approximately `r formatC(round(effort$estimates$estimate), big.mark=",")` angler-hours (95% CI: `r formatC(round(effort$estimates$ci_lower), big.mark=",")`–`r formatC(round(effort$estimates$ci_upper), big.mark=",")`). The standard error reflects between-day variability in angler counts — on some sampled days the reservoir was nearly empty, on others it was busy. That day-to-day spread, scaled by the expansion weight for each stratum, is the primary source of uncertainty in the seasonal total.
+
+Effort broken down by stratum shows where the season's angling time was concentrated:
+
+```{r}
+#| label: qs-effort-strata
+effort_strata <- estimate_effort(
+  harlan_design,
+  by     = day_type,
+  target = "stratum_total"
+)
+effort_strata$estimates
+```
+
+@fig-qs-effort shows the stratum-level estimates with 95% confidence intervals.
+
+```{r}
+#| label: fig-qs-effort
+#| fig-cap: "Seasonal angler-hour estimates with 95% confidence intervals at Harlan Reservoir, by day type. Error bars reflect between-day variability in angler counts scaled by the stratum expansion weight. The relative widths of the confidence intervals reflect both stratum sample size and day-to-day variability in counts."
+#| fig-alt: "Bar chart showing weekday and weekend estimated angler-hours with confidence interval error bars."
+
+effort_strata$estimates |>
+  mutate(label = c(weekday = "Weekday", weekend = "Weekend")[day_type]) |>
+  ggplot(aes(x = label, y = estimate, fill = day_type)) +
+  geom_col(alpha = 0.85) +
+  geom_errorbar(
+    aes(ymin = ci_lower, ymax = ci_upper),
+    width     = 0.25,
+    linewidth = 0.7,
+    colour    = "grey30"
+  ) +
+  scale_fill_manual(
+    values = c(weekday = "#2171b5", weekend = "#cb181d"),
+    guide  = "none"
+  ) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    x = NULL,
+    y = "Estimated angler-hours (seasonal total)"
+  ) +
+  theme_creel()
+```
+
+### Total harvest {#sec-qs-harvest}
+
+`estimate_total_harvest()` multiplies interview-based harvest rates by the design-weighted effort estimate to produce a season total with variance. It uses the same design object and expansion structure as `estimate_effort()`.
+
+```{r}
+#| label: qs-harvest
+harvest <- estimate_total_harvest(harlan_design, target = "stratum_total")
+harvest$estimates
+```
+
+Estimated total harvest across the season is approximately `r formatC(round(harvest$estimates$estimate), big.mark=",")` fish (95% CI: `r formatC(round(harvest$estimates$ci_lower), big.mark=",")`–`r formatC(round(harvest$estimates$ci_upper), big.mark=",")`). As with effort, the confidence interval reflects the between-day variability in harvest rates across sampled days.
+
+### Catch rate (CPUE) {#sec-qs-cpue}
+
+`estimate_catch_rate()` returns the ratio-of-means catch per unit effort. Unlike the totals above, CPUE does not use `target = "stratum_total"` because it is a rate, not a total — it is already expressed per angler-hour and does not need expansion.
+
+```{r}
+#| label: qs-cpue
+cpue <- estimate_catch_rate(harlan_design)
+cpue$estimates
+```
+
+CPUE is `r round(cpue$estimates$estimate, 2)` fish per angler-hour (95% CI: `r round(cpue$estimates$ci_lower, 2)`–`r round(cpue$estimates$ci_upper, 2)`). This rate is computed over all species combined and all angler types. Chapter 14 disaggregates CPUE by angler type, by species, and compares the ratio-of-means estimator to the mean-of-ratios alternative.
+
+## A quick results summary {#sec-qs-summary}
+
+The three estimates can be assembled into a single table. This is the minimum viable results report — a starting point for the fuller reporting format in Chapter 16.
+
+```{r}
+#| label: qs-summary-table
+bind_rows(
+  effort$estimates  |>
+    select(estimate, se, ci_lower, ci_upper) |>
+    mutate(quantity = "Effort",        unit = "angler-hours"),
+  harvest$estimates |>
+    select(estimate, se, ci_lower, ci_upper) |>
+    mutate(quantity = "Total harvest", unit = "fish"),
+  cpue$estimates    |>
+    select(estimate, se, ci_lower, ci_upper) |>
+    mutate(quantity = "CPUE",         unit = "fish / hr")
+) |>
+  mutate(
+    estimate = round(estimate, 2),
+    se       = round(se,       2),
+    ci_lower = round(ci_lower, 2),
+    ci_upper = round(ci_upper, 2)
+  ) |>
+  select(quantity, unit, estimate, se, ci_lower, ci_upper)
+```
+
+The CV for each estimate — `se / estimate × 100` — tells you how precise the estimate is relative to its own scale. An effort CV below 20% is adequate for most management decisions; catch rate CVs are typically higher because they compound uncertainty from both the effort and interview streams.
+
+```{r}
+#| label: qs-cv
+bind_rows(
+  effort$estimates  |> mutate(quantity = "Effort"),
+  harvest$estimates |> mutate(quantity = "Total harvest"),
+  cpue$estimates    |> mutate(quantity = "CPUE")
+) |>
+  mutate(
+    cv_pct = round(se / estimate * 100, 1)
+  ) |>
+  select(quantity, estimate, se, cv_pct)
+```
+
+### Species composition of harvest {#sec-qs-species}
+
+Harvest by species is available directly from the catch table as a raw interview summary. This is not a design-weighted estimate — it represents what the interviewed sample reported, not an expansion to the full season. Chapter 13 produces the design-weighted species-specific harvest totals.
+
+```{r}
+#| label: fig-qs-species
+#| fig-cap: "Raw interview harvest counts by species at Harlan Reservoir. These are unweighted sums across all interviewed parties — not design-weighted season estimates. The species composition and relative magnitudes are broadly representative of the fishery, but the absolute counts require design-weighting for use in management reporting. See Chapter 13 for weighted species-specific estimates."
+#| fig-alt: "Horizontal bar chart showing fish harvest counts by species from the interview sample, ordered by total harvest."
+
+harlan_catch |>
+  filter(catch_type == "harvested") |>
+  group_by(species) |>
+  summarise(total_n = sum(n_fish), .groups = "drop") |>
+  filter(total_n > 0) |>
+  mutate(species = reorder(species, total_n)) |>
+  ggplot(aes(x = total_n, y = species)) +
+  geom_col(fill = "#2171b5", alpha = 0.85) +
+  labs(
+    x = "Fish harvested (interview counts, not design-weighted)",
+    y = NULL
+  ) +
+  theme_creel()
+```
+
+@fig-qs-species shows the species composition of angler harvest in the interview sample. White Bass and Walleye dominate. The species mix matters for management: a harvest regulation that targets Walleye — the most regulated species in most Nebraska reservoir fisheries — should be informed by a design-weighted Walleye-specific harvest estimate, not the raw interview count shown here.
+
+### Harvest by angler type {#sec-qs-angler-harvest}
+
+The overall CPUE of `r round(cpue$estimates$estimate, 2)` fish per angler-hour and total harvest of `r formatC(round(harvest$estimates$estimate), big.mark=",")` fish are fishery-wide averages that pool boat and bank anglers. The interview data show whether those averages conceal important within-fishery differences.
+
+```{r}
+#| label: fig-qs-harvest-type
+#| fig-cap: "Harvest per party by angler type at Harlan Reservoir (completed trips only). Points are individual party records, with median and interquartile range overlaid. Differences in harvest distributions between boat and bank anglers motivate domain-restricted estimates in Chapter 13. The overall harvest and CPUE estimates from this chapter pool both types; Chapter 13 disaggregates them."
+#| fig-alt: "Box plots showing harvest per party for bank and boat anglers, with boat anglers showing a wider spread at the upper end."
+
+harlan_interviews_prep |>
+  filter(trip_status == "complete") |>
+  ggplot(aes(x = angler_type, y = harvested, fill = angler_type)) +
+  geom_jitter(alpha = 0.25, width = 0.18, colour = "grey40", size = 0.8) +
+  geom_boxplot(alpha = 0.65, outlier.shape = NA, width = 0.45) +
+  scale_fill_manual(
+    values = c(bank = "#cb181d", boat = "#2171b5"),
+    guide  = "none"
+  ) +
+  scale_x_discrete(labels = c(bank = "Bank", boat = "Boat")) +
+  labs(
+    x = NULL,
+    y = "Fish harvested per party (complete trips)"
+  ) +
+  theme_creel()
+```
+
+@fig-qs-harvest-type shows that boat anglers tend to harvest more fish per party than bank anglers, but both distributions are right-skewed with many zero-harvest parties. Harvest rates that differ between access types mean the pooled estimate in this chapter is a weighted average — weighted by how many angler-hours came from each type. Whether that pooled average is the right quantity for the management question depends on whether the question applies to the whole fishery or to one access type specifically. Chapter 13 demonstrates domain-restricted harvest estimation that produces separate estimates for boat and bank anglers.
+
+## What this chapter skipped {#sec-qs-skipped}
+
+This pipeline produces correct estimates for the Harlan dataset because the dataset was purpose-built to run cleanly. Real data rarely cooperates. The chapters that follow address the complications:
+
+- **Part II (Survey Designs):** how the design choices — access-point vs. roving, shift structure, stratification — affect what the estimates mean and how they are computed.
+- **Chapter 9 (Linked Tables):** why the four-table structure is the right format and what goes wrong when tables are collapsed prematurely.
+- **Chapter 10 (Design Object):** what the `creel_design` object stores internally and how to inspect or audit it.
+- **Chapter 11 (Cleaning):** how data-quality problems (outlier trips, unrecognized species codes, incomplete trips) affect estimates and how to detect and handle them.
+- **Chapters 12–15 (Estimation):** how each estimator works, what assumptions it makes, how to diagnose violations, and how to compute domain-restricted estimates (by species, by angler type, by month).
+- **Chapter 16 (Reporting):** how to assemble all estimates into a complete, reproducible report with inline R narrative.
+
+The pipeline here is the skeleton. The rest of the book puts flesh on it.
+
+## Takeaway {#sec-qs-takeaway}
+
+Four functions — `creel_design()`, `add_counts()`, `add_interviews()`, `add_catch()` — build the design object. Three functions — `estimate_effort()`, `estimate_total_harvest()`, `estimate_catch_rate()` — produce the estimates. Everything else in the `tidycreel` workflow is a variation on this structure: more estimation targets, more diagnostic checks, more domain-restricted summaries.
+
+The numbers from this chapter — `r formatC(round(effort$estimates$estimate), big.mark=",")` angler-hours, `r formatC(round(harvest$estimates$estimate), big.mark=",")` fish harvested, `r round(cpue$estimates$estimate, 2)` fish per angler-hour — are the same numbers that appear throughout Chapters 12–16 as the estimation chapters develop each estimator in detail. Running this pipeline first means the detailed chapters are extending a result you have already seen, not building toward a result you have not.
