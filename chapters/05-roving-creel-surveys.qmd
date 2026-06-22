@@ -193,7 +193,7 @@ The effort estimator for a progressive count follows the same general form as th
 
 Every roving interview records an angler in the middle of a trip. The angler started fishing at some time before the interview and will continue fishing for some time afterward. What the interview captures is the portion of the trip that had already elapsed at the moment of contact.
 
-This creates a censoring problem. The analyst observes catch-so-far and effort-so-far, but not the completed trip's catch and effort. The ratio of catch-so-far to effort-so-far — the mid-trip catch rate — is not the same as the ratio of completed-trip catch to completed-trip effort. It will equal the completed-trip rate only if the rate at which fish are caught is constant throughout the trip (stationary catch rate). That constancy assumption is rarely defensible: anglers move, feeding activity changes with light and temperature, and successful anglers either quit early when they reach a bag limit or fish longer to maximize harvest.
+This creates a censoring problem. The analyst observes catch-so-far and effort-so-far, but not the trip's eventual catch and duration. The ratio of catch-so-far to effort-so-far — the mid-trip catch rate — is not the same as the ratio of completed-trip catch to completed-trip effort. It equals the completed-trip rate only if fish are caught at a constant rate throughout the trip (stationary catch rate). That constancy assumption is rarely defensible: anglers move, feeding activity changes with light and temperature, and successful anglers either quit early when they reach a bag limit or fish longer to maximize harvest.
 
 The Harlan dataset reflects the incomplete-trip problem directly. Of 600 total interviews, 210 are flagged as incomplete — 35% of the interview record:
 
@@ -232,7 +232,7 @@ harlan_interviews |>
   )
 ```
 
-Completed trips at Harlan averaged 4.74 hours. Incomplete trips averaged 1.71 hours — about 36% of the completed-trip mean rather than 50%, reflecting that the distribution of trip start times is not uniform and that some anglers were contacted early in the morning shift before they had been out long.
+Completed trips at Harlan averaged 4.74 hours. Incomplete trips averaged 1.71 hours, about 36% of the completed-trip mean rather than 50%, reflecting that the distribution of trip start times is not uniform and that some anglers were contacted early in the morning shift before they had been out long.
 
 ```{r}
 #| label: fig-trip-duration-comparison
@@ -549,7 +549,7 @@ When `trip_status = "incomplete"`, downstream functions in `tidycreel` automatic
 summarize_trips(harlan_design_final)
 ```
 
-The output reports total interview counts, the complete/incomplete split, and summary statistics for elapsed duration by trip status. The 4.74-hour mean for complete trips and 1.71-hour mean for incomplete trips match the manual calculation from the length-of-stay comparison earlier in this chapter — confirming that the design object carries the same data used in the worked examples and that the trip-status routing is correct before estimation proceeds.
+The output reports total interview counts, the completed/incomplete split, and summary statistics for elapsed duration by trip status. The 4.74-hour mean for completed trips and 1.71-hour mean for incomplete trips match the manual calculation from the length-of-stay comparison earlier in this chapter, confirming that the design object carries the same data used in the worked examples and that the trip-status routing is correct before estimation proceeds.
 
 ## When to use roving surveys
 
@@ -570,7 +570,7 @@ The output reports total interview counts, the complete/incomplete split, and su
 
 : Design choice between access-point and roving creel surveys. {#tbl-roving-choice}
 
-Pollock et al. [-@pollock1994, Ch. 15] note that the roving-roving design — roving counts paired with roving interviews — "despite some serious drawbacks, is probably the most widely used on-site creel survey design." Its ubiquity reflects the reality that most productive fisheries in North America do not funnel through a compact access network. Rivers, reservoirs with dispersed access, natural lakes with extensive shoreline, and coastal fisheries all require some form of roving contact if bank and shoreline anglers are to be sampled.
+Pollock et al. [-@pollock1994, Ch. 15] note that the roving design — roving counts paired with roving interviews — "despite some serious drawbacks, is probably the most widely used on-site creel survey design." Its ubiquity reflects the reality that most productive fisheries in North America do not funnel through a compact access network. Rivers, reservoirs with dispersed access, natural lakes with extensive shoreline, and coastal fisheries all require some form of roving contact if bank and shoreline anglers are to be sampled.
 
 The serious drawbacks Pollock et al. identify are real. Effort estimates from instantaneous counts can have severe negative bias when count times are not randomized or when clerks systematically avoid high-pressure areas. Incomplete-trip interviews require the analyst to choose the correct estimator and apply the truncation rule; the wrong choice produces biased catch rate estimates that persist undetected through the full seasonal expansion. And the length-of-stay bias — the oversampling of long trips — cannot be fully corrected without additional data on the distribution of completed trip lengths, which roving surveys cannot supply.
 
@@ -600,6 +600,6 @@ Understanding these constraints is not an argument against roving surveys. It is
 
 ## Takeaway
 
-Roving surveys extend creel sampling to fisheries that access-point designs cannot reach. The price of that flexibility is methodological discipline: effort must come from counts, catch rate must come from mid-trip interviews using the mean-of-ratios estimator, and trips shorter than 30 minutes should be excluded to keep variance manageable. The length-of-stay bias that is intrinsic to roving contact cannot be corrected from within the survey data, but its direction and approximate magnitude can be assessed by comparing mean elapsed interview time to the mean completed trip length from any completed-trip contacts available in the same program.
+Roving surveys extend creel sampling to fisheries that access-point designs cannot reach. The price of that flexibility is methodological discipline: effort must come from counts, catch rate must come from mid-trip interviews using the mean-of-ratios estimator, and trips shorter than 30 minutes should be excluded to keep variance manageable. The length-of-stay bias that is intrinsic to roving contact cannot be corrected from within the survey data, but its direction and approximate magnitude can be assessed by comparing mean elapsed interview time to the mean completed-trip duration from any completed-trip contacts available in the same program.
 
 At Harlan, the 210 incomplete interviews produced a Walleye MOR of approximately 0.29 fish/hour after truncation — a substantially lower figure than the ROM applied naively (0.61 fish/hour) or than the completed-trip ROM from access-point contacts (0.91 fish/hour). The gap between those three numbers summarizes the main risks of misapplying estimators: the wrong formula does not produce a warning, it just produces a number that looks plausible and is wrong.

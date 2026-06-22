@@ -26,11 +26,11 @@ What makes access-point surveys tractable is that the sampling frame is physical
 
 The design is not without limitations. Access networks rarely cover an entire fishery. Shore anglers who reach the water through unimproved trails, anglers using private docks, and ice anglers accessing frozen surfaces through locations not included in the ramp network may all be missed. Whether those exclusions matter depends on the management question and the share of total effort they represent.
 
-This chapter works through the access-point design from first principles: how the frame is defined, how counts translate to effort estimates, how completed-trip interviews produce catch rates through the ratio-of-means estimator, and where the design is vulnerable to bias. The example throughout is Harlan Reservoir, where boat anglers depart and return through a primary ramp and a secondary shore-fishing area.
+This chapter works through the access-point design from first principles: how the frame is defined, how counts translate to effort estimates, how completed-trip interviews produce catch rates through the ratio-of-means estimator, and where the design is vulnerable to bias. The example throughout is Harlan Reservoir, where the access network is simplified to a primary ramp and a secondary bank-fishing area.
 
 ## Constructing the access-point frame
 
-The access-point frame is the set of spatial-temporal opportunities that define the survey's population of inference. As Pope et al. ([-@pope_chapter]) emphasize, a frame that fails to enumerate real fishing activity produces estimates that undercount the true total, regardless of how carefully the covered access points are sampled.
+The access-point frame is the set of spatial and temporal opportunities that define the survey's population of inference. As Pope et al. ([-@pope_chapter]) emphasize, a frame that fails to enumerate real fishing activity produces estimates that undercount the true total, regardless of how carefully the covered access points are sampled.
 
 A well-constructed frame answers four questions explicitly:
 
@@ -277,7 +277,7 @@ When a party is interviewed as it leaves, the interview captures the entire trip
 
 Compare this with a survey that intercepts anglers mid-trip. A party interrupted at midday has fished some fraction of their eventual trip. If the interview uses the hours-so-far as the denominator in a catch-rate calculation, the result can be biased in ways that are difficult to quantify. Short-trip parties are more likely to have completed their trip when the interviewer arrives; long-trip parties are more likely to still be fishing. This creates a selection probability that depends on trip length — and trip length is correlated with what anglers catch.
 
-The completed-trip feature of access-point surveys breaks that correlation. At departure, every party — short-trip or long-trip — has an equal probability of being intercepted (assuming the technician is present and interviews all departing parties). The selection probability does not depend on trip duration. This property is what justifies the ratio-of-means estimator.
+The completed-trip feature of access-point surveys breaks that correlation. At departure, every party - short-trip or long-trip - has the same probability of being intercepted, assuming the technician is present and interviews all departing parties. The selection probability does not depend on trip duration. That is why the ratio-of-means is the right estimator here.
 
 ```{r}
 #| label: trip-status
@@ -680,7 +680,7 @@ type_catch |>
   )
 ```
 
-The Walleye ROM differs by more than an order of magnitude between boat and bank anglers. If boat and bank anglers access the fishery through separate physical locations, a design that samples only the boat ramp produces a catch-rate estimate that applies only to boat anglers. Reporting that estimate as a reservoir-wide catch rate implicitly excludes bank angling effort — and the exclusion is invisible in the estimate itself.
+The Walleye ROM differs sharply between boat and bank anglers. If boat and bank anglers access the fishery through separate physical locations, a design that samples only the boat ramp produces a catch-rate estimate that applies only to boat anglers. Reporting that estimate as a reservoir-wide catch rate implicitly excludes bank angling effort, and the exclusion is invisible in the estimate itself.
 
 ## `tidycreel` support
 
@@ -750,7 +750,7 @@ Access-point surveys are vulnerable to a specific set of failures that coverage 
 
 **Recording count period and interview period at different levels.** Counts record anglers at specific times within a shift. Interviews record parties over the duration of a trip. If the data management system does not link counts and interviews to the same shift period, the effort-catch rate multiplication can apply the wrong count-based effort to the wrong set of interviews. The section and period columns in the Harlan data enforce this alignment; straying from a consistent period key in the field creates mismatches that are difficult to detect after the fact.
 
-**Optimizing count times toward peak activity.** Scheduling counts when the ramp is busiest produces a mean count higher than the true time-averaged density. $\hat{E}_i = T \bar{x}_i$ is unbiased only when count times are drawn without regard to expected angler density. Stratifying count times to cover the full shift window — or drawing them randomly — guards against this form of upward bias.
+**Scheduling counts around peak activity.** Scheduling counts when the ramp is busiest produces a mean count higher than the true time-averaged density. $\hat{E}_i = T \bar{x}_i$ is unbiased only when count times are drawn without regard to expected angler density. Stratifying count times to cover the full shift window, or drawing them randomly, guards against this form of upward bias.
 
 ## Summary
 
