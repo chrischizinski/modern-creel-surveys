@@ -59,7 +59,7 @@ Every creel survey produces estimates of some subset of five population quantiti
 
 Effort ($E$) is the total fishing time expended by all anglers at a waterbody or site during the target period, expressed in angler-hours. It is the foundational estimand: it appears in the denominator of catch rate, serves as the multiplier that scales catch-rate estimates up to total catch, and is the primary measure of recreational pressure used by managers to track how intensively a fishery is used. Getting $E$ wrong contaminates every downstream estimate.
 
-Effort is derived from counts, not from interviews. An instantaneous count records how many anglers are present at a moment in time; that observation, multiplied by the length of the sampling period, yields an estimate of angler-hours. Interviews provide catch and fishing time per party, which enter the catch-rate calculation but not the effort estimate directly. This separation of sources is structural and intentional, and is explained in @sec-counts-not-trips.
+Effort is derived from counts, not from interviews. An instantaneous count records how many anglers are present at a moment in time; that observation, together with the length of the sampling period and the relevant trip-duration information, enters an estimator of angler-hours. Interviews provide catch and fishing time per party, which enter the catch-rate calculation but not the effort estimate directly. This separation of sources is structural and intentional, and is explained in @sec-counts-not-trips.
 
 ### Total catch and its components
 
@@ -91,7 +91,7 @@ Catch rate ($\widehat{\text{cpue}}$), harvest rate ($\hat{H}/\hat{E}$), and rele
 
 The five core estimands — effort, total catch, total harvest, total release, and catch rate — are the primary targets of most creel surveys. Several secondary quantities are frequently reported alongside them. They are derived from the same field records but answer different management questions.
 
-**Trip success rate** is the proportion of completed angler-trips that resulted in at least one fish of the target species being caught. It is a angler-experience metric rather than a population-dynamics metric: a fishery can have a low trip success rate but high total harvest if the successful trips are extremely productive. Conversely, high trip success with low total catch indicates that many anglers are catching exactly one fish and not much more. Trip success rate is computed directly from the interview stream without reference to the count-based effort estimate.
+**Trip success rate** is the proportion of completed angler-trips that resulted in at least one fish of the target species being caught. It is an angler-experience metric rather than a population-dynamics metric: a fishery can have a low trip success rate but high total harvest if the successful trips are extremely productive. Conversely, high trip success with low total catch indicates that many anglers are catching exactly one fish and not much more. Trip success rate is computed directly from the interview stream without reference to the count-based effort estimate.
 
 **Harvest rate** is the proportion of caught fish that were retained: $\hat{H}/\hat{C}$. A declining harvest rate over time on a catch-and-release regulation may indicate angler compliance; a suddenly high harvest rate may indicate unregulated sites or non-compliance with bag limits. Harvest rate can be computed at the species level from the catch table.
 
@@ -433,7 +433,7 @@ walleye_rates
 The harvest rates from Step 3 must be multiplied by access-type-specific effort estimates — boat-angler effort for the boat rate, bank-angler effort for the bank rate — not by total effort. If boat-angler effort is unavailable because counts did not distinguish boat and bank anglers, the correct response is to combine the two access types into a single domain rather than multiply a boat-only rate by total effort. This is the domain consistency rule applied to a concrete case.
 
 ::: {.callout-note}
-This step-by-step pipeline is shown here for transparency. In practice, `estimate_total_harvest()` handles the join, zero-filling, and rate computation internally, and `estimate_effort()` supplies the effort denominator from the count table. The underlying arithmetic is identical; only the interface changes. Chapter 4 replaces this manual pipeline with the full function workflow.
+This manual version stays visible here so the domain logic is easy to follow. In practice, `estimate_total_harvest()` handles the join, zero-filling, and rate computation internally, and `estimate_effort()` supplies the effort denominator from the count table. The underlying arithmetic is identical; only the interface changes. Chapter 4 replaces this manual pipeline with the full function workflow.
 :::
 
 ## Visualizing domain structure {#sec-domain-viz}
@@ -542,7 +542,7 @@ walleye_hpue_boat <- walleye_h |>
 # walleye_harvest_total <- walleye_hpue_boat$hpue * boat_effort$effort_total
 ```
 
-The pattern is always the same: filter to the domain, compute the rate at the interview level, compute the effort estimate for the matching domain, multiply. Writing the specification before writing any code makes it visible whether each filtering step matches the stated domain.
+The workflow is consistent: filter to the domain, compute the rate at the interview level, compute the effort estimate for the matching domain, then multiply. Writing the specification before writing any code makes it visible whether each filtering step matches the stated domain.
 
 ## Before you estimate: a domain checklist {#sec-checklist}
 

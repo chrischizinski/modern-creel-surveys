@@ -14,13 +14,13 @@ library(here)
 
 ## Purpose {#sec-ch1-purpose}
 
-Recreational fishing is one of the most widely practiced outdoor activities in North America, yet the fisheries that support it are among the least precisely monitored. Unlike commercial fisheries, where landings are recorded at processing facilities and catch limits are enforced at the dock, recreational harvest is distributed across thousands of access points, compressed into short seasonal windows, and produced by anglers who have no legal obligation to report what they caught. The result is a system where meaningful amounts of fishing pressure and harvest can accumulate unobserved, and where the first indication that a population is in trouble may arrive years after the damage has been done [@pope_chapter].
+Recreational fishing is one of the most widely practiced outdoor activities in North America, yet the fisheries that support it are among the least precisely monitored. Unlike commercial fisheries, where landings are recorded at processing facilities and catch limits are enforced at the dock, recreational harvest is spread across thousands of access points, compressed into short seasonal windows, and produced by anglers who usually are not required to report what they caught. The result is a system in which substantial fishing pressure and harvest can accumulate out of sight, and the first indication that a population is in trouble may arrive years after the damage has been done [@pope_chapter].
 
-Creel surveys exist to close that gap. By sending trained clerks into the field to count anglers and conduct structured interviews, fisheries agencies collect the raw material needed to estimate total effort, total catch, and angler behavior across a defined fishery and time period. Done well, a creel survey converts a partially observed, spatially distributed recreational fishery into a set of statistically defensible estimates that can be compared across years, presented to regulatory bodies, and used to justify changes in harvest regulations or stocking programs.
+Creel surveys are built to close that gap. By sending trained clerks into the field to count anglers and conduct structured interviews, fisheries agencies collect the raw material needed to estimate total effort, total catch, and angler behavior across a defined fishery and time period. Done well, a creel survey converts a partially observed, spatially distributed recreational fishery into a set of statistically defensible estimates that can be compared across years, presented to regulatory bodies, and used to justify changes in harvest regulations or stocking programs.
 
-The economic stakes are substantial. The U.S. Fish and Wildlife Service estimates that recreational anglers spend tens of billions of dollars annually on equipment, travel, and license fees. In many states, sport fishing license revenue is the primary funding mechanism for fisheries conservation programs. The fish populations that support this activity are a public trust resource, and fisheries agencies are obligated — legally in some jurisdictions — to manage that resource using the best available information about harvest and effort. Creel surveys are the primary mechanism for generating that information.
+The economic stakes are real. The U.S. Fish and Wildlife Service estimates that recreational anglers spend tens of billions of dollars annually on equipment, travel, and license fees. In many states, sport fishing license revenue is the primary funding mechanism for fisheries conservation programs. The fish populations that support this activity are a public trust resource, and fisheries agencies are obligated — legally in some jurisdictions — to manage that resource using the best available information about harvest and effort. Creel surveys remain one of the standard ways agencies generate that information.
 
-The methodology is not new. Roving creel surveys were described in the North American literature by the 1950s, and the statistical foundations for estimation from instantaneous counts were formalized by @pollock1994 and colleagues at a symposium that produced a synthesis still widely cited today. What has changed is the computational environment. Modern creel datasets involve thousands of records, multiple strata, incomplete trips, species-level catch matrices, and the expectation that estimates will be accompanied by defensible variance estimates. Doing that work in spreadsheets — as many agencies still do — is error-prone, difficult to audit, and nearly impossible to replicate. This book is about how to do it reproducibly in R with the `tidycreel` package.
+The basic method has been around for decades. Roving creel surveys were described in the North American literature by the 1950s, and the statistical foundations for estimation from instantaneous counts were formalized by @pollock1994 and colleagues at a symposium that produced a synthesis still widely cited today. What has changed is the computational environment. Modern creel datasets involve thousands of records, multiple strata, incomplete trips, species-level catch matrices, and the expectation that estimates will be accompanied by defensible variance estimates. Doing that work in spreadsheets — as many agencies still do — is error-prone, difficult to audit, and nearly impossible to replicate. This book is about how to do it reproducibly in R with the `tidycreel` package.
 
 This chapter covers:
 
@@ -33,9 +33,9 @@ This chapter covers:
 
 ### How this book is organized
 
-This book is organized around the estimation workflow, not around individual concepts. Each chapter takes the output of the previous chapter as its input and produces output that feeds into the next. The structure mirrors what a practitioner does when analyzing a real creel dataset from scratch.
+This book is organized around the estimation workflow, not around individual concepts. Each chapter takes the output of the previous chapter as its input and produces output that feeds into the next. That structure mirrors what a practitioner actually does when working a real creel dataset from scratch.
 
-Chapters 2 and 3 lay the statistical foundation: Chapter 2 defines estimands formally, introduces notation, and describes the reporting domains that bound creel inference. Chapter 3 develops the design-based estimator, derives the variance formula, and works through the Harlan dataset from raw counts to a stratified effort estimate with a confidence interval.
+Chapters 2 and 3 lay the statistical foundation: Chapter 2 defines estimands formally, introduces notation, and describes the reporting domains that bound creel inference. Chapter 3 develops the design-based estimator, derives the variance formula, and works through the Harlan dataset from raw counts to a stratified effort estimate with a confidence interval. If you want the definitions first, start with @sec-estimands; if you want the sampling logic that turns field records into totals, go to @sec-inference.
 
 Chapters 4 through 8 address the estimation pipeline: total catch, harvest, release, catch rate, and the handling of incomplete trips. These chapters introduce the core `tidycreel` estimation functions and demonstrate their application to the Harlan dataset. Each chapter includes a section on diagnostics — how to check whether the estimator's assumptions are met and what to do when they are not.
 
@@ -47,11 +47,11 @@ Chapter 17 applies all methods to a real published dataset, closing the loop fro
 
 ## Recreational fisheries as partially observed systems {#sec-partial-obs}
 
-Consider what a fisheries manager actually knows about recreational harvest on a 5,000-hectare reservoir on a given day. An unknown number of anglers are on the water, arriving and departing at irregular intervals. They fish from boats, from shore, from kayaks. They target different species with different gear. Some keep fish; most do not. Some will tell the truth about what they caught; a few will not. By evening, every angler has gone home, and the only trace of the day's activity is whatever was recorded by whoever happened to be in the field.
+Consider what a fisheries manager actually knows about recreational harvest on a 5,000-hectare reservoir on a given day. An unknown number of anglers are on the water, arriving and departing at irregular intervals. They fish from boats, from shore, from kayaks. They target different species with different gear. Some keep fish; most do not. Some will round, forget, or hedge a detail or two. By evening, everyone has gone home, and the day survives only in the notes collected by whoever happened to be in the field.
 
 That is a partially observed system. The full population of fishing activity is never visible at once. The manager can observe only what a sampling design captures. Every inference about total effort, catch, or harvest is therefore an extrapolation from a sample — an estimate with uncertainty, not a count.
 
-This matters because the consequences of misestimating recreational harvest can be serious. @pope_chapter notes that recreational harvest drives population dynamics of many socially, economically, and ecologically important fish species, and poorly quantified harvest has contributed to the collapse of important fisheries. Accurate, well-characterized estimates are not a scientific luxury; they are the information base for regulatory decisions that determine whether a fishery remains viable.
+Misestimating recreational harvest has real consequences. @pope_chapter notes that recreational harvest drives population dynamics of many socially, economically, and ecologically important fish species, and poorly quantified harvest has contributed to the collapse of important fisheries. Accurate, well-characterized estimates are not a scientific luxury; they are the information base for regulatory decisions that determine whether a fishery remains viable.
 
 ### The target population and the sampling frame
 
@@ -87,7 +87,7 @@ In an access point survey, the field clerk stations at one or more defined point
 
 Access point surveys have a potential bias: they intercept only anglers who exit through the monitored access point. Anglers who use unmonitored access — unmarked trails, private land, or canoe carries — are not counted, not interviewed, and not represented in the estimate. On waterbodies with complex or unofficial access, this exclusion can be substantial. Pilot surveys that map all access points and estimate their usage fractions are essential before committing to an access-point design.
 
-The statistical framework for access point estimation is well developed. Under certain conditions, the probability that an angler passes through the access point during the clerk's presence can be estimated, and the inverse of that probability serves as the expansion factor for observed catch. The `tidycreel` function `estimate_effort()` implements this framework with support for stratification by day type, period, and section.
+The statistical framework for access point estimation is well developed. Under certain conditions, the probability that an angler is intercepted at the access point during the clerk's presence can be estimated, and the inverse of that probability serves as the expansion factor for observed catch. The `tidycreel` function `estimate_effort()` implements this framework with support for stratification by day type, period, and section.
 
 ### Roving surveys
 
@@ -109,7 +109,7 @@ A creel survey combines two field operations that are conducted on each sampled 
 
 **Counts** are instantaneous observations of the number of anglers present at a waterbody or access site at a specific moment in time. On small, visually open waterbodies, a clerk can complete a true instantaneous count by observing the entire system at once. On larger systems, the clerk travels between vantage points quickly enough that no anglers arrive or depart during the traversal — what @pope_chapter describes as a functionally instantaneous count. The count is recorded with a timestamp and the clerk's location; it is not an interview and does not involve talking to anglers.
 
-The connection between an instantaneous count and an effort estimate requires two additional pieces of information: the total number of possible fishing hours in the day (the "day length," from first legal fishing hour to last), and the mean time anglers spend fishing per trip. Under certain assumptions, the ratio of anglers counted to the day length yields an estimate of total effort. These assumptions — chiefly that the count is truly instantaneous and that the departure rate from the fishery is approximately constant across the day — are discussed formally in Chapter 3.
+Counts do not estimate effort by themselves. They become an effort estimate only when the analyst combines them with the length of the fishing day and an estimate of how long trips last on average. Under the usual assumptions, the count is treated as a snapshot of angler density, then expanded to angler-hours through the design-based estimator in Chapter 3.
 
 Counts are typically conducted at multiple points during a sampled day, within randomized "count periods." Randomizing when within a day the counts occur — rather than always counting at 8 AM or at noon — is a design requirement, not a nicety. Systematic count times introduce bias if effort is not constant across the day, which it never is in practice.
 
@@ -119,7 +119,7 @@ Some survey programs augment or replace roving counts with passive monitoring: c
 
 **Interviews** are structured conversations with anglers, typically conducted when they complete a trip. The clerk records how long the angler fished, how many anglers were in the party, what they targeted, what they caught, what they kept, and sometimes whether they have any fish available for measurement. The interview happens at an access point, a boat ramp, or along a shoreline — on-site, not by mail or phone later.
 
-This temporal proximity to the fishing activity is the defining advantage of creel surveys over mail or telephone recall methods: anglers interviewed as they leave the water have far better recall of the trip than anglers contacted weeks later [@pope_chapter]. The error in recalled catch counts grows rapidly with time between the catch event and the interview; same-day intercept interviews are far more accurate than retrospective reports.
+This temporal proximity to the fishing activity is the defining advantage of creel surveys over mail or telephone recall methods: anglers interviewed as they leave the water usually remember the trip more accurately than anglers contacted weeks later [@pope_chapter]. Recall error grows quickly as the delay increases, which is why same-day intercept interviews are usually much more reliable than retrospective reports.
 
 The biological information collected during interviews — species composition, lengths, weights, tissue samples — also provides secondary confirmation of what was caught and can support stock assessment directly. Length frequency data from creel interviews, for example, can be used alongside mark-recapture data in integrated assessment models. This secondary use of creel data is often overlooked in agency planning but can substantially increase the information return per dollar spent in the field.
 
@@ -178,7 +178,7 @@ From the interviews:
 
 Now suppose the same waterbody has 65 eligible weekdays in the season, of which 15 were sampled, and the mean estimated daily effort across those 15 days is 47 angler-hours. The seasonal weekday effort estimate is $\hat{E}_{\text{WD}} = 65 \times 47 = 3{,}055$ angler-hours. Multiplied by the mean weekday catch rate, this yields the seasonal weekday catch estimate. Repeating for the weekend stratum and summing the two stratum estimates yields the seasonal total.
 
-This miniature example captures the full logical chain: count $\rightarrow$ effort $\rightarrow$ total catch $\rightarrow$ harvest/release split. Every function in `tidycreel` implements some portion of this chain on real stratified datasets. The formalism of Chapter 3 extends this logic to cover stratification, variance estimation, and incomplete trip correction.
+This miniature example captures the full logical chain: count $\rightarrow$ effort $\rightarrow$ total catch $\rightarrow$ harvest/release split. The core functions in `tidycreel` each implement some portion of this chain on real stratified datasets. The formalism of Chapter 3 extends this logic to cover stratification, variance estimation, and incomplete trip correction.
 
 ## From field records to fishery-wide inference {#sec-inference}
 
@@ -253,9 +253,9 @@ These three properties are also what make creel estimates auditable in regulator
 
 ### What reproducibility looks like in R
 
-A reproducible creel workflow reads raw data from source files, applies documented transformations in sequence, and writes estimates to output files or tables. The key constraint is that every step must be code — no manual adjustments in Excel between the raw data and the final estimate.
+A reproducible creel workflow starts with raw data from source files, applies documented transformations in sequence, and writes estimates to output files or tables. The key constraint is that every step must be code — no manual adjustments in Excel between the raw data and the final estimate.
 
-A minimal structure that satisfies this constraint:
+A minimal workflow looks like this:
 
 ```r
 # Load raw data
@@ -272,7 +272,7 @@ catch_est  <- estimate_total_catch(effort_est, catch)
 write_estimates(catch_est, path = here::here("output/season_estimates.csv"))
 ```
 
-This is the structure used throughout this book. Each chapter introduces functions that operate on tidy data frames, produce tidy outputs, and chain together without undocumented intermediate steps.
+That is the pattern used throughout this book. Each chapter introduces functions that operate on tidy data frames, produce tidy outputs, and chain together without undocumented intermediate steps.
 
 `tidycreel` is designed around reproducibility. Every estimation function returns not just the point estimate but the data used to produce it, the variance, and the stratum-level components. Every function takes data frames as inputs and returns data frames as outputs, so each step in the analytical chain is auditable and re-runnable.
 

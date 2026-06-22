@@ -19,19 +19,19 @@ harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
 
 A fishery never reveals itself all at once. On any given day, anglers are spread across shorelines and boat ramps, fishing at different times, targeting different species, departing before a technician arrives. No agency has the resources to watch every angler on every day of a season. What an agency can do is watch *some* anglers on *some* days, and then reason carefully about what those observations mean for the season as a whole.
 
-That reasoning — from a partial view to a complete picture — is the subject of this chapter. It is not primarily a statistical matter. It is a logical one. The question is: on what grounds can we claim that what we saw during our sampled days tells us something defensible about the days we did not sample?
+That reasoning — from a partial view to a complete picture — is the subject of this chapter. It is not just a statistical matter; it is a question of logic and authorization. On what grounds can we claim that what we saw during our sampled days tells us something defensible about the days we did not sample?
 
 The answer, when it exists, comes from the survey design. A design that selects sampling units with known probability creates a traceable connection between the observed records and the unobserved population. That connection is what transforms a collection of field notes into a scientifically defensible estimate.
 
-Creel surveys are built around this principle. The methods in Pollock et al. ([-@pollock1994]) and refined in Bernard et al. ([-@bernard1998]) are design-based from the ground up: the expansion factors, variance estimators, and stratification schemes all depend on having defined a sampling frame, selected units from it with known probability, and recorded which units were selected and which were not. The same logic governs the `tidycreel` package. Understanding it at this level makes the later chapters on estimation and validation legible rather than arbitrary.
+Creel surveys are built around this principle. The methods in Pollock et al. [@pollock1994] and refined in Bernard et al. [@bernard1998] are design-based from the ground up: the expansion factors, variance estimators, and stratification schemes all depend on having defined a sampling frame, selected units from it with known probability, and recorded which units were selected and which were not. The same logic governs the `tidycreel` package. Understanding it at this level makes the later chapters on estimation and validation legible rather than arbitrary.
 
 ## Census versus sample
 
 Before considering how to estimate from a sample, it is worth asking what a complete census of a fishery would look like — and why it is almost never practical.
 
-A census would require recording every angler-trip completed during the survey period: who fished, where, for how long, and what they caught. This is the standard against which samples are evaluated. Newman et al. ([-@newman1997]) compared a stratified instantaneous-count creel survey with a complete mandatory creel census on Escanaba Lake, Wisconsin, and found that the survey-based estimates recovered the census quantities closely when the design was properly executed. That comparison is illuminating precisely because it is rare: a full census of a recreational fishery demands either a very small water body, a mandatory reporting system, or both. For most inland and coastal waters, neither condition holds.
+A census would require recording every angler-trip completed during the survey period: who fished, where, for how long, and what they caught. This is the standard against which samples are evaluated. Newman et al. [@newman1997] compared a stratified instantaneous-count creel survey with a complete mandatory creel census on Escanaba Lake, Wisconsin, and found that the survey-based estimates recovered the census quantities closely when the design was properly executed. That comparison is illuminating precisely because it is rare: a full census of a recreational fishery demands either a very small water body, a mandatory reporting system, or both. For most inland and coastal waters, neither condition holds.
 
-In practice, a census would require a creel agent to be present everywhere simultaneously — at every access point, on every section of shore, for every hour of the fishing day. For a reservoir with multiple boat ramps, miles of shoreline accessible to wading anglers, and a season spanning several months, the cost is prohibitive. McCormick et al. ([-@mccormick2013]) note that complete census is "often infeasible for complex fisheries and thus is rarely used."
+In practice, a census would require a creel agent to be present everywhere simultaneously — at every access point, on every section of shore, for every hour of the fishing day. For a reservoir with multiple boat ramps, miles of shoreline accessible to wading anglers, and a season spanning several months, the cost is prohibitive. McCormick et al. [@mccormick2013] note that complete census is "often infeasible for complex fisheries and thus is rarely used."
 
 The impossibility of a census creates a choice. One option is to observe whatever is convenient — survey days when the technician is available, access points that are easy to reach, anglers who happen to be leaving when the agent arrives. The other option is to select a sample deliberately, using a randomized procedure that connects the selected units back to the full population. The first option produces data. The second produces *estimates*.
 
@@ -41,7 +41,7 @@ This distinction matters because convenience data cannot support statistical inf
 
 Not all partial observation supports inference. A technician who counts anglers only when convenient, interviews only approachable parties, or schedules surveys around personal preference is collecting data — but those data cannot be used to estimate population totals with statistical rigor. The estimates may be numerically plausible, but there is no formal mechanism connecting them to the population.
 
-What transforms partial observation into a statistically defensible estimate is *probability sampling*: a procedure in which every unit in the sampling frame has a known, nonzero chance of being selected [@cochran1977]. Lumley ([-@lumley2010]) puts it plainly: "what makes a probability sample is the procedure for taking samples from a population, not just the data we happen to end up with."
+What transforms partial observation into a statistically defensible estimate is *probability sampling*: a procedure in which every unit in the sampling frame has a known, nonzero chance of being selected [@cochran1977]. Lumley [@lumley2010] puts it plainly: "what makes a probability sample is the procedure for taking samples from a population, not just the data we happen to end up with."
 
 This distinction matters because the procedure — not the data — is the source of the inferential license. When a day is drawn at random from a schedule, we know its probability of selection. That probability tells us how many similar days this one day represents. When a day is selected for convenience, we have no such anchor. The field records look the same either way; the inferential status is completely different.
 
@@ -83,7 +83,7 @@ The design-based logic requires precise notation. @tbl-notation-design-ch3 defin
 
 The sampling frame is the explicit list — or the well-defined rule — that enumerates every unit eligible for selection. In human survey work, a frame might be a voter registration list or a telephone number registry. In creel surveys, frames are more abstract but no less important.
 
-Pope et al. ([-@pope_chapter]) describe the sampling frame as "the basis of all creel surveys" and equate it with the *population of inference*. The frame defines what the estimate applies to. An estimate cannot legitimately describe units that were outside the frame, and a frame that omits large portions of the fishing activity produces estimates that undercount the true total even when the within-frame estimation is perfect.
+Pope et al. [@pope_chapter] describe the sampling frame as "the basis of all creel surveys" and equate it with the *population of inference*. The frame defines what the estimate applies to. An estimate cannot legitimately describe units that were outside the frame, and a frame that omits large portions of the fishing activity produces estimates that undercount the true total even when the within-frame estimation is perfect.
 
 In practice, creel survey frames are built from the intersection of time and space:
 
@@ -101,17 +101,17 @@ Consider a practical example. Calamus Reservoir in Nebraska has a primary boat r
 
 Most creel surveys do not select individual anglers at random from a roster. The population is not enumerable in advance — we cannot know on January 1st exactly which anglers will visit the reservoir on which days in June. Instead, selection proceeds through a hierarchy of nested units, each stage narrowing the focus until a specific field encounter becomes possible.
 
-McCormick et al. ([-@mccormick2013]) describe the standard three-stage structure:
+McCormick et al. [@mccormick2013] describe the standard three-stage structure:
 
 1. **First stage (days)**: Days are randomly selected from the set of all days within the survey period or stratum. These are the *primary sampling units* (PSUs). The day is the unit that the analyst has the most control over and the most stake in: most of the between-sample variability in creel estimates comes from day-to-day differences in fishing activity.
 
 2. **Second stage (shifts)**: Within each selected day, a portion of the day — a shift or time window — is randomly selected for survey coverage. Not every hour of a selected day may be accessible; a shift schedule defines which time windows the technician could potentially cover, and one or more are drawn.
 
-3. **Third stage (count times)**: Within each selected shift, specific count times are drawn for instantaneous or progressive counts of anglers. Hoenig et al. ([-@hoenig1993]) formalize the scheduling of these counts and show how the choice among simple random, systematic, and stratified count schedules affects the bias and variance of effort estimates.
+3. **Third stage (count times)**: Within each selected shift, specific count times are drawn for instantaneous or progressive counts of anglers. Hoenig et al. [@hoenig1993] formalize the scheduling of these counts and show how the choice among simple random, systematic, and stratified count schedules affects the bias and variance of effort estimates.
 
 This three-stage structure is a practical response to the cost of fieldwork. Surveying an entire day is expensive; surveying every count opportunity within every day is impossible. By sampling at each stage, the survey covers the full season with manageable effort while preserving the probability structure that makes expansion valid.
 
-The hierarchy also clarifies what "replicate" means in practice. The replicate unit for estimating seasonal totals is the day, not the individual count or interview. Increasing the number of counts per day improves precision within a day but does relatively little for seasonal-level uncertainty. Increasing the number of sampled days directly reduces the primary source of variance. Newman et al. ([-@newman1997]) demonstrated this: between-day variance dominates within-day variance in most stratified creel surveys.
+The hierarchy also clarifies what "replicate" means in practice. The replicate unit for estimating seasonal totals is the day, not the individual count or interview. Increasing the number of counts per day improves precision within a day but does relatively little for seasonal-level uncertainty. Increasing the number of sampled days directly reduces the primary source of variance. Newman et al. [@newman1997] demonstrated this: between-day variance dominates within-day variance in most stratified creel surveys.
 
 ### Inclusion probabilities in multi-stage designs
 
@@ -133,7 +133,7 @@ For stratified designs, each unit $i$ in stratum $h$ has a stratum-specific prob
 
 $$\pi_i = \pi_h = \frac{n_h}{N_h}$$
 
-Inclusion probabilities are the bridge between what was observed and what was not. As Breidt et al. ([-@breidt2009]) state: "in sampling theory, the weights are the inverses of the inclusion probabilities." A unit with $\pi_i = 0.10$ was selected with a 10% chance; its observation represents 10 similar units in the frame. A unit with $\pi_i = 0.25$ represents 4 similar units.
+Inclusion probabilities are the bridge between what was observed and what was not. As Breidt et al. [@breidt2009] state: "in sampling theory, the weights are the inverses of the inclusion probabilities." A unit with $\pi_i = 0.10$ was selected with a 10% chance; its observation represents 10 similar units in the frame. A unit with $\pi_i = 0.25$ represents 4 similar units.
 
 Two properties of inclusion probabilities are required for valid design-based inference:
 
@@ -144,7 +144,7 @@ A unit with an unknown inclusion probability cannot be weighted correctly. If so
 
 ## The Horvitz-Thompson estimator
 
-The central result in design-based survey sampling is the Horvitz-Thompson (HT) estimator, introduced by Horvitz and Thompson ([-@horvitz1952]) and foundational to creel estimation since Robson ([-@robson1961]).
+The central result in design-based survey sampling is the Horvitz-Thompson (HT) estimator, introduced by Horvitz and Thompson [@horvitz1952] and foundational to creel estimation since Robson [@robson1961].
 
 For a population of $N$ units, let $y_i$ denote the value of interest for unit $i$. The population total is $T = \sum_{i=1}^{N} y_i$. We observe a sample $s$ of $n$ units. The Horvitz-Thompson estimator of $T$ is:
 
@@ -160,7 +160,7 @@ Each unit $i$ contributes $y_i / \pi_i$ to the sum when it appears in $s$, which
 
 The intuition is equally direct. If a day is selected with probability $\pi_i = d/D$ — that is, $d$ days are drawn at random from a frame of $D$ total days — then the expansion factor is $D/d$. The observed count on that day, multiplied by $D/d$, gives the contribution to the seasonal total. Summing across all sampled days yields the estimate. The structure *total = mean-per-unit × number-of-units* is the HT estimator in applied form; it is not a heuristic.
 
-Bernard et al. ([-@bernard1998]) give this formulation explicitly for harvest estimation in a two-stage roving-access design. Their equation for seasonal harvest $\hat{H}$ within a stratum is:
+Bernard et al. [@bernard1998] give this formulation explicitly for harvest estimation in a two-stage roving-access design. Their equation for seasonal harvest $\hat{H}$ within a stratum is:
 
 $$\hat{H} = \frac{D}{d} \sum_{i=1}^{d} \hat{H}_i$$
 
@@ -287,7 +287,7 @@ There are two fundamentally different philosophical stances toward statistical e
 
 **Design-based inference** treats the population values as fixed, deterministic constants. The fishing pressure on a specific Tuesday in July is a real number — it is not a random variable. The only randomness in the system comes from the act of sampling: whether that Tuesday happened to be selected, which count times were drawn, which anglers were intercepted. Uncertainty in the estimate reflects the variability across all the samples the design could have generated, not a distributional assumption about angler behavior.
 
-As Ida et al. [-@ida2014] state it: "the variable interest values for each population unit are considered to be deterministic and the only variable present is that of the construction of the sample. The statistical inference then only describes the randomness created by the sampling design."
+As Ida et al. [@ida2014] state it: "the variable interest values for each population unit are considered to be deterministic and the only variable present is that of the construction of the sample. The statistical inference then only describes the randomness created by the sampling design."
 
 **Model-based inference** treats the population values as realizations of a random process. Under this view, the 47 angler-hours observed on a Tuesday is a draw from some probability distribution that governs Tuesday fishing effort. Uncertainty comes from the assumed model, not from the sampling procedure. With strong model assumptions, you can estimate population quantities even from convenience samples — because the model provides the inferential mechanism that the design would otherwise supply.
 
@@ -307,15 +307,15 @@ Design-based methods are robust in an important sense: the HT estimate is valid 
 
 Model-based methods can be valuable when direct estimation is not possible — for estimating quantities in subgroups too small to support the HT estimator, for combining creel data with auxiliary information, or for predicting effort at unsampled access points. But validity depends entirely on how well the model describes the data-generating process. A model that assumes fishing effort is proportional to air temperature will give biased estimates in fisheries where temperature and effort are uncorrelated.
 
-Lumley ([-@lumley2010]) makes the practical implication explicit for regression applied to survey data: "all the statistical inference in this chapter is still design-based and its validity makes no assumptions about the truth of the model or the distribution of any variable." Even when a regression model is incorporated into the analysis — for ratio estimation or domain estimation — the design-based framework requires that the variance be computed from the design structure, not from model residuals alone.
+Lumley [@lumley2010] makes the practical implication explicit for regression applied to survey data: "all the statistical inference in this chapter is still design-based and its validity makes no assumptions about the truth of the model or the distribution of any variable." Even when a regression model is incorporated into the analysis — for ratio estimation or domain estimation — the design-based framework requires that the variance be computed from the design structure, not from model residuals alone.
 
-This book uses design-based methods throughout, following the framework established by Pollock et al. ([-@pollock1994]) and Bernard et al. ([-@bernard1998]) for creel survey estimation. The estimators that `tidycreel` implements are grounded in the design.
+This book uses design-based methods throughout, following the framework established by Pollock et al. [@pollock1994] and Bernard et al. [@bernard1998] for creel survey estimation. The estimators that `tidycreel` implements are grounded in the design.
 
 ## Variance from the design
 
 An estimate without uncertainty is not complete. A seasonal total of 1,400 angler-hours carries very different implications if the 95% confidence interval spans 800 to 2,000 angler-hours versus 1,300 to 1,500 angler-hours. The width of that interval depends on how the sample was designed.
 
-Wolter ([-@wolter2007]) states this plainly: "a common error of the survey practitioner or the beginning student is the belief that simple random sampling formulae may be used to estimate variances, regardless of the design or estimator actually employed. This belief is false. An estimator of variance must take account of both the estimator and the sampling design."
+Wolter [@wolter2007] states this plainly: "a common error of the survey practitioner or the beginning student is the belief that simple random sampling formulae may be used to estimate variances, regardless of the design or estimator actually employed. This belief is false. An estimator of variance must take account of both the estimator and the sampling design."
 
 For the HT estimator under simple random sampling without replacement from a frame of $N$ units, the exact variance is:
 
@@ -337,7 +337,7 @@ The stratum-level terms reveal which strata contribute most to overall uncertain
 
 ### Variance components in multi-stage designs
 
-In the three-stage creel design, variance decomposes into components corresponding to each stage. Bernard et al. ([-@bernard1998]) give the two-stage variance for seasonal harvest as:
+In the three-stage creel design, variance decomposes into components corresponding to each stage. Bernard et al. [@bernard1998] give the two-stage variance for seasonal harvest as:
 
 $$\hat{V}(\hat{H}) = \frac{D^2}{d}\!\left(1 - \frac{d}{D}\right)s_1^2 + \frac{D}{d}\sum_{i=1}^{d}\hat{V}(\hat{H}_i)$$
 
@@ -485,7 +485,7 @@ $$\text{deff} = \frac{\hat{V}_{\text{design}}(\hat{T})}{\hat{V}_{\text{SRS}}(\ha
 
 A design effect of 2.0 means the design is twice as variable as SRS with the same $n$; equivalently, the effective sample size is $n / \text{deff} = n/2$. Design effects greater than one arise from clustering (days within strata tend to be more similar than randomly selected days across the full season) and from unequal weighting (strata sampled at very different rates). Design effects less than one can arise from stratification when strata are homogeneous within but different between, because the design prevents overrepresentation of any one stratum.
 
-McCormick et al. ([-@mccormick2013]) note that the design effect in creel surveys "has not been extensively evaluated in short-duration fisheries," partly because the comparison baseline (SRS of individual trips) is operationally impossible. Nonetheless, understanding deff helps analysts evaluate whether their stratification and allocation choices are paying off in efficiency terms.
+McCormick et al. [@mccormick2013] note that the design effect in creel surveys "has not been extensively evaluated in short-duration fisheries," partly because the comparison baseline (SRS of individual trips) is operationally impossible. Nonetheless, understanding deff helps analysts evaluate whether their stratification and allocation choices are paying off in efficiency terms.
 
 ## What the design authorizes
 
@@ -512,7 +512,7 @@ The design-based framework can be stated as a chain of authorizations, each step
 
 Each link depends on the previous one. Skipping step 3 — using a convenience sample — breaks the chain at the point where statistical inference would otherwise be authorized. Applying wrong weights at step 5 produces a biased total even if every other step was correctly executed. Reporting a point estimate without uncertainty at step 7 obscures the precision of the result.
 
-Pope et al. ([-@pope_chapter]) are direct: "all estimates must be accompanied by some measure of variation (e.g., variance, standard error, and 95% confidence interval)." This is not stylistic preference. It is a statement about what constitutes a complete scientific result.
+Pope et al. [@pope_chapter] are direct: "all estimates must be accompanied by some measure of variation (e.g., variance, standard error, and 95% confidence interval)." This is not stylistic preference. It is a statement about what constitutes a complete scientific result.
 
 ## Failure modes
 
@@ -526,9 +526,9 @@ The design-based logic breaks down in predictable ways. Recognizing these failur
 
 **Domain extrapolation**: an estimate derived from one stratum or access point is reported as if it applies to the whole fishery. The design did not cover the whole fishery, so the estimate cannot describe it.
 
-**Data cleaning that changes selection**: a record is excluded from analysis because of a data entry error, but the excluded day was part of the random sample. Removing it without adjustment changes the effective inclusion probability and introduces bias. Bernard et al. ([-@bernard1998]) develop methods for handling missing data within sampled periods precisely because this failure mode is operationally common.
+**Data cleaning that changes selection**: a record is excluded from analysis because of a data entry error, but the excluded day was part of the random sample. Removing it without adjustment changes the effective inclusion probability and introduces bias. Bernard et al. [@bernard1998] develop methods for handling missing data within sampled periods precisely because this failure mode is operationally common.
 
-**Applying SRS variance formulas to clustered data**: Wolter ([-@wolter2007]) identifies this as "a common error." Days within a stratified creel design are not independent draws from the full population; they are nested within strata and selected in a structured way. The SRS variance formula underestimates true variance when clustering is present and overestimates it when stratification reduces variability. Neither error direction is predictable in advance.
+**Applying SRS variance formulas to clustered data**: Wolter [@wolter2007] identifies this as "a common error." Days within a stratified creel design are not independent draws from the full population; they are nested within strata and selected in a structured way. The SRS variance formula underestimates true variance when clustering is present and overestimates it when stratification reduces variability. Neither error direction is predictable in advance.
 
 ## Connecting to `tidycreel`
 
