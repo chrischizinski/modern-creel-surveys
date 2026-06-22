@@ -116,12 +116,12 @@ Trip durations sometimes fall outside what is physically possible for a survey
 shift. Interview records occasionally contain party sizes that conflict with count
 data. Catch entries arrive with values that seem impossibly large.
 
-None of those issues resolves itself. The analyst must make decisions, and those
-decisions are not neutral. A cleanup rule that removes or recodes records changes
-which data enter the estimator — which changes the numerator, the denominator,
-or both. That means cleaning decisions are methodological decisions. They belong
-in the analysis record alongside model choices, stratification choices, and
-estimator choices.
+None of those issues resolves itself. The analyst must decide whether to
+remove, recode, or retain each record, and those decisions are not neutral.
+Changing which records enter the estimator changes the numerator, the
+denominator, or both. Cleaning decisions are methodological decisions. They
+belong in the analysis record alongside model, stratification, and estimator
+choices.
 
 This chapter works through the most consequential cleaning steps for a creel
 dataset: species standardization, trip duration plausibility, catch quantity
@@ -144,13 +144,12 @@ familiarity, and culture. "Drum" and "sheepshead" describe the same fish in
 different places. "Crappie" may refer to Black Crappie, White Crappie, or an
 undifferentiated pooled entry.
 
-Those naming differences are inconsequential at the level of a single survey
-running on consistent entry rules. They become consequential when surveys are
-compared across time, merged into multi-site databases, or linked to external
-data sources (bag limit tables, stock assessment databases, CreelCat). A merge
-that pairs "White Bass" with "WHB" will succeed; a merge that pairs "Whitebass"
-with "WHB" will silently fail, and those records will appear as missing rather
-than as mismatched.
+Those naming differences are minor within one survey running on consistent
+entry rules. They matter when surveys are compared across time, merged into
+multi-site databases, or linked to external data sources (bag limit tables,
+stock assessment databases, CreelCat). A merge that pairs "White Bass" with
+"WHB" will succeed; a merge that pairs "Whitebass" with "WHB" will silently
+fail, and those records will appear as missing rather than mismatched.
 
 The American Fisheries Society publishes standard species codes for exactly this
 reason. `tidycreel` provides `standardize_species()`, which maps free-text
@@ -180,10 +179,10 @@ lacks a single-code standard. Crappie entered without species designation is a
 data quality issue: Black Crappie and White Crappie are distinct management
 units in many systems, and pooled entries cannot be split after the fact.
 
-These two categories represent different problems. Wiper requires a
-project-specific code assignment. Crappie requires a conversation with field
-staff about whether species-level identification was attempted and, if so, how
-to recover it from supplemental records.
+These are different problems. Wiper needs a project-specific code assignment.
+Crappie needs a conversation with field staff about whether species-level
+identification was attempted and, if so, how to recover it from supplemental
+records.
 
 ```{r}
 #| label: fig-species-codes
@@ -282,12 +281,10 @@ anti_join(harlan_interviews, harlan_catch, by = "interview_id") |>
   count(trip_status)
 ```
 
-The Harlan data passes both checks. No catch records lack a parent interview —
-the catch table is fully linked. The 158 interviews with no catch records are
+The Harlan data passes both checks. The 158 interviews with no catch records are
 not a data gap: 56 are completed trips and 102 are incomplete trips where the
 angler reported zero fish caught. Zero-catch completed trips are valid
-observations and must remain in the analysis (they enter the CPUE denominator
-as hours fished with zero catch).
+observations and must remain in the analysis.
 
 The second check is worth running any time the catch table and interview table
 arrive from different sources — for example, when interview data is collected
@@ -594,7 +591,7 @@ Trip status (complete versus incomplete) is not just a classification field. It
 determines which records enter which estimator:
 
 - Complete trips contribute to CPUE estimation (ratio-of-means uses
-  completed trips only; see @sec-effort-estimation and @sec-cpue-estimation).
+  completed trips only; see @sec-effort-formula and @sec-cpue-estimators).
 - Incomplete trips are used by some estimators to validate that complete
   and incomplete anglers are exchangeable (see `validate_incomplete_trips()` in
   @sec-roving-creel-surveys).
@@ -640,11 +637,10 @@ than complete trips (0.792 vs. 0.585 fish/hr), and the difference falls outside
 the ±20% equivalence margin. The TOST failure does not indicate that trip status
 was misclassified — it indicates that incomplete anglers systematically differ
 from complete anglers, a common pattern at access-point surveys where early-
-morning arrivals target faster-biting periods. The implication for cleaning is
-the opposite of what might seem intuitive: the two groups should be kept
-separate, not merged. Any record misclassified as "complete" that truly
-represents a shorter, higher-intensity trip would inflate the complete-trip
-catch rate and bias CPUE estimates upward.
+morning arrivals target faster-biting periods. Keep the groups separate. Any
+record misclassified as "complete" that truly represents a shorter,
+higher-intensity trip would inflate the complete-trip catch rate and bias CPUE
+estimates upward.
 
 ## Building a cleaning log {#sec-cleaning-log}
 
@@ -836,9 +832,9 @@ effort.
 Whether 177 fish is material depends on the management context. For a fishery
 with a Walleye quota or a slot-limit assessment, a 1.6% harvest overestimate
 matters. For a general community harvest summary, it may be within acceptable
-reporting uncertainty. The point is not the magnitude in isolation — it is that
-the analyst should compute it and make the judgment explicitly rather than
-assume catch-type errors are inconsequential.
+reporting uncertainty. The point is not the magnitude in isolation. The
+analyst should compute it and make the judgment explicitly rather than assume
+catch-type errors are harmless.
 
 ### When the impact is not small
 
@@ -905,13 +901,12 @@ last year's.
 
 ## Takeaway {#sec-cleaning-takeaway}
 
-Data cleaning in creel surveys is part of the estimation process. Decisions
-about which records to accept, recode, or remove propagate through to catch
-rates, harvest totals, and the uncertainty reported around them. The species
-name an angler gives in the field, the trip duration a clerk records, and the
-catch count that enters the database are all measurements — and like all
-measurements, they benefit from systematic review before being embedded in an
-estimate.
+Data cleaning in creel surveys is part of estimation. Decisions about which
+records to accept, recode, or remove propagate through catch rates, harvest
+totals, and the uncertainty reported around them. The species name an angler
+gives in the field, the trip duration a clerk records, and the catch count that
+enters the database are all measurements, and they benefit from systematic
+review before being embedded in an estimate.
 
 `tidycreel` provides `flag_outliers()` for detecting unusual numeric values and
 `standardize_species()` for aligning species names to a common code system.
@@ -920,8 +915,7 @@ anomalies visible, document the detection rule, and create a foundation for the
 cleaning log that should accompany every creel analysis.
 
 The Harlan 2022 data required minimal cleaning. One trip duration flagged at
-$k = 1.5$; three species names without AFS codes; no zero-effort completed
+$k = 1.5$; three species names lacked AFS codes; no zero-effort completed
 trips; no impossible catch counts given the party sizes observed. Those results
-are worth reporting too: a well-collected dataset that passes systematic review
-gives the analyst confidence that the estimates reflect the fishery, not the
-data entry process.
+matter too: a dataset that passes systematic review gives the analyst
+confidence that the estimates reflect the fishery, not the data entry process.

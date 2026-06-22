@@ -460,7 +460,7 @@ est
 
 The `truncate_at` argument applies the 0.5-hour threshold automatically. The `estimator = "mortr"` argument selects the truncated mean-of-ratios formula rather than the ratio-of-means default. The overall CPUE of 0.792 fish/hr from the Taylor-variance estimator is slightly higher than the manually computed MOR of 0.29 fish/hr for Walleye alone, because here it uses the aggregated harvest total across all species rather than Walleye-only counts.
 
-## Diagnosing incomplete trips with `validate_incomplete_trips`
+## Diagnosing incomplete trips with `validate_incomplete_trips` {#sec-roving-creel-surveys}
 
 Before computing catch rates from incomplete interviews, `tidycreel` provides a diagnostic function that checks the incomplete-trip record for issues that would bias the MOR estimate:
 
