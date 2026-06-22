@@ -64,11 +64,11 @@ The chapters that follow this one build estimators for effort, catch, harvest, a
 
 When those conditions fail, no estimator fixes the result. A variance formula does not recover anglers who were never in the frame. A smarter catch-rate estimator does not undo the effect of a protocol that only interviewed cooperative anglers. An elegant ratio estimator cannot produce an unbiased total from a survey that missed three weeks of peak summer fishing.
 
-This chapter names the most common ways creel surveys go wrong — before estimation ever starts. The goal is to give analysts a vocabulary for diagnosing what happened, communicating it honestly, and deciding whether the problem belongs in field operations, frame construction, or the limitations section of the report.
+This chapter names the most common ways creel surveys go wrong before estimation ever starts. The goal is to give analysts a vocabulary for diagnosing what happened, communicating it honestly, and deciding whether the problem belongs in field operations, frame construction, or the limitations section of the report.
 
 ## A taxonomy of creel survey error {#sec-bias-taxonomy}
 
-Creel survey errors fall into two broad categories: **bias** and **variance**. Variance is the sampling variability that shrinks with more observations; it is managed through design choices like stratification and allocation. Bias is systematic error that does not shrink with more observations. Adding more interviews in the wrong place does not fix a coverage gap; it amplifies it.
+Creel survey errors fall into two broad categories: **bias** and **variance**. Variance is the sampling variability that shrinks with more observations; it is managed through design choices like stratification and allocation. Bias is systematic error that does not shrink with more observations. Adding more interviews in the wrong place does not fix a coverage gap.
 
 Within bias, the literature identifies several recurring types [@pollock1994]:
 
@@ -101,7 +101,7 @@ The Harlan Reservoir survey covers public boat ramps at the reservoir's four pri
 - shore fishing on the restricted Corps of Engineers management zones;
 - anglers who access the spillway from the north road, which is seasonally gated.
 
-These exclusions are not recorded in the data. They appear only in the survey design documentation. An analyst working from the data file alone would not know they existed.
+These exclusions are not recorded in the data. They appear only in the survey design documentation, so an analyst working from the data file alone would not know they existed.
 
 ### Temporal coverage gaps
 
@@ -135,7 +135,7 @@ An angler who is approached for an interview but declines to participate is a **
 
 Nonresponse is not a problem in itself. Most creel surveys expect some fraction of anglers to decline, and a 10–15% refusal rate is typical for well-conducted access-point surveys [@pollock1994]. The problem is **nonresponse bias**: if anglers who refuse differ from anglers who accept in the variables being measured, the survey estimate is biased.
 
-The most plausible direction of that bias in a creel context is upward pressure on catch rates. Anglers who had an unsuccessful trip may be more likely to wave off the interviewer and leave quickly. Successful anglers, with fish to show and a story to tell, are more likely to linger. If this pattern holds, the interview sample overrepresents catching parties and the estimate overstates CPUE.
+The most plausible direction of that bias in a creel context is upward pressure on catch rates. Anglers who had an unsuccessful trip may be more likely to wave off the interviewer and leave quickly. Successful anglers, with fish to show and a story to tell, are more likely to linger. If this pattern holds, the interview sample overrepresents catching parties and overstates CPUE.
 
 The opposite pattern is also possible. Avid anglers who fish frequently may grow weary of being interviewed on every visit and begin declining. If avid anglers catch at higher rates, repeated refusal from that group biases the estimate downward. The direction of bias is not knowable from the data alone.
 
@@ -497,11 +497,9 @@ When reviewing a creel estimate or preparing to report one, the following questi
 - Did `flag_outliers()` reveal clusters of anomalous records tied to specific dates, clerks, or access points?
 - Were species mismatches detected by `standardize_species()`? What fraction of catch records had unresolved codes?
 
-No creel survey answers all of these questions satisfactorily. The goal is not a perfect survey but an honest one — where the analyst can say clearly what the data support, what the design was able to claim, and what should be treated as a limitation rather than a result.
+No creel survey answers all of these questions satisfactorily. The goal is not a perfect survey but an honest one — where the analyst can say clearly what the data support, what the design can claim, and what should be treated as a limitation rather than a result.
 
 ## Takeaway {#sec-bias-takeaway}
-
-The biggest creel failures often happen before estimation starts.
 
 A well-designed estimator applied to biased input produces a precise estimate of the wrong quantity. The variance is small; the confidence interval is narrow; and the answer is still wrong because the sample does not represent the population the report claims it represents.
 

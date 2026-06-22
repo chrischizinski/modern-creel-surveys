@@ -23,6 +23,8 @@ That reasoning — from a partial view to a complete picture — is the subject 
 
 The answer, when it exists, comes from the survey design. A design that selects sampling units with known probability creates a traceable connection between the observed records and the unobserved population. That connection is what transforms a collection of field notes into a scientifically defensible estimate.
 
+The idea is easiest to see in miniature. If a 90-day season is reduced to a 30-day sample, each sampled day stands in for three similar days that were not observed. The sample only works if the 30 selected days were chosen in a way that makes that expansion legitimate.
+
 Creel surveys are built around this principle. The methods in Pollock et al. [@pollock1994] and refined in Bernard et al. [@bernard1998] are design-based from the ground up: the expansion factors, variance estimators, and stratification schemes all depend on having defined a sampling frame, selected units from it with known probability, and recorded which units were selected and which were not. The same logic governs the `tidycreel` package. Understanding it at this level makes the later chapters on estimation and validation legible rather than arbitrary.
 
 ## Census versus sample
@@ -54,6 +56,8 @@ The statistical properties that follow from probability sampling are powerful:
 - **Domain validity**: the estimate is guaranteed to apply to the covered population frame, not to some hypothetical superpopulation.
 
 All three properties depend on knowing, for each unit in the sample, the probability with which it was selected.
+
+In plain language, the inclusion probability says how much of the unseen population each observed unit stands for. A unit that had a 10% chance of selection is standing in for about ten similar units that were not observed.
 
 ## Notation
 

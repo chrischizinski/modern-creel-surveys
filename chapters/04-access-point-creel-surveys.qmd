@@ -61,6 +61,8 @@ Each vehicle's contribution is scaled by $1/w_j$ — the inverse of the time the
 
 The logic reflects the same inclusion-probability principle from Chapter 3. A vehicle parked for a long time had a higher probability of being observed on any given visit; scaling by $1/w_j$ corrects for the differential observation probability across stops with different wait times.
 
+Read as plain language, the formula says that a stop with longer parking times contributes less per observed vehicle because the observer had more chances to see it. That is the same design idea that turns a count of anglers into a time-based estimate of effort.
+
 ### Scheduling the route
 
 The `tidycreel` package supports bus-route designs through `generate_bus_schedule()`, which randomizes the circuit order and assigns visit windows to each stop within the daily sampling period:
@@ -279,6 +281,8 @@ Compare this with a survey that intercepts anglers mid-trip. A party interrupted
 
 The completed-trip feature of access-point surveys breaks that correlation. At departure, every party - short-trip or long-trip - has the same probability of being intercepted, assuming the technician is present and interviews all departing parties. The selection probability does not depend on trip duration. That is why the ratio-of-means is the right estimator here.
 
+Put another way, the access-point interview sees the trip only after it is finished, so the numerator and denominator describe the same completed event. That is what makes the ratio meaningful without extra correction.
+
 ```{r}
 #| label: trip-status
 #| echo: true
@@ -312,6 +316,8 @@ $$\hat{R}_{ROM} = \frac{\sum_{k=1}^{m} c_k}{\sum_{k=1}^{m} e_k} = \frac{\bar{c}}
 The mean-of-ratios has two practical deficiencies. First, parties with very short trips ($e_k \approx 0$) produce extreme or undefined ratios that dominate the mean. Second, it weights each party equally regardless of how long they fished — a party that fished 30 minutes counts the same as a party that fished 8 hours. This makes the mean-of-ratios sensitive to the composition of trip lengths in the sample in a way that does not reflect the underlying angler population.
 
 The ratio-of-means avoids both problems. Short trips contribute proportionally small weight to the denominator. Parties with zero catch but nonzero effort do not cause computational problems. And the estimator is equivalent to a weighted average of individual catch rates, with each party weighted by its contribution to total effort — which is the natural weighting for a rate defined per unit of effort [@hoenig1997].
+
+The practical interpretation is straightforward: ROM answers the question, "How many fish were caught per hour across all finished trips?" It does not average every party equally; it pools their effort first and then forms the rate.
 
 For a completed-trip access-point survey, Hoenig et al. ([-@hoenig1997]) show that the ROM estimator is less biased than the mean-of-ratios, particularly when trip length is correlated with catch. The intuition is that parties who catch fish quickly may end trips early, and the ratio-of-means down-weights their contribution in proportion to their shorter trips.
 
@@ -422,6 +428,8 @@ ggplot(trip_catch, aes(x = hours_fished, y = harvest)) +
 ## Length-of-stay bias
 
 The ratio-of-means estimator is appropriate for completed-trip interviews, but not necessarily for mid-trip intercepts. Understanding why requires the concept of length-of-stay bias, which Hoenig et al. ([-@hoenig1997]) analyzed formally.
+
+The intuition is simple: when the interview happens at the end of the trip, every finished trip is eligible in the same way. When the interview happens in the middle, long trips are easier to catch than short trips, so the sample no longer reflects the trip population one-for-one.
 
 Consider a survey that intercepts anglers at a random point during a period, rather than at departure. At that moment, who is most likely to be present? Anglers on long trips. A party fishing for ten hours has ten times the probability of being present at a random count time compared to a party that fished for one hour. If catch and trip length are correlated — which they typically are — this length-biased sampling systematically overrepresents productive anglers in the sample.
 

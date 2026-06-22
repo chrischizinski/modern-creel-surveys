@@ -44,6 +44,11 @@ designs. The same `creel_design()` → `add_counts()` → `add_interviews()` →
 estimate pipeline applies to both, with a few additional required arguments
 that capture the characteristics of the observation system.
 
+The common thread is simple: the remote sensor changes how the count is
+observed, but not what the analyst ultimately needs. The target is still
+angler-hours, so each design has to translate the sensor output back into
+that unit.
+
 ## Aerial surveys {#sec-aerial}
 
 ### The observation problem {#sec-aerial-obs}
@@ -176,6 +181,10 @@ underestimate total daily effort, while a flight at 13:00 would overestimate
 it. The GLMM integrates the full curve rather than multiplying one snapshot
 count by hours_open.
 
+That is the reason the model is doing real work here. It is not just smoothing
+noise; it is replacing a one-time observation with a full-day representation
+of use.
+
 ### Estimating effort {#sec-aerial-estimate}
 
 `estimate_effort_aerial_glmm()` fits the negative-binomial GLMM, integrates
@@ -278,6 +287,10 @@ standard access-point design. The `design_type = "aerial"` flag affects only
 effort estimation; catch rate, harvest, and release estimation are design-type
 agnostic.
 
+That asymmetry is deliberate: aerial data revise the effort side of the
+estimate, while completed-trip interviews still supply the catch-rate side.
+Only the effort side is sensor-specific.
+
 ## Camera-assisted designs {#sec-camera}
 
 ### Access-point counters {#sec-camera-counter}
@@ -294,6 +307,9 @@ A day with camera downtime is a day where the count is missing or
 underrepresented. If those days are disproportionately high-use days —
 weekends, good-weather days — excluding them biases the effort estimate
 downward.
+
+In other words, the camera can fail precisely when use is highest. That makes
+missingness part of the design problem, not just a maintenance issue.
 
 `impute_camera_counts()` handles missing counts using a stratum-specific
 generalized linear model fitted to the operational days. The imputed values
@@ -372,7 +388,9 @@ specify what the counter records. The current supported modes are:
   `preprocess_camera_timestamps()` computes trip-level effort
 
 The `counter` mode is the most common and requires only the imputed count
-table passed to `add_counts()`:
+table passed to `add_counts()`. This is the simplest camera case: the sensor
+gives a daily traffic total, and the analyst reconstructs angler-hours from
+counts and mean trip length.
 
 ```{r}
 #| label: camera-design-build
@@ -430,6 +448,10 @@ across the 10-day window. The `se_between` component reflects between-day
 variation in the ingress × trip-length product; `se_within` reflects within-day
 interview variance in trip duration.
 
+That split tells you where the next precision gain is likely to come from:
+more camera-days if between-day variation dominates, more interviews if
+trip-length variation dominates.
+
 As with the aerial design, catch rate estimation is unchanged:
 
 ```{r}
@@ -468,6 +490,9 @@ differences. This can substitute for or supplement the interview-based mean
 trip duration estimate — the camera itself measures effort directly, rather
 than inferring it from a count and a mean duration.
 
+This is the cleanest camera case because effort is observed directly from the
+start and end times rather than inferred from counts.
+
 ## Sample size for camera designs {#sec-camera-n}
 
 Once a pilot camera season establishes the stratum-level mean and variance of
@@ -503,15 +528,14 @@ creel_n_camera(
 ```
 
 With only five operational weekday observations and four weekend observations,
-the within-stratum variance is too small to constrain the sample-size
-calculation — both strata return n = 1, the floor. This is a toy-data
-artifact: real pilot seasons with 20–30 operational days per stratum produce
-the spread in ingress counts needed to estimate variance reliably. The
-interpretation of a real result is identical to `creel_n_effort()`: sample at
-least this many camera-days per stratum to keep the effort CV below the target.
-`creel_n_camera()` also emits a warning when the pilot falls below the
-empirical minimum recommended by Feltz–Middaugh (2025); that warning is
-suppressed here because the example data intentionally fall below it.
+the variance estimate is too thin to say much, so both strata bottom out at
+n = 1. That is a toy-data artifact: real pilot seasons with 20–30 operational
+days per stratum usually provide enough spread in ingress counts to make the
+calculation informative. Treat the output as a minimum sample-size target for
+each stratum, not as a precise optimum. `creel_n_camera()` also emits a warning
+when the pilot falls below the empirical minimum recommended by Feltz–
+Middaugh (2025); that warning is suppressed here because the example data
+intentionally fall below it.
 
 ## Proxy counts and validation {#sec-proxy}
 
@@ -520,7 +544,7 @@ suppressed here because the example data intentionally fall below it.
 Aerial counts and camera-monitored ramps are the most thoroughly supported
 remote-count methods in `tidycreel`, but other proxy systems appear in
 practice: pneumatic road tubes at boat launch entrances, infrared gate sensors
-at trailheads, acoustic hydrophone arrays that detect boat motors in
+at trailheads, and acoustic hydrophone arrays that detect boat motors in
 restricted channels. Each records a correlated signal of fishing activity
 rather than a direct observation of anglers.
 
@@ -598,11 +622,11 @@ example_camera_counts |>
 ```
 
 A camera with 90% uptime over a 30-day survey loses roughly 3 operational
-days. If those failures are random relative to angler activity, imputation
-introduces only noise. If failures correlate with weather — cameras fail in
-cold rain, which also suppresses fishing — the imputed values reflect
-low-use conditions, and the estimate is biased downward. Understanding the
-failure mechanism matters as much as the imputation method.
+days. If those failures are random relative to angler activity, imputation adds
+noise but not much bias. If failures correlate with weather — cameras fail in
+cold rain, which also suppresses fishing — the imputed values reflect low-use
+conditions, and the estimate is biased downward. Understanding the failure
+mechanism matters as much as the imputation method.
 
 ## `tidycreel` support summary {#sec-remote-tidycreel}
 
@@ -650,9 +674,8 @@ the fraction of days that were imputed alongside the estimate and standard
 error, so users can assess how much of the result rests on modeled versus
 observed counts.
 
-Remote count designs extend the creel survey toolkit substantially — larger
+Remote count designs extend the creel survey toolkit substantially: larger
 waterbodies become tractable, high-frequency temporal monitoring becomes
-affordable, and record-keeping becomes auditable. What they cannot do is
-relax the foundational requirements: a defined frame, a defensible sampling
-design, and documented assumptions about what the sensor measures and what
-it misses.
+affordable, and record-keeping becomes auditable. What they do not change is
+the need for a defined frame, a defensible sampling design, and explicit
+assumptions about what the sensor measures and what it misses.

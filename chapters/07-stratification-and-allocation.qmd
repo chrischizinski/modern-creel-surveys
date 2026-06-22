@@ -438,7 +438,7 @@ What `tidycreel` cannot do is decide whether a missed day should be treated as m
 
 ## Takeaway {#sec-strat-takeaway}
 
-Stratification determines how observations represent the fishery. The estimator can only be as defensible as the strata that produced it.
+Stratification determines how observations represent the fishery. The design question is not how many strata can be named, but which distinctions are worth their own sample.
 
 In practical terms:
 

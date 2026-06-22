@@ -165,6 +165,8 @@ This is the instantaneous count estimator: observed anglers times shift duration
 
 The practical consequence is that catch rates derived from count-based effort are in fish per angler-hour. Multiplying a per-hour catch rate by an hour-based effort estimate yields total catch with internally consistent units. An analyst who wants to report catch rates in fish per trip must obtain the number of trips from the interview stream and verify that the interview sample represents all trips — not all angler-hours — which requires a different sampling condition.
 
+In plain language, counts answer "how long was the fishery active?" and interviews answer "what happened during that activity?" The first is a time total; the second is a trip summary. They are related, but they are not interchangeable.
+
 ### Unit decisions in practice
 
 When setting up a new creel program, the unit decisions above should appear explicitly in the field data entry form and the data dictionary, not just in the analysis protocol. Common practices that create unit ambiguity in legacy datasets:
@@ -193,6 +195,8 @@ An estimand without a domain is incomplete. "Total harvest" is undefined unless 
 
 Every creel survey operates within an overall sampling frame — the set of sites, dates, and access types covered by the design. The full-frame estimate corresponds to the broadest domain. Narrower estimates apply to domain-restricted subsets: harvest at one ramp only, walleye harvest only, harvest on weekend days only. Getting the domain right matters because domain-restricted estimates and full-frame estimates have different denominators, different subsets of interview records, and sometimes different estimation strategies.
 
+The domain is part of the estimand, not just a label attached afterward. "Walleye harvest on weekend mornings in the north section" and "seasonal harvest across the full reservoir" are different questions, so they require different data cuts and different expectations for precision.
+
 Four dimensions define the reporting domain in most creel surveys.
 
 ### Temporal domains
@@ -218,6 +222,8 @@ Four dimensions define the reporting domain in most creel surveys.
 The four domain dimensions — temporal, spatial, species, access type — can be combined. A reporting request for "walleye harvest by boat anglers during June on the north section" is the intersection of all four domains simultaneously. Each intersection step reduces the sample size available for that estimate. If 600 interviews are collected over the season, and 40% are from boat anglers, and 25% are from June, and 30% are from the north section, and 60% involve any walleye catch, the intersection may contain only a handful of parties — far too few for a useful estimate.
 
 This sample-size decay problem is not a failure of estimation theory; it is a fundamental constraint of domain-restricted inference. The statistical machinery works correctly on ten interviews, but the resulting confidence interval may span an order of magnitude. The practical response is to decide which domain dimensions are essential for the management question and which can be aggregated without misleading the user. A request for "walleye harvest by boat anglers" that arrives after data collection has already begun cannot be answered precisely if the original design did not power for it.
+
+The book-level rule is to state the narrowest domain you actually need before the season starts, then treat everything broader or narrower as a secondary cut of the same data. That discipline is what keeps the estimate honest when the data become sparse.
 
 @fig-catch-by-species-type below shows the distribution of harvest and release counts across species and catch type in the Harlan dataset — the starting point for any species-domain restricted estimate.
 
@@ -254,6 +260,8 @@ Note that @fig-catch-by-species-type shows raw interview totals, not design-weig
 
 **Access type and gear.** Estimates can be restricted to boat anglers, bank anglers, fly-fishing anglers, or bait users. Access type is frequently an important domain because boat and bank anglers target different areas of the waterbody, encounter different assemblages, and often have systematically different catch rates for the same species. When access type is distinguishable during counts — boat trailers in the parking lot vs. anglers on foot — effort can also be partitioned by access type, and it must be for the domain consistency rule in @sec-consistency to be satisfied.
 
+In practical terms, access type is not just a label. It is a different fishing population with a different denominator, so a boat-angler rate only makes sense if the effort it is multiplied by also came from boat anglers.
+
 ### The impossible domain: species-targeted effort {#sec-impossible-domain}
 
 One domain restriction unavailable from instantaneous or progressive counts is species-targeted effort: total fishing time expended only by anglers targeting a particular species.
@@ -263,6 +271,8 @@ This would be a natural quantity to have — if you wanted a walleye catch rate 
 An apparent workaround is to scale total effort by the fraction of interviewed anglers who reported targeting a species. If 35 percent of interviewed parties reported targeting walleye, one might use $0.35 \times \hat{E}$ as walleye-targeting effort. This requires assuming that the fraction of walleye-targeting anglers in the interview sample equals the fraction present in the system during counts — an assumption that fails whenever targeting behavior correlates with time of day, day type, or access type in ways not captured by the sampling design [@pope_chapter].
 
 The correct approach is to use **total effort** as the denominator for species-specific catch rates. A walleye catch rate of 0.2 fish per angler-hour means anglers on average caught 0.2 walleye per hour of total fishing time — not per hour of walleye-targeting time. This is interpretable: it represents the expected walleye catch per angler-hour from the full fishery. Comparing species-specific rates on this shared denominator is valid. Comparing rates computed on species-targeting denominators is not, because those denominators come from different, incomparable subsets of the fishing population.
+
+The rule is simple: if counts cannot tell you who was targeting a species, they cannot supply species-targeting effort. The denominator has to stay at the level the counts can actually observe.
 
 ## Interview-reported effort vs. count-estimated effort {#sec-effort-comparison}
 

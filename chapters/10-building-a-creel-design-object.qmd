@@ -32,7 +32,7 @@ incorrectly — at every estimation step.
 `tidycreel` addresses this with the `creel_design` object. The design object
 holds the calendar, the strata, the counts, the interviews, and the species-level
 catch in a single structure. Estimation functions in Chapters 12 through 15 take a
-`creel_design` as their first argument. The design object is the handoff point
+`creel_design` as their first argument, so the design object is the handoff point
 between data preparation and estimation.
 
 This chapter builds a `creel_design` for the Harlan 2022 survey, one step at a
@@ -66,7 +66,7 @@ harlan_design
 
 The printed output shows the core design metadata: survey type, date column,
 strata variable, calendar span, and the number of stratum levels. Nothing about
-counts, interviews, or catch appears yet — those are added in subsequent steps.
+counts, interviews, or catch appears yet.
 
 The schedule itself tells the base design how many days were in each stratum and
 how many were sampled:
@@ -153,7 +153,7 @@ harlan_interviews_with_catch |>
 
 Starting from `harlan_interviews` with `left_join` is the safest pattern: all
 original rows survive, and `NA` in `total_harvest` after the join can only mean
-the party had no harvested catch — never that the interview itself is missing.
+the party had no harvested catch.
 
 ```{r}
 #| label: design-interviews
@@ -177,7 +177,7 @@ The output now shows interview counts broken down by trip completion status:
 `r sum(harlan_interviews$trip_status == "complete")` complete and
 `r sum(harlan_interviews$trip_status == "incomplete")` incomplete.
 The 318 interviews flagged for zero catch are anglers who had not yet landed
-anything when intercepted — a normal outcome in access-point surveys.
+anything when intercepted.
 
 The `interview_type = "access"` argument tells the design that these are
 access-point interviews: anglers intercepted at fixed locations as they exit the
@@ -209,10 +209,9 @@ harlan_design
 The design now reports `r nrow(harlan_catch)` catch rows covering
 `r n_distinct(harlan_catch$species)` species, split between harvested and released
 records. An advisory message notes that harvest totals in the catch table diverge
-from `total_harvest` in the interviews table for some parties. This is expected:
+from `total_harvest` in the interviews table for some parties. That is expected:
 `total_harvest` counts only harvested fish, while the catch table records both
-harvested and released. The divergence is not an error; it reflects the difference
-between the two representations of catch.
+harvested and released.
 
 The full design object now holds every layer of the survey:
 
@@ -417,7 +416,7 @@ is the prerequisite for running those functions with real output.
 
 The step-by-step build earlier in this chapter printed each intermediate state for
 teaching purposes. In production code, the same pipeline is written as a single
-pipe chain that silently passes each intermediate object to the next builder:
+pipe chain:
 
 ```{r}
 #| label: full-pipeline
@@ -454,14 +453,14 @@ harlan_design_final <- creel_design(
 harlan_design_final
 ```
 
-The pipe chain is the production form. Each step adds one layer. The result is a
-single named object that summarizes the entire survey and can be passed to any
-estimation function in the book.
+The pipe chain is the production form. Each step adds one layer, and the result
+is a single named object that can be passed to any estimation function in the
+book.
 
 ## What the design object stores {#sec-design-slots}
 
-The `creel_design` object is a named list. Understanding which slot holds which
-information makes it possible to extract or inspect any piece of the survey without
+The `creel_design` object is a named list. Knowing which slot holds which
+information makes it possible to inspect any piece of the survey without
 re-running estimation.
 
 ```{r}
@@ -501,9 +500,8 @@ slots is rarely needed; the estimation functions handle it internally.
 ## When to rebuild the design {#sec-design-rebuild}
 
 Because the design object is immutable, any change to the underlying data
-requires rebuilding from the affected step forward. This is deliberate: it
-prevents a situation where the design object reflects one version of the data and
-the raw tables reflect another.
+requires rebuilding from the affected step forward. This keeps the design
+aligned with the raw tables.
 
 The most common triggers for a rebuild are:
 
@@ -532,28 +530,25 @@ not:
 creel_design pipeline → estimate → discover problem → patch design object
 ```
 
-The `harlan_design_final` object built in @sec-design-handoff represents the
-end of the data preparation phase for the Harlan 2022 survey. When the next
-chapter's cleaning decisions are applied, a fresh design object should be built
-from the cleaned tables using the same four-step pipeline.
+The `harlan_design_final` object built in @sec-design-handoff marks the end of
+the data preparation phase for the Harlan 2022 survey. When the next chapter's
+cleaning decisions are applied, rebuild the design from the cleaned tables with
+the same four-step pipeline.
 
 ## Takeaway {#sec-design-takeaway}
 
 The `creel_design` object collects everything an estimator needs to produce a
 design-consistent result: the sampling frame, the strata, the realized sample
-counts, the party-level effort and catch, and the species-level records. Building
-it in four explicit steps makes the design choices visible and verifiable at each
-stage.
+counts, the party-level effort and catch, and the species-level records. Four
+explicit steps keep the design choices visible and verifiable.
 
 `audit_strata()`, `check_completeness()`, and `plot_design()` provide immediate
 feedback on whether the assembled design is consistent and complete before any
 estimates are computed. Problems surfaced at this stage — a stratum below the
-minimum interview count, count dates outside the schedule, strata with very high
-design effects — are far easier to diagnose here than after an estimation function
-has already processed them.
+minimum interview count, count dates outside the schedule, or a very high design
+effect — are easier to diagnose here than after estimation has already run.
 
-The next chapter addresses data cleaning decisions that can change estimates: how
-to identify and handle extreme catch values, implausible trip durations, and
+The next chapter addresses data cleaning decisions that can change estimates:
+how to identify and handle extreme catch values, implausible trip durations, and
 interviews that do not pass internal consistency checks. Cleaning is done on the
-raw tables before building the design object; the design object should be
-constructed from data that has already passed the checks in Chapter 11.
+raw tables before building the design object.

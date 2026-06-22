@@ -26,7 +26,7 @@ species-level outcomes.
 Each record type answers a different question and belongs to a different
 observation unit. A count record belongs to a site-period combination. An
 interview record belongs to an angler party. A catch record belongs to a single
-species-outcome combination within a single interview. These are not the same unit
+species-outcome combination within a single interview. These are different units
 and should not share rows in the same table.
 
 The practical consequence is statistical. Effort estimators divide an observed
@@ -37,11 +37,11 @@ join that combines catch with trip records creates duplicate rows — and the
 denominator for the trip-hours calculation expands with them. The estimate changes
 not because the underlying data changed but because the data structure changed.
 
-Keeping records in separate tables and joining them only when an analysis requires
-it is the safest guard against this class of error. This chapter introduces the
-four Harlan Reservoir survey tables, explains their keys and relationships, and
-shows how `tidycreel` validates and formalizes the structure before any estimation
-begins.
+Keeping records in separate tables and joining them only when an analysis
+requires it is the safest guard against this class of error. This chapter
+introduces the four Harlan Reservoir survey tables, explains their keys and
+relationships, and shows how `tidycreel` validates the structure before any
+estimation begins.
 
 ## The four Harlan tables {#sec-four-tables}
 
@@ -186,9 +186,9 @@ harlan_catch
 
 The structure means a single interview with three species can appear as six rows
 in the catch table — one harvested and one released row per species. This is
-intentional. Storing species and outcomes in separate rows rather than separate
-columns keeps the table tidy as species lists expand and makes it straightforward
-to filter, aggregate, or join by species or outcome.
+intentional. Storing species and outcomes in separate rows keeps the table tidy
+as species lists expand and makes it straightforward to filter, aggregate, or
+join by species or outcome.
 
 ```{r}
 #| label: catch-summary
@@ -236,8 +236,8 @@ The schedule is the root. Counts and interviews are both children of the schedul
 connected through shared date and context columns. Catch is a child of interviews,
 connected through the surrogate key.
 
-Joining in the wrong direction or joining without specifying all required key
-columns are the two most common sources of phantom rows and silent data loss.
+Joining in the wrong direction or joining without all required key columns are
+the two most common sources of phantom rows and silent data loss.
 
 The counts-to-interviews join is worth demonstrating explicitly. It produces one
 output row per interview, augmented with the count context from the same
@@ -263,10 +263,9 @@ interviews_with_context |>
 ```
 
 The row count is preserved — one output row per interview — and each interview
-row now carries the angler count from the concurrent count round. A mismatch
-in row count here would indicate either an interview with no corresponding count
-(a sampling design issue) or multiple count rounds matching the same interview
-composite key (a data structure issue).
+row now carries the angler count from the concurrent count round. A mismatch in
+row count would indicate either an interview with no corresponding count or
+multiple count rounds matching the same interview key.
 
 ## Validating joins {#sec-validate-joins}
 
@@ -357,10 +356,10 @@ validate_creel_data(
 ```
 
 The Harlan data passes all 63 checks with no warnings and no failures. This
-outcome is worth recording at the start of any analysis session: a validation run
-that passes confirms the tables have not been modified in a way that would silently
-break downstream estimation. A run that fails identifies specific columns and rows
-to investigate before any estimation proceeds.
+outcome is worth recording at the start of any analysis session: a passing run
+confirms the tables have not been modified in a way that would silently break
+downstream estimation. A failure identifies specific columns and rows to
+investigate before estimation proceeds.
 
 The checks `validate_creel_data()` runs are not redundant with the anti-joins in
 @sec-validate-joins. The anti-joins test relational integrity between tables. The
@@ -406,10 +405,10 @@ The printed schema shows which column in each table maps to which conceptual rol
 table carries the trip-duration information the estimator uses. `catch_count -> n_fish`
 means that `n_fish` in the catch table is the count column.
 
-Schemas are useful precisely because the data are in separate tables. If all
-columns were in one flat file, distinguishing between `hours_fished` (trip-level)
-and `n_fish` (catch-level) would require column name conventions rather than table
-structure. The schema makes the distinction explicit and inspectable.
+Schemas are useful because the data are in separate tables. If all columns were
+in one flat file, distinguishing between `hours_fished` (trip-level) and
+`n_fish` (catch-level) would require column-name conventions rather than table
+structure.
 
 In the next chapter, the schema is consumed by `creel_design()` to produce the
 design object that estimation functions take as their primary argument.
@@ -438,19 +437,19 @@ The output carries standardized names — `interview_uid`, `species`, `count`,
 `prep_interview_catch()` at the start of an analysis session means that column
 name differences between projects do not propagate into estimation errors.
 
-The prep functions are thin wrappers: they rename columns and return the data with
-the same number of rows. They do not validate values, impute missing data, or
-recode factors. Validation (via `validate_creel_data()`) and join checking (via
-anti-joins) should run before the prep step, not after it.
+The prep functions are thin wrappers: they rename columns and return the data
+with the same number of rows. They do not validate values, impute missing data,
+or recode factors. Validation (via `validate_creel_data()`) and join checking
+(via anti-joins) should run before the prep step, not after it.
 
 ## The danger of premature flattening {#sec-flattening}
 
-The most common data management mistake in creel analysis is joining tables before
-the analysis requires it. The typical failure mode is joining interviews to catch
-before aggregating catch to the party level. The interview table has one row per
-party. The catch table has one row per species per outcome per party. The join
-expands the interview table, and any trip-level statistic computed on the result
-uses the wrong denominator.
+The most common data management mistake in creel analysis is joining tables
+before the analysis requires it. The typical failure mode is joining interviews
+to catch before aggregating catch to the party level. The interview table has one
+row per party. The catch table has one row per species per outcome per party.
+The join expands the interview table, and any trip-level statistic computed on
+the result uses the wrong denominator.
 
 ```{r}
 #| label: premature-flatten-demo
@@ -477,10 +476,10 @@ interviews_flat |>
   count(n_rows_in_join, name = "n_interviews")
 ```
 
-Most interviews appear more than once in the flat join. An interview that reported
-three species with two outcomes each would appear six times. If trip-level effort
-hours are then averaged on the flat file, the denominator is inflated and the mean
-is wrong:
+Most interviews appear more than once in the flat join. An interview that
+reported three species with two outcomes each would appear six times. If
+trip-level effort hours are then averaged on the flat file, the denominator is
+inflated and the mean is wrong:
 
 ```{r}
 #| label: premature-flatten-wrong-mean
@@ -526,7 +525,8 @@ interviews_with_catch |>
 
 The row count matches the interview table and each row carries trip-level effort
 alongside party-level catch totals. This is the correct shape for CPUE
-calculation: one row per trip, with hours and catch from the same observation unit.
+calculation: one row per trip, with hours and catch from the same observation
+unit.
 
 ## Visualizing the data hierarchy {#sec-viz-hierarchy}
 
@@ -610,11 +610,11 @@ ggplot(coverage_data, aes(x = date, y = source, color = source)) +
   theme(panel.grid.major.x = element_line(linewidth = 0.3))
 ```
 
-Several dates appear in the schedule and counts rows but not in the interviews row.
-A day can be counted — observers present and recording anglers — without any
-parties agreeing to be interviewed. The figure makes this gap visible. Treating the
-interview date range as equivalent to the sampled date range would overstate the
-survey frame and understate the non-response rate.
+Several dates appear in the schedule and counts rows but not in the interviews
+row. A day can be counted without any parties agreeing to be interviewed. The
+figure makes this gap visible. Treating the interview date range as equivalent
+to the sampled date range would overstate the survey frame and understate the
+non-response rate.
 
 ## Table ownership rules {#sec-ownership}
 
@@ -668,8 +668,8 @@ for the same attribute.
 
 Violations of these rules are common in creel programs that began as spreadsheets
 and were later imported into a data system. Columns get copied as a convenience
-and then diverge. The linked-table approach makes these copies unnecessary —
-the information is always available through a join from the table that owns it.
+and then diverge. The linked-table approach makes these copies unnecessary: the
+information is always available through a join from the table that owns it.
 
 ## Common mistakes {#sec-common-mistakes}
 
@@ -695,8 +695,8 @@ tables before joining makes the distinction visible; a flat file obscures it.
 ## Takeaway {#sec-linked-takeaway}
 
 Creel data is naturally relational. The sampling frame, effort counts, party
-interviews, and species-level catch records each describe a different observation
-unit and belong in separate tables with stable keys connecting them.
+interviews, and species-level catch records each describe a different
+observation unit and belong in separate tables with stable keys connecting them.
 
 Keeping these tables separate until the analysis requires them protects the row
 counts and denominators that estimators depend on. It also makes data quality
@@ -706,6 +706,5 @@ explicit join checks rather than manifesting silently as wrong estimates.
 
 `tidycreel` supports this structure through `validate_creel_data()`, which checks
 internal integrity within each table, and `creel_schema()`, which formalizes the
-column mapping that estimation functions consume. The next chapter builds on both
-to construct the `creel_design` object — the complete survey representation that
-passes all four tables into the estimation pipeline.
+column mapping that estimation functions consume. The next chapter uses both to
+construct the `creel_design` object.

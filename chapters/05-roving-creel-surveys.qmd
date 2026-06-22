@@ -68,6 +68,8 @@ The design has become the most widely used on-site creel method in North America
 
 This chapter works through roving survey design from first principles: how effort is estimated from counts, how mid-trip interviews produce catch rates through the mean-of-ratios estimator, where the design is vulnerable to bias, and how `tidycreel` supports the roving workflow. The running example is the Harlan Reservoir 2022 dataset. Harlan was operated primarily as an access-point survey, but the dataset includes 210 incomplete-trip interviews collected during mid-day roving contacts — enough to illustrate every feature of the roving analysis.
 
+The short version is that roving surveys trade convenience for reach. They can cover anglers who never pass a fixed access point, but the analyst has to reconstruct the trip from partial information instead of from a finished record.
+
 ## How roving surveys differ from access-point surveys
 
 The structural difference between roving and access-point surveys is not where the clerk is stationed — it is when the interview happens relative to the trip.
@@ -195,6 +197,8 @@ Every roving interview records an angler in the middle of a trip. The angler sta
 
 This creates a censoring problem. The analyst observes catch-so-far and effort-so-far, but not the trip's eventual catch and duration. The ratio of catch-so-far to effort-so-far — the mid-trip catch rate — is not the same as the ratio of completed-trip catch to completed-trip effort. It equals the completed-trip rate only if fish are caught at a constant rate throughout the trip (stationary catch rate). That constancy assumption is rarely defensible: anglers move, feeding activity changes with light and temperature, and successful anglers either quit early when they reach a bag limit or fish longer to maximize harvest.
 
+The key point is that the interview captures a moving target. A party that has already fished for two hours may still fish for four more, and a party that has fished for two hours may stop almost immediately. The observed ratio is real, but it is only a partial record of the trip.
+
 The Harlan dataset reflects the incomplete-trip problem directly. Of 600 total interviews, 210 are flagged as incomplete — 35% of the interview record:
 
 ```{r}
@@ -265,6 +269,8 @@ The harmonic mean down-weights long elapsed times and up-weights short ones, cou
 
 The practical implication is that incomplete trip durations cannot be used as if they were completed trip durations. Extrapolating from elapsed time to full trip length without a correction model would require assumptions about the joint distribution of trip start times and total durations that are rarely estimable from the creel data alone. The standard approach is not to correct the duration but to choose an estimator that is appropriate for the incomplete-trip observation structure.
 
+That is the core roving adjustment: do not pretend the mid-trip record is complete. Use the partial record for what it can support, and choose the estimator around that limitation.
+
 ## Catch rate estimation for roving surveys
 
 ### Two estimators, two settings
@@ -284,6 +290,8 @@ $$\hat{R}_{\text{MOR}} = \frac{1}{n} \sum_{j=1}^{n} \frac{c_j}{l_j}$$
 This estimator computes a catch rate for each angler individually and then averages across anglers. Hoenig et al. [-@hoenig1997] showed that MOR has the correct expectation for incomplete trips (at least approximately, under the Poisson fishing process assumption), making it the appropriate estimator when interviews occur mid-trip.
 
 The recommendation from Hoenig et al. [-@hoenig1997]: **use MOR for incomplete trips, exclude trips shorter than 30 minutes**. The 30-minute truncation is necessary because MOR has infinite variance when short trips are included. A single angler who has fished for 0.1 hours and caught three fish contributes a CPUE of 30 fish/hour — an extreme observation that inflates the sample mean unpredictably. Excluding trips under 30 minutes (0.5 hours) substantially reduces mean squared error with minimal loss of sample size in most datasets.
+
+In practice, this means the estimator is chosen to match the data structure, not the other way around. If the trip is still in progress, the complete-trip formula is the wrong tool even when the output looks numerically tidy.
 
 For completed trips — as in the access-point analysis in Chapter 4 — ROM is correct and MOR is not.
 
