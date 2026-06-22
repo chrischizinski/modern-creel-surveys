@@ -262,7 +262,7 @@ creel_n_cpue(
 
 Setting `rho = 0` is conservative: it over-estimates the required sample size
 because it ignores the variance-reducing effect of positive catch–effort covariance.
-The observed ρ = 0.35 reduces the 20%-CV interview requirement from 80 to 60. Using
+The observed ρ = 0.35 reduces the 20%-CV interview requirement from 78 to 59. Using
 the observed correlation is appropriate when pilot data are reliable; in the absence
 of pilot data, the conservative `rho = 0` default is the safer choice.
 
@@ -304,7 +304,7 @@ cv_from_n(
 )
 ```
 
-Sixty interviews delivers an expected CPUE CV of about 24%, which may exceed the
+Sixty interviews delivers an expected CPUE CV of about 23%, which may exceed the
 agency's 20% threshold. One hundred interviews brings the CV to 18%, comfortably
 within standard precision targets. If neither budget is achievable, this output
 makes the trade-off explicit and auditable — a more defensible position than an
@@ -344,11 +344,11 @@ tibble(
 )
 ```
 
-For the Harlan design, Neyman allocation shifts 5 days from the weekend stratum to
-the weekday stratum relative to proportional. The weekday stratum has both more
-calendar days and substantially higher between-day variance (161,734 vs 54,123), so
-directing additional sampling effort there reduces the overall variance of the
-effort estimate.
+For the Harlan design, Neyman allocation adds 5 days to the weekday stratum and
+removes 4 from the weekend stratum relative to proportional (32→37 weekday,
+13→9 weekend). The weekday stratum has both more calendar days and substantially
+higher between-day variance (161,734 vs 54,123), so directing additional sampling
+effort there reduces the overall variance of the effort estimate.
 
 ```{r}
 #| label: fig-ps-allocation
@@ -725,8 +725,8 @@ field_schedule |>
   tidyr::pivot_wider(names_from = day_type, values_from = days_scheduled, values_fill = 0L)
 ```
 
-The calendar table shows how the 45 sampling days distribute across strata and
-months. A roughly even spread across the April–October window is desirable; heavy
+The calendar table shows how the 46 allocated sampling days distribute across strata and
+months (Neyman integer rounding adds one day above the 45-day target). A roughly even spread across the April–October window is desirable; heavy
 concentration in any one month would bias estimates toward conditions in that month.
 If a gap appears — for instance, no weekend days scheduled in June — `generate_schedule()`
 can be re-run with different seeds until a more balanced calendar is produced, or
