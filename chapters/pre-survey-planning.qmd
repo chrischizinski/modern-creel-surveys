@@ -403,12 +403,15 @@ optimal_alloc
 ```
 
 The result shows total days required under Neyman allocation to hit the target CV,
-alongside the per-stratum breakdown. For the Harlan design, `optimal_n()` should
-return a comparable total to `creel_n_effort()` — the difference is that
-`creel_n_effort()` uses proportional allocation (equal cost assumption) while
-`optimal_n()` uses Neyman allocation, concentrating days in the higher-variance
-stratum. When strata variances differ substantially, Neyman allocation requires
-fewer total days for the same CV.
+alongside the per-stratum breakdown. For the Harlan design, `optimal_n()` returns
+the same total (28) as `creel_n_effort()` at this CV target, but allocates
+differently: 23 weekday / 6 weekend (Neyman) versus 20 weekday / 9 weekend
+(proportional). Neyman allocation concentrates days in the weekday stratum because
+that stratum has both more calendar days and higher between-day variance. When
+strata variances differ substantially across surveys, Neyman allocation can require
+fewer total days than proportional for the same precision target; for the Harlan
+design the totals happen to be equal, and the practical benefit is the more efficient
+per-stratum split.
 
 ## Power to detect a change {#sec-ps-power}
 
