@@ -408,7 +408,7 @@ ggplot(compliance_by_angler,
   theme_creel()
 ```
 
-Boat anglers show marginally higher compliance than bank anglers, consistent with their ability to target deeper water where larger fish concentrate. The difference is not statistically tested here — a formal design-weighted contrast would require filtering `lf_weighted` to each angler type, which requires a separate `est_length_distribution()` call with `by = angler_type`. The overall design-weighted estimate from `est_compliance()` is the more defensible number for regulatory reporting.
+Boat anglers show marginally higher compliance than bank anglers, consistent with their ability to target deeper water where larger fish concentrate. The difference is not statistically tested here — a formal design-weighted contrast would require a separate `est_length_distribution(design_bio, ..., by = angler_type)` call followed by `est_compliance()` per angler type. The overall design-weighted estimate produced above is the more defensible number for regulatory reporting.
 
 ## Estimating biomass from the length distribution {#sec-bio-biomass}
 
@@ -422,10 +422,8 @@ For Walleye, a commonly used length-weight relationship takes the form $W = a \c
 a <- 0.0000106
 b <- 3.093
 
-biomass_est <- est_biomass(lf_weighted, a = a, b = b)
-biomass_est
-
-biomass_walleye <- biomass_est |> filter(species == "Walleye")
+lf_walleye_harvest <- lf_weighted |> filter(species == "Walleye")
+biomass_walleye <- est_biomass(lf_walleye_harvest, a = a, b = b)
 biomass_walleye
 ```
 

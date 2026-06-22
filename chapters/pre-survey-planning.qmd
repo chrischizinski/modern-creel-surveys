@@ -676,8 +676,9 @@ cv_from_n(
 ```
 
 Thirty days yields a higher effort CV than the 20% target, making the precision
-trade-off explicit and auditable before the field season begins. For CPUE, the
-same budget check uses `type = "cpue"`:
+trade-off explicit and auditable before the field season begins. The same call
+with `type = "cpue"` and `n = 60` or `n = 100` was shown earlier in
+@sec-ps-cv-from-n.
 
 **Step 4 — Choose an allocation strategy.**
 
