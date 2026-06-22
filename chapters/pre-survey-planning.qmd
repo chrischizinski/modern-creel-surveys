@@ -278,8 +278,9 @@ many days?" But managers sometimes allocate a fixed number of sampling days befo
 the precision question is asked, and the analyst must then characterize what that
 budget can deliver.
 
-`cv_from_n()` inverts the CPUE sample size formula: given a fixed number of
-interviews, what CV should you expect?
+`cv_from_n()` inverts the sample size formula: given a fixed number of sampling
+units, what CV should you expect? Set `type = "cpue"` for interviews or
+`type = "effort"` for sampling days.
 
 ```{r}
 #| label: ps-cv-from-n
@@ -785,7 +786,7 @@ biologically important changes; and `generate_schedule()` turns the numerical
 targets into a concrete field calendar.
 
 The Harlan example illustrates a realistic planning sequence: 45 sampling days
-under Neyman allocation (32 weekday, 13 weekend) will achieve approximately 15% CV
+under Neyman allocation (37 weekday, 9 weekend) will achieve approximately 15% CV
 on effort, and 80–100 interviews will achieve approximately 20% CV on CPUE.
 However, the power analysis reveals an important limitation: because individual
 catch rates are highly variable (CV ≈ `r round(cv_historical, 2)`), detecting a
