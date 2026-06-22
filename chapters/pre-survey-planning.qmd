@@ -384,6 +384,32 @@ performs nearly as well and has the practical advantage of simplicity: interview
 can be scheduled without knowledge of historical variance estimates, and the
 allocation is easier to explain to field crews and managers.
 
+`optimal_n()` combines the two steps — total sample size and Neyman allocation —
+into a single call. Rather than first computing `creel_n_effort()` and then calling
+`reallocate_strata()`, `optimal_n()` takes the CV target directly and returns both
+the required total days and the per-stratum allocation:
+
+```{r}
+#| label: ps-optimal-n
+#| echo: true
+
+optimal_alloc <- optimal_n(
+  cv_target = 0.20,
+  N_h       = N_hv,
+  ybar_h    = ybar_hv,
+  s2_h      = s2_hv
+)
+optimal_alloc
+```
+
+The result shows total days required under Neyman allocation to hit the target CV,
+alongside the per-stratum breakdown. For the Harlan design, `optimal_n()` should
+return a comparable total to `creel_n_effort()` — the difference is that
+`creel_n_effort()` uses proportional allocation (equal cost assumption) while
+`optimal_n()` uses Neyman allocation, concentrating days in the higher-variance
+stratum. When strata variances differ substantially, Neyman allocation requires
+fewer total days for the same CV.
+
 ## Power to detect a change {#sec-ps-power}
 
 CV targets address precision, not the capacity to detect change. A survey that
@@ -632,8 +658,26 @@ tibble(
 
 The 45-day effort target and 80-interview CPUE target are both feasible for a
 season-long Harlan survey. If the field budget supports only 30 sampling days,
-`cv_from_n(type = "cpue")` can be used to characterize the precision achievable
-with a proportionally reduced interview effort.
+`cv_from_n()` characterizes the precision achievable at that budget for both
+effort and CPUE:
+
+```{r}
+#| label: ps-cv-from-n-effort
+#| echo: true
+
+# What effort CV is achievable with 30 sampling days?
+cv_from_n(
+  type   = "effort",
+  n      = 30L,
+  N_h    = N_hv,
+  ybar_h = ybar_hv,
+  s2_h   = s2_hv
+)
+```
+
+Thirty days yields a higher effort CV than the 20% target, making the precision
+trade-off explicit and auditable before the field season begins. For CPUE, the
+same budget check uses `type = "cpue"`:
 
 **Step 4 — Choose an allocation strategy.**
 
@@ -714,14 +758,15 @@ season begins, rather than a post-hoc reckoning with an inadequate estimate.
 
 | Function | Purpose |
 |---|---|
-| `creel_n_effort()` | Sampling days for a target effort CV |
+| `creel_n_effort()` | Sampling days for a target effort CV (proportional allocation) |
 | `creel_n_cpue()` | Interviews for a target CPUE CV |
-| `cv_from_n()` | Expected CV given a fixed number of interviews |
-| `reallocate_strata()` | Neyman-optimal allocation across strata |
+| `cv_from_n()` | Expected CV given a fixed number of sampling units; `type = "effort"` or `type = "cpue"` |
+| `optimal_n()` | Sampling days and Neyman-optimal per-stratum allocation for a target effort CV |
+| `reallocate_strata()` | Neyman-optimal allocation across strata given a fixed day budget |
 | `creel_power()` | Power to detect a fractional CPUE change |
 | `generate_schedule()` | Stratified random sampling calendar |
 
-All six functions expect named vectors for stratum-level arguments. Names must
+All functions that take stratum-level arguments expect named vectors. Names must
 match across `N_h`, `ybar_h`, and `s2_h`; mismatched names will produce an error.
 The output of `generate_schedule()` is a `creel_schedule` object that passes
 directly to `creel_design()` without further transformation.

@@ -428,7 +428,7 @@ The default endpoint paths are designed for the UNL/NGPC creel survey API. Agenc
 
 ### No-auth connection
 
-The simplest API connection requires only a base URL, one or more creel survey UIDs, and a schema. The schema here supplies only the `survey_type` — the API backend uses hardcoded field name mappings for the NGPC response format, not the column-mapping arguments used by the CSV backend.
+The simplest API connection requires only a base URL, one or more creel survey UIDs, and a schema. The schema supplies `survey_type`; JSON field-name translation defaults to the NGPC response format. Agencies whose API returns different field names can override them with the `api_field_map` argument, shown in @sec-api-field-map below.
 
 ```{r}
 #| label: api-no-auth
@@ -530,6 +530,35 @@ conn_api <- creel_connect_api(
 ```
 
 Valid endpoint names are `interviews`, `counts`, `catch`, `harvest_lengths`, and `release_lengths`. Unspecified endpoints retain the NGPC defaults.
+
+### Configuring JSON field names {#sec-api-field-map}
+
+By default, `creel_connect_api()` translates NGPC JSON field names (`ii_UID`, `cd_Date`, `ii_TripType`, …) into `tidycreel` canonical names. Agencies that serve a compatible JSON structure with different field names supply an `api_field_map` override — a named list keyed by endpoint, each entry mapping a canonical column name to its JSON field name. Unspecified entries retain their NGPC defaults.
+
+```{r}
+#| label: api-field-map
+#| echo: true
+#| eval: false
+# Agency API uses different JSON field names than NGPC
+conn_api <- creel_connect_api(
+  base_url   = "https://api.example.com/creel/",
+  creel_uids = "survey-uid-001",
+  schema     = schema,
+  api_field_map = list(
+    interviews = list(
+      interview_uid  = "interview_id",   # not "ii_UID"
+      date           = "survey_date",    # not "cd_Date"
+      trip_status    = "trip_type"       # not "ii_TripType"
+    ),
+    counts = list(
+      bank_anglers  = "bank_count",      # not "c_BankAnglers"
+      angler_boats  = "boat_count"       # not "c_AnglerBoats"
+    )
+  )
+)
+```
+
+If you pass column-mapping arguments to `creel_schema()` (such as `interview_uid_col`, `date_col`) without also supplying `api_field_map`, the function will emit a warning: schema column mappings configure CSV/SQL column names and are ignored by the API backend. Use `api_field_map` for API JSON field name translation.
 
 ### Fetching from an API connection
 
