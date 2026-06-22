@@ -312,9 +312,8 @@ prescriptive.
 
 CPUE encompasses all fish contacted — harvested and released together. The
 component rates are estimated separately by `estimate_harvest_rate()` and
-`estimate_release_rate()`. These functions use all interviews, including incomplete
-trips, because the current livewell contents and any fish already released are
-observable regardless of whether the trip is finished.
+`estimate_release_rate()`. By default these functions also use completed-trip
+interviews, matching `estimate_catch_rate()` so that HPUE + RPUE = CPUE exactly.
 
 ```{r}
 #| label: hpue-rpue
@@ -329,27 +328,24 @@ bind_rows(
   select(quantity, estimate, se, ci_lower, ci_upper, n)
 ```
 
-Harvest rate is 0.600 fish per angler-hour (SE = 0.043); release rate is 0.917
-fish per angler-hour (SE = 0.071). Both use all 600 interviews, unlike the CPUE
-estimate that uses completed trips only.
+Harvest rate is 0.585 fish per angler-hour (SE = 0.046); release rate is 0.920
+fish per angler-hour (SE = 0.073). All three estimates use the 390
+completed-trip interviews.
 
-A simple consistency check: if the catch partition is internally coherent, then
-HPUE + RPUE should approximately equal CPUE. Here, 0.600 + 0.917 = 1.517, which
-compares well to the CPUE of 1.51. The 0.7% discrepancy arises because CPUE uses
-only completed trips while HPUE and RPUE use all interviews — different
-denominators produce a small arithmetic disagreement that does not indicate an
-error. The close agreement confirms that the interview records are internally
-consistent.
+Because all three rates share the same 390 completed-trip interviews and the
+same effort denominator, HPUE + RPUE = CPUE holds exactly. The displayed sum
+(0.585 + 0.920 = 1.505) rounds to the displayed CPUE (1.51) — the 0.005
+difference is display rounding, not a data inconsistency.
 
-The release fraction (RPUE / CPUE ≈ 0.917 / 1.51 ≈ 0.61) says that roughly 61%
-of fish contacted at Harlan were released. The harvest fraction (0.600 / 1.51 ≈
-0.40) feeds directly into harvest estimation when multiplied by total angler-hours.
+The release fraction (RPUE / CPUE ≈ 0.920 / 1.51 ≈ 0.61) says that roughly 61%
+of fish contacted at Harlan were released. The harvest fraction (0.585 / 1.51 ≈
+0.39) feeds directly into harvest estimation when multiplied by total angler-hours.
 
 ```{r}
 #| label: fig-ch14-rates
 #| echo: true
-#| fig-cap: "Catch, harvest, and release rates at Harlan Reservoir, 2022. CPUE uses completed-trip interviews only (n = 390); HPUE and RPUE use all interviews (n = 600). HPUE plus RPUE sum to 1.517, within 0.7% of CPUE, confirming internal consistency of the catch partition. Error bars show 95% confidence intervals."
-#| fig-alt: "Three horizontal error bars arranged vertically. CPUE at top (~1.51) with a narrow CI. RPUE in middle (~0.917) with a moderate CI. HPUE at bottom (~0.600) with a narrow CI. A vertical dashed line marks the CPUE value of 1.51."
+#| fig-cap: "Catch, harvest, and release rates at Harlan Reservoir, 2022. All three estimates use completed-trip interviews (n = 390). HPUE plus RPUE sum to 1.505, consistent with CPUE of 1.51 (difference is rounding only), confirming internal consistency of the catch partition. Error bars show 95% confidence intervals."
+#| fig-alt: "Three horizontal error bars arranged vertically. CPUE at top (~1.51) with a narrow CI. RPUE in middle (~0.920) with a moderate CI. HPUE at bottom (~0.585) with a narrow CI. A vertical dashed line marks the CPUE value of 1.51."
 bind_rows(
   cpue_overall$estimates |> mutate(quantity = "CPUE (all catch)"),
   rpue$estimates          |> mutate(quantity = "RPUE (released)"),
@@ -408,8 +404,11 @@ reliable when a species appears in at least 15–20% of completed trips.
 compare_cpue_estimators(harlan_design_ch14)
 ```
 
-The three methods agree within approximately 20% of each other, which is typical
-for access-point designs with moderate sample sizes.
+At Harlan, ROM returns 1.51 fish/hr, regression returns 1.31 (13% below ROM),
+and MOR returns 2.02 (34% above ROM). The MOR divergence is expected on an
+access-point design: MOR weights every completed trip equally regardless of
+duration, so a few short high-catch trips pull the mean upward. ROM and
+regression — both duration-weighted — agree within 15% of each other.
 
 **Ratio-of-means (ROM, default):** divides the total catch across all completed trips by the total effort. A single angler catching twenty fish in two hours contributes 20 fish and 2 hours to the numerator and denominator separately. The estimate is pulled toward trips with long effort because they contribute more hours.
 

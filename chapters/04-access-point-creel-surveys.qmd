@@ -18,7 +18,7 @@ harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
 harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 ```
 
-## Why access-point surveys work
+## Why access-point surveys work {#sec-access-point}
 
 Access-point creel surveys are historically the most common design in inland fisheries management [@pollock1994]. The logic behind them is straightforward: if anglers must pass through a finite set of access points to reach and leave a fishery, a technician stationed at those points can count who is present and interview who has finished fishing. Two types of observations — counts and interviews — answer two related but distinct questions: how many angler-hours occurred, and at what rate were fish caught per angler-hour.
 

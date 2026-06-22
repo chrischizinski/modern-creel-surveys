@@ -58,7 +58,7 @@ suppressMessages({
 })
 ```
 
-## Why roving surveys exist
+## Why roving surveys exist {#sec-roving}
 
 The access-point design in Chapter 4 rests on a tractable assumption: anglers pass through a finite, enumerable set of entry and exit points. That assumption holds well for a reservoir with one boat ramp and a small bank-fishing area. It fails for a 100-kilometer river reach where anglers can reach the water from road bridges, wading accesses, and unimproved shore landings at hundreds of points. No finite roster of clerks can staff every entry. The access-point frame is incomplete by construction.
 

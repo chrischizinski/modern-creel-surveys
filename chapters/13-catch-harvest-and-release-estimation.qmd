@@ -139,23 +139,20 @@ $$
 \widehat{\text{HPUE}}_j = \frac{\sum_{i} h_i}{\sum_{i} l_i}
 $$
 
-where $h_i$ is fish harvested on trip $i$ and $l_i$ is hours fished. Unlike
-the ratio-of-means CPUE estimator used in access-point surveys — which is
-restricted to completed trips because only those have a known total catch —
-HPUE uses all interviews. Harvest from an incomplete
-trip is observable: what is in the livewell at interview time is harvested
-regardless of whether the angler keeps fishing. An angler with three walleye
-in the livewell has harvested three walleye, whether or not the trip is
-finished. Incomplete trips therefore contribute valid harvest and effort records
-to the HPUE denominator and numerator.
+where $h_i$ is fish harvested on trip $i$ and $l_i$ is hours fished.
+`estimate_harvest_rate()` defaults to completed trips, matching the CPUE
+estimator. Harvest from an incomplete trip is theoretically observable — what
+is in the livewell at interview time is harvested regardless of whether the
+angler keeps fishing — but using the same interview pool as CPUE makes the
+HPUE + RPUE ≈ CPUE consistency check exact rather than approximate.
 
 The same product structure applies to release:
 $\widehat{R}_j = \widehat{E}_j \times \widehat{\text{RPUE}}_j$, and to total
-catch: $\widehat{C}_j = \widehat{E}_j \times \widehat{\text{CPUE}}_j$. At
-Harlan, CPUE uses completed trips only, so the three season totals are not
-guaranteed to satisfy $\widehat{C} = \widehat{H} + \widehat{R}$ exactly. Roving
-designs use a mean-of-ratios estimator that can incorporate all interviews; see
-Chapter 17 for that case.
+catch: $\widehat{C}_j = \widehat{E}_j \times \widehat{\text{CPUE}}_j$. Because
+all three rate estimators default to the same completed-trip interview pool, the
+season totals satisfy $\widehat{C} \approx \widehat{H} + \widehat{R}$ up to
+rounding. Roving designs use a mean-of-ratios estimator; see Chapter 17 for
+that case.
 
 ## Preparing catch data for estimation {#sec-catch-prep}
 
@@ -256,9 +253,8 @@ angler counts to angler-hours, so effort and rates share the same time units.
 ## Harvest rates by day type {#sec-harvest-rate}
 
 The harvest rate — fish harvested per angler-hour — is the ratio-of-means
-HPUE from all 600 party interviews. Because harvest from an incomplete trip is
-directly observable (see @sec-harvest-estimator), no trip-status filter is
-applied; both complete and incomplete interviews contribute.
+HPUE from 390 completed-trip interviews. `estimate_harvest_rate()` defaults to
+completed trips, matching the CPUE estimator (see @sec-harvest-estimator).
 
 ```{r}
 #| label: harvest-rate-overall
@@ -266,8 +262,8 @@ applied; both complete and incomplete interviews contribute.
 estimate_harvest_rate(harlan_design_ch13)
 ```
 
-The overall Harlan 2022 harvest rate is 0.600 fish per angler-hour
-(95% CI: 0.515–0.685). Disaggregating by day type shows that weekend anglers
+The overall Harlan 2022 harvest rate is 0.585 fish per angler-hour
+(95% CI: 0.495–0.676). Disaggregating by day type shows that weekend anglers
 harvest at a substantially higher rate than weekday anglers:
 
 ```{r}
@@ -285,8 +281,8 @@ estimate_release_rate(harlan_design_ch13, by = day_type)
 ```{r}
 #| label: fig-rates-daytype
 #| echo: true
-#| fig-cap: "Estimated harvest rate (HPUE) and release rate (RPUE) by day type at Harlan Reservoir, 2022. Bars show the ratio-of-means estimate from all party interviews; error bars show 95% confidence intervals. Weekend anglers harvested at a noticeably higher rate than weekday anglers, while release rates were similar across day types."
-#| fig-alt: "Grouped bar chart with HPUE and RPUE on the y axis and weekday/weekend on the x axis. Weekend HPUE (0.815) is higher than weekday HPUE (0.562). Release rates are similar between day types at approximately 0.91 and 0.95."
+#| fig-cap: "Estimated harvest rate (HPUE) and release rate (RPUE) by day type at Harlan Reservoir, 2022. Bars show the ratio-of-means estimate from completed-trip interviews; error bars show 95% confidence intervals. Weekend anglers harvested at a noticeably higher rate than weekday anglers, while release rates were similar across day types."
+#| fig-alt: "Grouped bar chart with HPUE and RPUE on the y axis and weekday/weekend on the x axis. Weekend HPUE (0.745) is higher than weekday HPUE (0.558). Release rates are similar between day types at approximately 0.924 (weekday) and 0.897 (weekend)."
 
 hpue_by_dt <- estimate_harvest_rate(harlan_design_ch13, by = day_type)
 rpue_by_dt <- estimate_release_rate(harlan_design_ch13, by = day_type)
@@ -314,11 +310,11 @@ ggplot(rates_dt, aes(x = day_type, y = estimate, fill = rate_type)) +
   theme(legend.position = "bottom")
 ```
 
-The weekend harvest rate (0.815 fish/hour, 95% CI: 0.562–1.068) is about
-45% higher than weekdays (0.562, 95% CI: 0.472–0.652). Release rates, by
-contrast, are nearly identical — 0.911 on weekdays and 0.950 on weekends.
-This pattern means weekend anglers are not catching more fish overall; they
-are keeping a larger fraction of what they catch. The weekend fishery at
+The weekend harvest rate (0.745 fish/hour, 95% CI: 0.499–0.991) is about
+33% higher than weekdays (0.558, 95% CI: 0.459–0.656). Release rates are
+nearly identical — 0.924 on weekdays and 0.897 on weekends.
+Weekend anglers both catch more (CPUE: 1.64 vs 1.48 fish/hr weekday) and
+retain a larger fraction of what they catch. The weekend fishery at
 Harlan draws more anglers actively targeting harvestable species, while
 weekday fishing is often more incidental in character.
 
@@ -347,7 +343,7 @@ estimate_total_harvest(harlan_design_ch13)
 estimate_total_harvest(harlan_design_ch13, target = "stratum_total")
 ```
 
-On sampled days only, estimated harvest was 11,030 fish (95% CI: 7,939–14,122).
+On sampled days only, estimated harvest was 11,052 fish (95% CI: 8,092–14,012).
 Expanding to all days in the season yields 19,825 fish (95% CI: 14,643–25,006).
 The difference reflects the unsampled days: the creel did not cover every day
 on the calendar, but the expansion assumes those days had fishing activity at
@@ -422,7 +418,7 @@ estimate_total_release(harlan_design_ch13, target = "stratum_total")
 ```
 
 The estimated total catch for the 2022 season was 49,756 fish
-(95% CI: 36,366–63,147). Of that, approximately 19,825 were harvested and
+(95% CI: 37,272–62,239). Of that, approximately 19,825 were harvested and
 30,310 released — roughly 60% of all fish caught were returned. That is a
 large catch-and-release fraction, and it raises a question the estimate alone
 cannot answer: do those released fish survive? The creel measures the number
@@ -443,12 +439,11 @@ estimate_release_rate(harlan_design_ch13)
 estimate_catch_rate(harlan_design_ch13)
 ```
 
-Note that `estimate_catch_rate()` is filtered to the 390 completed-trip
-interviews (65% of all 600 parties) because incomplete-trip catch totals are
-unknown. HPUE and RPUE use all 600 interviews because what is in the livewell
-or what has been released so far is observable even mid-trip. Their
-approximate sum is a useful consistency check: if HPUE + RPUE ≈ CPUE, the
-catch partition is internally coherent.
+All three rate estimators (`estimate_catch_rate()`, `estimate_harvest_rate()`,
+`estimate_release_rate()`) default to the 390 completed-trip interviews (65%
+of 600 parties). Using the same interview pool makes the consistency check
+exact: HPUE (0.585) + RPUE (0.920) = 1.505, which rounds to CPUE (1.51),
+confirming the catch partition is internally coherent.
 
 ## Reporting catch, harvest, and release together {#sec-combined-reporting}
 
@@ -600,12 +595,14 @@ of interviews. `estimate_total_harvest()`, `estimate_total_catch()`, and
 propagated variance. `add_interviews()` needs explicit `catch` and `harvest`
 arguments.
 
-The HPUE and RPUE estimators use all interviews — including incomplete trips —
-because what is harvested or released at the time of interview is directly
-observable. For access-point designs, CPUE uses completed trips only because
-the final catch total of an in-progress trip is unknown. Roving designs use a
-mean-of-ratios estimator that treats each mid-trip contact as an instantaneous
-rate observation.
+By default, `estimate_harvest_rate()` and `estimate_release_rate()` use
+completed-trip interviews, matching `estimate_catch_rate()`. Harvest and
+release are theoretically observable for incomplete trips — the livewell
+contents and any fish already returned are directly countable — but the
+default promotes exact HPUE + RPUE = CPUE consistency. For access-point
+designs, CPUE cannot include incomplete trips because the final catch total is
+unknown. Roving designs use a mean-of-ratios estimator that treats each
+mid-trip contact as an instantaneous rate observation.
 
 At Harlan in 2022, roughly 60% of all fish caught were released. Weekend
 harvest rates were higher than weekday rates, but weekday fishing pressure was

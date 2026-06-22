@@ -25,14 +25,19 @@ harlan_counts_effort <- harlan_counts |>
   ) |>
   select(reservoir, date, day_type, period, section, count_time, angler_hours)
 
-harvest_by_interview <- harlan_catch |>
-  filter(catch_type == "harvested") |>
-  group_by(interview_id) |>
-  summarise(total_harvest = sum(n_fish), .groups = "drop")
+catch_by_interview <- harlan_catch |>
+  group_by(interview_id, catch_type) |>
+  summarise(n_fish = sum(n_fish), .groups = "drop") |>
+  pivot_wider(names_from = catch_type, values_from = n_fish, values_fill = 0L) |>
+  mutate(total_catch = harvested + released)
 
 harlan_interviews_with_catch <- harlan_interviews |>
-  left_join(harvest_by_interview, by = "interview_id") |>
-  mutate(total_harvest = if_else(is.na(total_harvest), 0L, as.integer(total_harvest)))
+  left_join(catch_by_interview, by = "interview_id") |>
+  mutate(
+    harvested   = if_else(is.na(harvested),   0L, as.integer(harvested)),
+    released    = if_else(is.na(released),    0L, as.integer(released)),
+    total_catch = if_else(is.na(total_catch), 0L, as.integer(total_catch))
+  )
 
 suppressMessages({
   harlan_design <- creel_design(
@@ -43,7 +48,7 @@ suppressMessages({
     add_counts(harlan_counts_effort, count_time_col = "count_time") |>
     add_interviews(
       interviews     = harlan_interviews_with_catch,
-      catch          = "total_harvest",
+      catch          = "total_catch",
       effort         = "hours_fished",
       trip_duration  = "hours_fished",
       trip_status    = "trip_status",
@@ -493,11 +498,11 @@ given input CVs for the catch and effort components. This is a planning tool:
 calibrate the input parameters using historical data or the current survey's
 observed variability, then read off the interview target.
 
-The Harlan 2022 season produced a CPUE estimate of 0.585 fish/angler-hour
-from 390 complete interviews (CV = 7.9%). Individual catch rates per interview
+The Harlan 2022 season produced a CPUE estimate of 1.51 fish/angler-hour
+from 390 complete interviews (CV = 6.2%). Individual catch rates per interview
 have high variability — many zero-catch anglers and a few high-count outliers
 — so `cv_catch` for planning purposes is substantially larger than the
-aggregate CPUE CV. A value of 1.5 (150%) for the individual catch-rate CV
+aggregate CPUE CV. A value of 1.2 (120%) for the individual catch-rate CV
 is consistent with the observed aggregate precision at Harlan and typical of
 reservoir access-point fisheries where zero-catch encounters are common.
 
@@ -505,8 +510,8 @@ reservoir access-point fisheries where zero-catch encounters are common.
 #| label: cv-cpue-sensitivity
 #| echo: true
 
-# cv_catch calibrated so the curve passes near the observed 7.9% CV at n = 390
-cv_catch  <- 1.5
+# cv_catch calibrated so the curve passes near the observed 6.2% CV at n = 390
+cv_catch  <- 1.2
 cv_effort <- round(eff$estimates$se / eff$estimates$estimate, 2)
 
 tibble(n_interviews = seq(50, 450, by = 25)) |>
@@ -519,7 +524,7 @@ tibble(n_interviews = seq(50, 450, by = 25)) |>
 
 ```{r}
 #| label: fig-ch15-cv-sensitivity
-#| fig-cap: "Estimated CPUE coefficient of variation as a function of interview sample size. Input CVs are calibrated to match the observed 7.9% CV at the Harlan 2022 sample size of 390 interviews (dashed vertical line). The horizontal dotted line marks 15% CV. Returns to precision become negligible beyond roughly 150 interviews for this level of variability."
+#| fig-cap: "Estimated CPUE coefficient of variation as a function of interview sample size. Input CVs are calibrated to match the observed 6.2% CV at the Harlan 2022 sample size of 390 interviews (dashed vertical line). The horizontal dotted line marks 15% CV. Returns to precision become negligible beyond roughly 100 interviews for this level of variability."
 #| fig-alt: "Line chart showing CPUE CV declining with interview sample size, with reference lines at n=390 and CV=15%"
 
 tibble(n_interviews = seq(20, 500, by = 10)) |>
@@ -545,7 +550,7 @@ tibble(n_interviews = seq(20, 500, by = 10)) |>
 ```
 
 The curve shows sharply diminishing returns. The 15% CV threshold is crossed
-near 100 interviews, well below the 390 the 2022 survey collected.
+near 65 interviews, well below the 390 the 2022 survey collected.
 
 For a new reservoir without historical data, `cv_from_n()` can be used
 prospectively by borrowing `cv_catch` and `cv_effort` from a comparable fishery.
