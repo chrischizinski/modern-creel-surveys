@@ -298,19 +298,10 @@ The overall catch rate was
 based on `r cpue_ch16$estimates$n` completed party interviews.
 :::
 
-Each sentence includes three things that are often omitted in practice: the
-domain ("Harlan Reservoir, 2022 open season"), the unit ("angler-hours" or
-"fish per angler-hour"), and the uncertainty ("SE =" and "95% CI"). Omitting
-any one of them weakens the claim without necessarily making it wrong — but it
-leaves the reader unable to evaluate the estimate.
+Each sentence includes the domain, the unit, and the uncertainty.
 
-Choosing precision is also a reporting decision. Reporting a harvest estimate
-of `r fmt_comma(harvest_ch16$estimates$estimate)` fish implies that the model
-is accurate to the individual fish, which it is not. The point estimate is an
-expansion of count-derived effort and interview-derived rates, each carrying
-substantial uncertainty. Rounding to the nearest hundred or even the nearest
-thousand is defensible for a management report where the practical question is
-"roughly how many fish were removed?" rather than "exactly how many?"
+Choosing precision is also a reporting decision. Rounding to the nearest
+hundred or even the nearest thousand is defensible for a management report.
 
 ```{r}
 #| label: rounding-demo-ch16
@@ -382,16 +373,9 @@ report_table
 The CV column — coefficient of variation, expressed as SE / estimate × 100 —
 gives readers a scale-free precision indicator. A CV below 20% is commonly
 cited as management-grade precision for recreational fisheries surveys
-[@pollock1994]. The Harlan estimates vary by quantity: effort benefits from
-the stratified design and has the lowest CV among the totals, while harvest and
-catch totals carry both effort uncertainty and rate uncertainty, producing larger
-CVs. Rate estimates fall between those extremes.
+[@pollock1994].
 
-The table should appear in any report with a caption that states the domain:
-"Estimated effort, harvest, catch, release, and catch rates for Harlan
-Reservoir 2022, covering public-access areas during the open season
-(April–October). All totals use `target = "stratum_total"` expansions;
-rates are ratio-of-means estimates from all eligible interviews."
+The table should appear in any report with a caption that states the domain.
 
 ## Summary figure: totals {#sec-fig-totals}
 
@@ -445,21 +429,13 @@ ggplot(totals_plot, aes(x = estimate, y = quantity)) +
   )
 ```
 
-The width of the confidence intervals in both panels conveys a message that
-numbers alone can obscure: the estimates are imprecise. The effort CI alone
-spans a range large enough to shift harvest estimates by several thousand fish.
-A manager who sees only the point estimates might treat them as facts; the
-figure makes clear that they are model-derived quantities with meaningful
-uncertainty attached.
+The width of the confidence intervals in both panels conveys that the estimates
+carry meaningful uncertainty.
 
 ## Precision profile {#sec-fig-precision}
 
-Not all estimates from the same survey are equally reliable. Effort estimates
-from a well-designed stratified survey typically have lower CVs than harvest
-or catch totals, because the latter add rate uncertainty on top of effort
-uncertainty. A precision profile — a horizontal bar chart of CVs — makes
-these differences visible and helps managers understand which parts of the
-report deserve the most caution.
+Not all estimates from the same survey are equally reliable. A precision
+profile makes those differences visible.
 
 ```{r}
 #| label: fig-ch16-precision
@@ -661,12 +637,8 @@ access point (e.g., anglers who enter by canoe and exit via a private road).
 The fraction of effort in those groups is unknown; if it is large, the effort
 estimate is biased downward.
 
-Stating these boundaries in the report is not weakness — it is the information
-a reader needs to decide whether the estimate answers their management question.
-If the question is "how much did harvest decline after a bag limit change?",
-the answer requires an estimate with the same domain in both years. If the
-domain is not documented, the before-after comparison cannot be made with
-confidence even if both years' surveys used identical methods.
+Stating these boundaries in the report is the information a reader needs to
+decide whether the estimate answers their question.
 
 ## Writing for different audiences {#sec-report-audience}
 
@@ -675,8 +647,7 @@ tolerances for statistical language. Field staff need operational feedback.
 Managers need a decision summary. Researchers need methodological detail.
 Stakeholders need a plain-language explanation of what the survey found.
 
-The same estimates can support all four audiences without changing the underlying
-claim — only the presentation changes.
+The same estimates can support all four audiences without changing the claim.
 
 **Manager summary (2–3 sentences).** Lead with the most policy-relevant
 quantity. State the estimate, the CI, and one interpretive sentence.
@@ -714,44 +685,34 @@ Of all fish caught, roughly
 were released.
 :::
 
-The estimate does not change between these versions. The confidence interval
-does not change. What changes is which information gets foregrounded and what
-vocabulary is used to present it.
+The estimate does not change between these versions. What changes is which
+information gets foregrounded and what vocabulary is used.
 
-A failure of audience adaptation is describing the survey method in detail to
-a stakeholder audience that wants to know whether the fish population is healthy
-— and omitting the uncertainty when writing for a manager who needs to decide
-whether to tighten regulations. Both failures serve the wrong need.
+A failure of audience adaptation is describing the survey method in detail to a
+stakeholder audience while omitting uncertainty for a manager who needs to act
+on the result.
 
 ## Reproducible reports {#sec-reproducibility}
 
 The most defensible property of a Quarto-based creel report is that it can be
-regenerated from the same data and code. When the data change — because a data
-entry error is corrected, or a late interview is added — re-running
-`quarto render` updates every table, figure, and inline number automatically.
-No manual transcription step introduces new errors.
+regenerated from the same data and code. Re-running `quarto render` updates
+every table, figure, and inline number automatically.
 
 That reproducibility has practical consequences for multi-year programs:
 
-**Year-over-year reuse.** A report template developed for the 2022 season can
-be applied to 2023 data by swapping the input files. The chapter structure,
-section headings, figure layouts, and table formats carry over. Only the
-numbers change, and those changes are automatic.
+**Year-over-year reuse.** A report template developed for one season can be
+applied to the next by swapping the input files.
 
 **Audit trail.** Because the analysis lives in the same document as the report,
-a future analyst can trace any number back to the code that produced it. There
-is no gap between "the analysis" and "the report" where undocumented decisions
-accumulate.
+a future analyst can trace any number back to the code that produced it.
 
-**Version control.** Storing the `.qmd` source and input data in a version
-control system (git) creates a complete record of every change to the report
-over time. If a manager asks why the 2022 harvest estimate was revised, the
-git history shows exactly what changed and when.
+**Version control.** Storing the `.qmd` source and input data in git creates a
+complete record of every change to the report over time.
 
 The design object — `harlan_design_ch16` in this chapter — is the key
 intermediate artifact. Saving it at the end of the analysis pipeline and
-loading it at the start of the reporting pipeline creates a clean separation
-between estimation and presentation without breaking the audit chain.
+loading it at the start of the reporting pipeline keeps estimation and
+presentation separate without breaking the audit chain.
 
 ```{r}
 #| label: save-design-ch16
@@ -763,8 +724,7 @@ saveRDS(harlan_design_ch16, here("data/harlan_design_2022.rds"))
 
 A report template that loads a saved design object rather than rebuilding it
 from raw data is faster to render and explicit about where the design
-assumptions live. The data provenance statement in the report caption can then
-cite the specific data files and the date they were last modified.
+assumptions live.
 
 ## Common reporting failures {#sec-report-failures}
 
@@ -789,34 +749,25 @@ quantities at once.
 
 **Mixing stratified and unstratified interpretations.** If the estimate covers
 all days, the interpretation should not compare weekday versus weekend behavior
-unless a stratified estimate is also reported. Interpreting the season-total CPUE
-as evidence that weekday anglers catch more fish is a domain error — the total
-was not computed by day type. Fix: every interpretation stays within the domain
-of the estimate that supports it.
+unless a stratified estimate is also reported. Fix: every interpretation stays
+within the domain of the estimate that supports it.
 
 **Burying the domain in a footnote.** A domain statement that appears only in a
 footnote or appendix will be missed by readers who stop at the table. Fix: the
 domain belongs in the first paragraph and in every table caption.
 
-**Describing a result as general when it covers only a subset.** "Harlan
-Reservoir anglers harvested approximately 20,000 fish" implies coverage of all
-anglers. A survey that covers only public-access areas cannot make that claim
-without qualification. Fix: "Anglers at public-access areas covered by the 2022
-creel survey harvested approximately 20,000 fish."
+**Describing a result as general when it covers only a subset.** A survey that
+covers only public-access areas cannot make an all-anglers claim without
+qualification. Fix: say which anglers were covered.
 
 ## Takeaway {#sec-ch16-takeaway}
 
-The estimate is correct only if the report says what it means. A point estimate
-without a domain, a domain without uncertainty, or an interpretation wider than
-the evidence all undermine the value of the survey that produced the number.
+The estimate is correct only if the report says what it means.
 
-The inline R approach — embedding estimates in prose at render time — protects
-against transcription errors and keeps the document honest when data change.
-The six-element framework protects against the interpretive errors that no
-amount of statistical care can prevent if the report does not state what was
-measured.
+The inline R approach protects against transcription errors and keeps the
+document honest when data change. The six-element framework protects against
+interpretive errors when the report does not state what was measured.
 
 The Harlan Reservoir 2022 estimates tell a specific story about a specific
 fishery during a specific season at specific access points. That story is worth
-telling precisely. It is also worth telling accurately — which means telling the
-reader where the story begins and where it ends.
+telling precisely and accurately, which means saying where it begins and ends.

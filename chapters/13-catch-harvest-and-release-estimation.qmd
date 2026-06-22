@@ -15,7 +15,7 @@ harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
 harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
 harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 
-# Same shift-length lookup used in Ch12
+# Shift lengths used in Chapter 12
 shift_hours <- c("1" = 8L, "2" = 6L)
 
 # Pre-compute angler_hours and drop component columns
@@ -38,7 +38,7 @@ catch_by_interview <- harlan_catch |>
   ) |>
   mutate(total_catch = harvested + released)
 
-# Join catch summary to interviews; fill zeros for anglers with no catch record
+# Join catch summary to interviews and fill zeros for no-catch interviews
 harlan_interviews_ch13 <- harlan_interviews |>
   left_join(catch_by_interview, by = "interview_id") |>
   mutate(
@@ -49,7 +49,7 @@ harlan_interviews_ch13 <- harlan_interviews |>
 
 # Build the design object
 # catch = total fish encountered (harvested + released)
-# harvest = fish retained — required by estimate_total_harvest()
+# harvest = fish retained
 suppressMessages({
   harlan_design_ch13 <- creel_design(
     calendar = harlan_schedule,
@@ -82,11 +82,9 @@ suppressMessages({
 
 ## Three quantities, one fishery {#sec-catch-distinctions}
 
-Effort is the foundation of creel estimation, but it is rarely what managers
-actually ask about. The questions that drive creel survey design are usually
-some variant of: how many fish were caught, how many were kept, and for which
-species? Those questions sound similar but they require different estimators
-and different data columns.
+Effort is the foundation of creel estimation, but managers usually ask about
+catch, harvest, and species. Those questions sound similar but they require
+different estimators and different data columns.
 
 **Catch** is the total number of fish that left the water during a fishing
 trip, regardless of what happened to them afterward. A walleye that was
@@ -105,13 +103,10 @@ the water. Access-point surveys reduce this error by interviewing anglers
 immediately after they leave the water, when memory of released fish is still
 fresh [@pollock1994].
 
-The distinction matters more than it might initially appear. An angler who
-catches fifteen white bass but keeps only three has contributed to a harvest
-total of three and a release total of twelve, even though the trip produced
-one catch total of fifteen. The estimator and its denominator have to match
-the question being answered. Collapsing catch and harvest into a single number
-does not cause a computational error — it produces a number that answers
-neither question correctly.
+The distinction matters. An angler who catches fifteen white bass but keeps
+only three contributes a harvest total of three and a release total of twelve,
+even though the trip produced one catch total of fifteen. The estimator and
+its denominator have to match the question being answered.
 
 This chapter shows how the Harlan Reservoir 2022 survey data produce estimates
 of all three quantities using `tidycreel`, and how the relationship between
@@ -154,23 +149,21 @@ in the livewell has harvested three walleye, whether or not the trip is
 finished. Incomplete trips therefore contribute valid harvest and effort records
 to the HPUE denominator and numerator.
 
-The same product structure applies to the release estimator:
+The same product structure applies to release:
 $\widehat{R}_j = \widehat{E}_j \times \widehat{\text{RPUE}}_j$, and to total
-catch: $\widehat{C}_j = \widehat{E}_j \times \widehat{\text{CPUE}}_j$, where
-At Harlan (an access-point design), CPUE uses completed trips only. The three season totals are not arithmetically
-guaranteed to satisfy $\widehat{C} = \widehat{H} + \widehat{R}$ exactly
-because the component estimators differ in their interview pools, but in
-practice they are close. Roving designs use a mean-of-ratios estimator that can
-incorporate all interviews; see Chapter 17 for that case.
+catch: $\widehat{C}_j = \widehat{E}_j \times \widehat{\text{CPUE}}_j$. At
+Harlan, CPUE uses completed trips only, so the three season totals are not
+guaranteed to satisfy $\widehat{C} = \widehat{H} + \widehat{R}$ exactly. Roving
+designs use a mean-of-ratios estimator that can incorporate all interviews; see
+Chapter 17 for that case.
 
 ## Preparing catch data for estimation {#sec-catch-prep}
 
 The design construction in this chapter differs from Chapter 12 in one
 important respect. Chapter 12 passed a single harvest column to
-`add_interviews()` as the `catch` argument. Here, we need two separate
-quantities: total catch (for `estimate_total_catch`) and harvest (for
-`estimate_total_harvest`). A third quantity — released fish — follows
-automatically from their difference.
+`add_interviews()` as the `catch` argument. Here, we need separate quantities
+for total catch and harvest. Released fish follow automatically from their
+difference.
 
 The `harlan_catch` table stores species-level fish counts with a `catch_type`
 column that takes values `"harvested"` or `"released"`. Pivot that table to
@@ -192,9 +185,9 @@ catch_by_interview <- harlan_catch |>
 catch_by_interview
 ```
 
-The result has one row per interview that recorded at least one fish. Interviews
-with no fish are handled when we join to the full interview table: any interview
-absent from `catch_by_interview` receives zeros for all three columns.
+The result has one row per interview that recorded at least one fish. When we
+join it to the full interview table, any missing interview receives zeros for
+all three columns.
 
 ```{r}
 #| label: catch-join
@@ -213,16 +206,14 @@ harlan_interviews_ch13 |>
 ```
 
 The interview table now carries three catch columns at the trip level. Each
-represents a different quantity that managers might ask about, and each feeds
-a different estimation function downstream.
+feeds a different estimation function downstream.
 
 ## Building the design object {#sec-ch13-design}
 
 With three catch columns available, the design pipeline is identical to
 Chapter 12 except that we now pass both `catch` and `harvest` to
 `add_interviews()`. The `harvest` argument tells `tidycreel` which column
-represents retained fish; without it, `estimate_total_harvest()` has no
-harvest column to work from.
+represents retained fish.
 
 ```{r}
 #| label: design-build
@@ -454,12 +445,10 @@ estimate_catch_rate(harlan_design_ch13)
 
 Note that `estimate_catch_rate()` is filtered to the 390 completed-trip
 interviews (65% of all 600 parties) because incomplete-trip catch totals are
-unknown — the trip is unfinished. HPUE and RPUE use all 600 interviews because
-what is in the livewell or what has been released so far is observable even
-mid-trip. The CPUE result (1.505 fish/hour) is therefore based on a different
-interview pool than the HPUE (0.600) and RPUE (0.917). Their approximate
-sum — $0.600 + 0.917 = 1.517 \approx 1.505$ — is a useful consistency check:
-if HPUE + RPUE ≈ CPUE, the catch partition is internally coherent.
+unknown. HPUE and RPUE use all 600 interviews because what is in the livewell
+or what has been released so far is observable even mid-trip. Their
+approximate sum is a useful consistency check: if HPUE + RPUE ≈ CPUE, the
+catch partition is internally coherent.
 
 ## Reporting catch, harvest, and release together {#sec-combined-reporting}
 
@@ -565,9 +554,9 @@ ggplot(species_comp, aes(x = n_fish, y = species, fill = catch_type)) +
   theme(legend.position = "bottom")
 ```
 
-The species composition in raw catch records accurately describes which species
-anglers encounter and what they do with them. It does not, by itself, produce
-an expanded season total per species — that requires design-based species-level
+The species composition in raw catch records describes which species anglers
+encounter and what they do with them. It does not, by itself, produce an
+expanded season total per species — that requires design-based species-level
 CPUE estimates applied to total effort, which Chapter 14 covers using
 `estimate_catch_rate(by = species)`.
 
@@ -605,23 +594,21 @@ the ratio-of-means estimators.
 
 ## Takeaway {#sec-ch13-takeaway}
 
-Catch, harvest, and release are three distinct quantities produced by the same
-set of interviews. `estimate_total_harvest()`, `estimate_total_catch()`, and
+Catch, harvest, and release are distinct quantities produced by the same set
+of interviews. `estimate_total_harvest()`, `estimate_total_catch()`, and
 `estimate_total_release()` each return a design-based season estimate with
-propagated variance. The key requirement is that `add_interviews()` receive
-explicit `catch` and `harvest` arguments, which the design carries forward to
-all downstream estimation functions.
+propagated variance. `add_interviews()` needs explicit `catch` and `harvest`
+arguments.
 
 The HPUE and RPUE estimators use all interviews — including incomplete trips —
 because what is harvested or released at the time of interview is directly
-observable. For access-point designs, CPUE uses completed trips only because the final catch total of an
-in-progress trip is unknown. This is not an inconsistency in the workflow; it
-reflects what each quantity actually measures. Roving designs use a
+observable. For access-point designs, CPUE uses completed trips only because
+the final catch total of an in-progress trip is unknown. Roving designs use a
 mean-of-ratios estimator that treats each mid-trip contact as an instantaneous
-rate observation, sidestepping the need for a completed trip record.
+rate observation.
 
-At Harlan in 2022, roughly 60% of all fish caught were released. The harvest
-rate on weekends was substantially higher than on weekdays, but weekday
-fishing pressure was large enough that weekdays still account for about 80% of
-season harvest. Rate and total tell different stories about the fishery — both
-are necessary for a complete picture.
+At Harlan in 2022, roughly 60% of all fish caught were released. Weekend
+harvest rates were higher than weekday rates, but weekday fishing pressure was
+large enough that weekdays still account for about 80% of season harvest. Rate
+and total tell different stories about the fishery, and both are necessary for
+a complete picture.

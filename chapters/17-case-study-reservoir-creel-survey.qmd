@@ -94,11 +94,9 @@ fmt_cv    <- function(est) fmt_pct(100 * est$se / est$estimate)
 
 ## Setting and design overview
 
-Harlan Reservoir anchors Part IV: a large impoundment sampled by access-point design, dominated by boat anglers, and operated over a single calendar year at high daily sampling intensity. Cedar Lake represents a complementary setting — a small urban reservoir managed primarily for walk-in anglers who do not require a boat ramp.
+Cedar Lake is the roving counterpart to the Harlan access-point example in Part IV. A single clerk drove the shoreline twice per sampling period, counted visible anglers, and interviewed parties encountered mid-trip. That design produces many incomplete-trip contacts and requires a rate estimator that works from truncated trip records.
 
-Cedar Lake was surveyed under a roving creel design. A single clerk drove the lake perimeter twice per sampling period, recording instantaneous counts of all visible anglers and stopping to interview parties encountered mid-trip. Unlike an access-point survey, roving contacts happen while anglers are still fishing: the clerk records fish caught so far and time elapsed so far, then continues the circuit. The result is a high fraction of incomplete-trip interviews and a catch-rate estimator that must account for the truncated trip record.
-
-The fishery targets channel catfish, bluegill, and white crappie across a seven-month open-water season, April through October 2023. Weekend pressure peaks in June and July, while shoulder months in April and October see reduced effort driven by cold weather and occasional survey-day cancellations due to rain or dangerous conditions.
+The fishery targets channel catfish, bluegill, and white crappie across the April-through-October 2023 open-water season. Pressure peaks in June and July; April and October are thinner because of weather and occasional cancelled survey days.
 
 This chapter walks the full analysis pipeline — frame to final report — using Cedar Lake as the vehicle.
 
@@ -127,11 +125,11 @@ cat(
 )
 ```
 
-The `r fmt_pct(100 * n_incomp / n_int)` incomplete-trip rate reflects the roving design: every interview happens mid-trip, capturing only elapsed time and fish so far. Complete trips — parties who happened to be finishing when the clerk passed — account for `r fmt_pct(100 * n_comp / n_int)` of contacts. Total-catch estimation requires the full trip record and uses only this subset; the mean-of-ratios CPUE estimator treats each mid-trip contact as an independent instantaneous catch-rate observation and uses every interview regardless of completion status.
+The `r fmt_pct(100 * n_incomp / n_int)` incomplete-trip rate is expected in a roving design: interviews happen mid-trip, so only elapsed time and fish-so-far are observed. Complete trips account for `r fmt_pct(100 * n_comp / n_int)` of contacts. Total catch uses only completed trips, while CPUE uses every interview as an instantaneous rate observation.
 
 ### Seasonal survey coverage
 
-Sampling intensity followed a proportional design: more survey days were allocated to summer months when angler pressure peaks. Eighteen survey days were cancelled or produced zero-angler counts due to rain, cold fronts, or high winds.
+Sampling was weighted toward summer months when angler pressure is highest. Eighteen survey days were cancelled or produced zero-angler counts because of weather.
 
 ```{r}
 #| label: fig-cedar-season
@@ -169,11 +167,11 @@ p2 <- ggplot(monthly_counts, aes(month, mean_count)) +
 p1 + p2
 ```
 
-The seasonal arc is clear: mean instantaneous counts rise from `r round(monthly_counts$mean_count[monthly_counts$month == "Apr"], 1)` anglers per count in April to `r round(monthly_counts$mean_count[monthly_counts$month == "Aug"], 1)` in August before falling through October. Zero or near-zero count days are visible in April and October, reflecting cancelled surveys during cold or high-wind conditions.
+Mean instantaneous counts rise from `r round(monthly_counts$mean_count[monthly_counts$month == "Apr"], 1)` anglers per count in April to `r round(monthly_counts$mean_count[monthly_counts$month == "Aug"], 1)` in August, then fall through October. The low-count days at the season edges line up with weather-related cancellations.
 
 ### Angler composition across the season
 
-Bank anglers dominate the Cedar Lake count record, but their fraction varies slightly by month as the small boat contingent fluctuates.
+Bank anglers dominate the count record, with only modest month-to-month movement in the small boat contingent.
 
 ```{r}
 #| label: fig-cedar-bankboat
@@ -201,7 +199,7 @@ cedar_counts |>
   theme(legend.position = "bottom")
 ```
 
-Bank anglers account for `r fmt_pct(100 * sum(cedar_counts$bank_anglers) / sum(cedar_counts$bank_anglers + cedar_counts$boat_anglers))` of all counted anglers across the season. This compositional stability simplifies interpretation: the season-level CPUE by angler type is not confounded by a seasonal shift in who is on the water.
+Bank anglers account for `r fmt_pct(100 * sum(cedar_counts$bank_anglers) / sum(cedar_counts$bank_anglers + cedar_counts$boat_anglers))` of all counted anglers across the season, so angler-type CPUE is not driven by a large seasonal shift in who is on the water.
 
 ### Incomplete trips in a roving design
 
@@ -210,7 +208,7 @@ Bank anglers account for `r fmt_pct(100 * sum(cedar_counts$bank_anglers) / sum(c
 summarize_trips(cedar_design)
 ```
 
-`summarize_trips()` reports median and mean trip duration separately for complete and incomplete trips. At Cedar Lake, the median complete trip lasts considerably longer than the median time-fished reported for incomplete contacts — an expected consequence of length-biased sampling. Anglers encountered mid-circuit have already been fishing for some time (so they are more likely to have started early or plan a long trip), which means the elapsed-time record understates the eventual full-trip duration.
+`summarize_trips()` reports median and mean trip duration separately for complete and incomplete trips. At Cedar Lake, complete trips last longer than incomplete contacts, which is the length-bias you expect when the clerk meets anglers mid-circuit.
 
 ```{r}
 #| label: cedar-incomplete-check
@@ -222,11 +220,11 @@ validate_incomplete_trips(
 )
 ```
 
-`validate_incomplete_trips()` runs a two-one-sided t-test (TOST) equivalence test comparing harvest-per-hour between incomplete and complete trips. A non-significant result means the data are consistent with rate equivalence — that incomplete trips are not selectively capturing faster or slower anglers. Equivalence within ± 0.5 fish/hr is the default tolerance. If the test rejects equivalence, the analyst should investigate whether a particular time window (early morning, pre-storm) drives a systematic bias in which anglers are contacted mid-trip.
+`validate_incomplete_trips()` runs a two-one-sided t-test (TOST) comparing harvest per hour between incomplete and complete trips. Non-significance means the data are consistent with rate equivalence within the default ± 0.5 fish/hr tolerance.
 
 ## Building the design object
 
-The Cedar Lake pipeline follows the same four-step assembly used throughout Part III and Part IV. Three features differ from the Harlan build:
+The Cedar Lake pipeline follows the same four-step assembly used throughout Part III and Part IV. Three details differ from the Harlan build:
 
 1. **Both periods have equal shift length.** Harlan's morning shift runs 8 hours; Cedar Lake uses 6 hours for each period (6 am–noon, noon–6 pm). The shift-hours vector reflects that equality.
 2. **Counts carry only `angler_hours`.** Bank and boat counts are summed and multiplied by shift length before calling `add_counts()`. The component columns are dropped so `tidycreel` selects only the target variable.
@@ -282,18 +280,18 @@ cedar_design <- creel_design(
   )
 ```
 
-The design object stores the frame, counts, interviews, and catch in a single structure. All estimation functions read from this object rather than from the raw tables, ensuring consistent stratum labels, consistent day-type assignments, and a reproducible audit trail.
+The design object keeps the frame, counts, interviews, and catch together so all estimation functions read the same stratum labels and day-type assignments.
 
 ## Effort estimation
 
-Total angler-hours is estimated from instantaneous count data. Each sampled day contributes two count replicates per period; `add_counts()` averages replicates within a period before computing day-period effort as `mean_count × shift_hours`. The design then expands sampled-day effort to the full survey period using the ratio of total days to sampled days within each stratum.
+Total angler-hours comes from instantaneous count data. `add_counts()` averages the two replicates within each period, converts counts to day-period effort, and expands sampled-day effort to the full survey period within each stratum.
 
 ```{r}
 #| label: cedar-effort
 eff_tot$estimates
 ```
 
-Cedar Lake logged an estimated `r fmt_comma(eff_tot$estimates$estimate)` angler-hours during the 2023 open-water season (95% CI: `r fmt_comma(eff_tot$estimates$ci_lower)`–`r fmt_comma(eff_tot$estimates$ci_upper)`). Weekend and weekday effort are nearly balanced, consistent with an urban fishery that draws regular weekday use from retirees and shift workers in addition to weekend family outings.
+Cedar Lake logged an estimated `r fmt_comma(eff_tot$estimates$estimate)` angler-hours during the 2023 open-water season (95% CI: `r fmt_comma(eff_tot$estimates$ci_lower)`–`r fmt_comma(eff_tot$estimates$ci_upper)`). Weekend and weekday effort are nearly balanced.
 
 ```{r}
 #| label: cedar-effort-strat
@@ -317,13 +315,13 @@ eff_strat$estimates |>
   theme_minimal(base_size = 11)
 ```
 
-Both strata carry overlapping confidence intervals. A formal two-group comparison is not the goal here — this is a reporting display, not a hypothesis test. The overlap tells managers that weekday and weekend programs would both see meaningful angler engagement.
+Both strata have overlapping confidence intervals, so this is a reporting display rather than a hypothesis test.
 
-The overall effort CV is `r fmt_pct(100 * eff_tot$estimates$se / eff_tot$estimates$estimate)`, which falls within the 10–20% management-grade range for a stratified open-water creel survey. Between-day variance dominates: `r fmt_pct(100 * eff_tot$estimates$se_between / eff_tot$estimates$se)` of the standard error comes from day-to-day variability in count totals rather than within-day count replication.
+The overall effort CV is `r fmt_pct(100 * eff_tot$estimates$se / eff_tot$estimates$estimate)`, within the 10–20% management-grade range for a stratified open-water creel survey. Between-day variance dominates.
 
 ## Catch, harvest, and release
 
-Cedar Lake targets three species with different management priorities: channel catfish (the primary trophy target, regulated by a daily bag limit), bluegill (abundant panfish, essentially unrestricted harvest), and white crappie (intermediate in both abundance and regulations).
+Cedar Lake targets three species with different management priorities: channel catfish, bluegill, and white crappie.
 
 ### Species catch composition
 
@@ -348,7 +346,7 @@ cedar_catch |>
   theme(legend.position = "bottom")
 ```
 
-Bluegill dominates raw catch counts — consistent with panfish abundance in a shallow, vegetated urban reservoir. Channel catfish show a markedly higher harvest fraction than the other two species, reflecting angler behavior: catfish are kept at high rates while bluegill and crappie see more selective harvest.
+Bluegill dominates raw catch counts, and channel catfish show the highest harvest fraction. That matches the fishery: panfish are abundant, while catfish are kept more often than bluegill or crappie.
 
 ### Season-level estimates
 
@@ -359,9 +357,9 @@ cat_tot$estimates
 rel_tot$estimates
 ```
 
-The season totals reveal asymmetry in estimation precision. Total harvest uses the complete interview set (`n` = `r harv_tot$estimates$n`) via the ratio-of-means estimator, while total catch uses only the `r cat_tot$estimates$n` completed trips. `estimate_total_release()` returns an estimate from the full interview set (`n` = `r rel_tot$estimates$n`). This means harvest and release estimates draw on different subsets of the data, and their sum will not exactly equal the total-catch estimate. Chapter 13 discusses this asymmetry in detail; the short version is that release information is available for incomplete trips (fish visible in livewell or on stringer mid-trip), while total catch requires the completed trip record.
+The season totals reveal asymmetry in estimation precision. Total harvest uses the full interview set (`n` = `r harv_tot$estimates$n`), total catch uses only the `r cat_tot$estimates$n` completed trips, and total release uses the full interview set (`n` = `r rel_tot$estimates$n`). Harvest plus release will not exactly equal total catch because the inputs differ.
 
-Harvest by stratum shows modest weekday–weekend differences, both within the confidence intervals of the season total:
+Harvest by stratum shows modest weekday–weekend differences, both within the season total's confidence interval:
 
 ```{r}
 #| label: cedar-harv-strat
@@ -372,7 +370,7 @@ Season total harvest: `r fmt_comma(harv_tot$estimates$estimate)` fish (95% CI: `
 
 ## CPUE and harvest rate
 
-Roving designs use the mean-of-ratios (MOR) estimator for catch rate, not the ratio-of-means (ROM) used in access-point surveys. Each mid-trip contact supplies an independent observation of instantaneous catch rate — fish caught so far divided by time fished so far — a valid rate measurement regardless of whether the trip ultimately completes. With `r fmt_pct(100 * n_incomp / n_int)` incomplete contacts at Cedar Lake, the MOR estimator retains `r cpue_all$estimates$n` of `r n_int` interviews (eight very short contacts under 0.5 hours are excluded as unreliable rate observations). Chapter 14 discusses the ROM vs. MOR distinction and when each is appropriate.
+Roving designs use the mean-of-ratios (MOR) estimator for catch rate, not the ratio-of-means (ROM) used in access-point surveys. Each mid-trip contact is a valid instantaneous rate observation. With `r fmt_pct(100 * n_incomp / n_int)` incomplete contacts, the MOR estimator still retains `r cpue_all$estimates$n` of `r n_int` interviews; eight very short contacts under 0.5 hours are excluded as unreliable.
 
 ```{r}
 #| label: cedar-cpue-all
@@ -380,7 +378,7 @@ cpue_all$estimates
 hpue_all$estimates
 ```
 
-Overall CPUE is `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour (95% CI: `r fmt_rate(cpue_all$estimates$ci_lower)`–`r fmt_rate(cpue_all$estimates$ci_upper)`). The harvest rate is `r fmt_rate(hpue_all$estimates$estimate)` fish per angler-hour, meaning anglers kept `r fmt_pct(100 * hpue_all$estimates$estimate / cpue_all$estimates$estimate)` of all fish caught.
+Overall CPUE is `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour (95% CI: `r fmt_rate(cpue_all$estimates$ci_lower)`–`r fmt_rate(cpue_all$estimates$ci_upper)`). The harvest rate is `r fmt_rate(hpue_all$estimates$estimate)` fish per angler-hour, so anglers kept `r fmt_pct(100 * hpue_all$estimates$estimate / cpue_all$estimates$estimate)` of all fish caught.
 
 ### CPUE by day type
 
@@ -389,11 +387,11 @@ Overall CPUE is `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour (
 cpue_dt$estimates
 ```
 
-Weekday and weekend CPUE are nearly identical — `r fmt_rate(cpue_dt$estimates$estimate[cpue_dt$estimates$day_type == "weekday"])` and `r fmt_rate(cpue_dt$estimates$estimate[cpue_dt$estimates$day_type == "weekend"])` fish per angler-hour respectively. Overlapping confidence intervals confirm that there is no detectable difference in catch success between the two strata at this sample size.
+Weekday and weekend CPUE are nearly identical — `r fmt_rate(cpue_dt$estimates$estimate[cpue_dt$estimates$day_type == "weekday"])` and `r fmt_rate(cpue_dt$estimates$estimate[cpue_dt$estimates$day_type == "weekend"])` fish per angler-hour. Overlapping confidence intervals show no detectable difference at this sample size.
 
 ### CPUE by angler type
 
-Bank and boat anglers differ in access, target species, and technique. Bank anglers at Cedar Lake tend to use bait (worms, prepared dough) fished near vegetated structure, targeting bluegill and catfish; the small boat fleet focuses more on open-water crappie. The split in CPUE reflects those behavioral differences.
+Bank and boat anglers differ in access, target species, and technique. Bank anglers typically fish bait near cover for bluegill and catfish, while the small boat fleet leans more toward crappie. The CPUE split reflects those differences.
 
 ```{r}
 #| label: fig-cedar-cpue-type
@@ -417,11 +415,11 @@ cpue_at$estimates |>
   theme_minimal(base_size = 11)
 ```
 
-Bank anglers catch `r fmt_rate(cpue_at$estimates$estimate[cpue_at$estimates$angler_type == "bank"])` fish per angler-hour; boat anglers catch `r fmt_rate(cpue_at$estimates$estimate[cpue_at$estimates$angler_type == "boat"])` fish per angler-hour. The boat sample is small (n = `r cpue_at$estimates$n[cpue_at$estimates$angler_type == "boat"]` trips), so the wider confidence interval should be interpreted cautiously. At current sample sizes, a bank versus boat contrast is suggestive but not conclusive.
+Bank anglers catch `r fmt_rate(cpue_at$estimates$estimate[cpue_at$estimates$angler_type == "bank"])` fish per angler-hour; boat anglers catch `r fmt_rate(cpue_at$estimates$estimate[cpue_at$estimates$angler_type == "boat"])` fish per angler-hour. The boat sample is small (`r cpue_at$estimates$n[cpue_at$estimates$angler_type == "boat"]` trips), so treat that contrast cautiously.
 
 ## Precision and diagnostics
 
-A precision profile summarizes CV across all season-level estimates. The goal is to identify which quantities are estimated confidently enough for management use and which carry enough uncertainty to warrant a caveated interpretation.
+A precision profile summarizes CV across all season-level estimates and highlights which quantities are solid enough for management use.
 
 ```{r}
 #| label: cedar-cv-summary
@@ -459,13 +457,13 @@ cv_tbl |>
   theme(legend.position = "bottom")
 ```
 
-Effort CV is `r fmt_pct(cv_eff)` — the most precisely estimated quantity, because it draws on the full set of `r n_samp` sampled days. Total harvest CV is `r fmt_pct(cv_harv)`, within the acceptable range. Total catch CV is `r fmt_pct(cv_catch)`, highest of the group because only the `r n_comp` completed trips contribute to that estimator. CPUE and HPUE have the smallest CVs — `r fmt_pct(cv_cpue)` and `r fmt_pct(cv_hpue)` respectively — reflecting both the large MOR sample (`r cpue_all$estimates$n` contacts) and the correlated-quotient property of rate estimators, which partially cancels between-day variance in effort and catch.
+Effort CV is `r fmt_pct(cv_eff)`, the lowest of the group because it uses all `r n_samp` sampled days. Total harvest CV is `r fmt_pct(cv_harv)`. Total catch CV is `r fmt_pct(cv_catch)`, highest because only the `r n_comp` completed trips contribute. CPUE and HPUE are the smallest — `r fmt_pct(cv_cpue)` and `r fmt_pct(cv_hpue)` — because the MOR sample is large.
 
-Quantities above 20% CV deserve a caveated interpretation in the final report. For Cedar Lake 2023, all season-level totals and rates fall within the management-grade range. The boat-angler CPUE sub-group, while not shown in this summary, carries a much larger CV and should not be reported as a standalone number without a prominent uncertainty statement.
+Quantities above 20% CV deserve a caveated interpretation. For Cedar Lake 2023, all season-level totals and rates fall within the management-grade range, but the boat-angler CPUE sub-group should still be reported with a strong uncertainty note.
 
 ## Final report assembly
 
-All seven estimates are assembled into a single reporting tibble, formatted for a non-technical audience. The pattern mirrors Chapter 16: bind rows, add formatted strings, compute CV column.
+All seven estimates are assembled into a single reporting tibble, formatted for a non-technical audience. The pattern mirrors Chapter 16: bind rows, add formatted strings, compute CV.
 
 ```{r}
 #| label: cedar-report-assembly
@@ -510,35 +508,27 @@ knitr::kable(report_table, align = "llrrr",
 A manager's summary for Cedar Lake 2023 draws directly from the computed estimates:
 
 ::: {.callout-note title="Example: manager one-page summary (excerpt)"}
-Cedar Lake anglers logged an estimated `r fmt_comma(eff_tot$estimates$estimate)` angler-hours during the 2023 open-water season (April 1–October 31), with weekday effort (`r fmt_comma(eff_strat$estimates$estimate[eff_strat$estimates$day_type == "weekday"])` angler-hours) and weekend effort (`r fmt_comma(eff_strat$estimates$estimate[eff_strat$estimates$day_type == "weekend"])` angler-hours) nearly equal. Total harvest across all species was `r fmt_comma(harv_tot$estimates$estimate)` fish (95% CI: `r fmt_comma(harv_tot$estimates$ci_lower)`–`r fmt_comma(harv_tot$estimates$ci_upper)` fish). Anglers caught `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour and retained `r fmt_rate(hpue_all$estimates$estimate)` fish per angler-hour. These estimates are based on `r n_samp` sampled survey days and `r n_int` angler contacts (`r n_comp` completed trips).
+Cedar Lake anglers logged an estimated `r fmt_comma(eff_tot$estimates$estimate)` angler-hours during the 2023 open-water season (April 1–October 31), with weekday and weekend effort nearly equal. Total harvest was `r fmt_comma(harv_tot$estimates$estimate)` fish (95% CI: `r fmt_comma(harv_tot$estimates$ci_lower)`–`r fmt_comma(harv_tot$estimates$ci_upper)` fish). Anglers caught `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour and retained `r fmt_rate(hpue_all$estimates$estimate)` fish per angler-hour, based on `r n_samp` sampled days and `r n_int` contacts (`r n_comp` complete trips).
 :::
 
 ::: {.callout-note title="Example: technical report footnote"}
-Effort uses ratio-of-means with day-type stratification from instantaneous count data. CPUE and HPUE use the mean-of-ratios estimator with all `r cpue_all$estimates$n` contacts (8 trips under 0.5 hours excluded); total catch uses only the `r n_comp` completed trips (`r fmt_pct(100 * n_comp / n_int)` of all contacts); total harvest and release use the full interview set (n = `r n_int`). Confidence intervals are 95% normal-approximation intervals from the design-based variance estimator. Domain: Cedar Lake public-access shoreline, daylight hours, April 1–October 31, 2023.
+Effort uses ratio-of-means with day-type stratification from instantaneous count data. CPUE and HPUE use the mean-of-ratios estimator with all `r cpue_all$estimates$n` contacts, excluding 8 trips under 0.5 hours. Total catch uses only the `r n_comp` completed trips (`r fmt_pct(100 * n_comp / n_int)` of contacts); total harvest and release use the full interview set. Confidence intervals are 95% normal-approximation intervals from the design-based variance estimator. Domain: Cedar Lake shoreline, daylight hours, April 1–October 31, 2023.
 :::
 
 ### Species-level CPUE
 
-Cedar Lake targets three species with different catchability profiles.
-`estimate_catch_rate(by = species)` returns design-based estimates with
-stratification weights and confidence intervals for each:
+Cedar Lake targets three species with different catchability profiles. `estimate_catch_rate(by = species)` returns design-based estimates with stratification weights and confidence intervals for each:
 
 ```{r}
 #| label: cedar-species-cpue
 estimate_catch_rate(cedar_design, by = species)
 ```
 
-Bluegill accounts for the highest CPUE, consistent with shallow vegetated
-habitat where panfish densities are high and contacts are frequent.
-Channel catfish CPUE is lower on a per-angler-hour basis but represents a
-disproportionate share of harvest by weight — catfish are kept at high rates.
-White crappie CPUE is lowest overall, reflecting both lower abundance and
-seasonal availability; crappie concentrate in predictable locations in spring
-and fall but disperse to deeper structure in summer.
+Bluegill has the highest CPUE, consistent with shallow vegetated habitat where panfish are abundant. Channel catfish CPUE is lower but still drives a disproportionate share of harvest. White crappie CPUE is lowest overall, reflecting lower abundance and seasonal availability.
 
 ## Cedar Lake versus Harlan: a design contrast
 
-Cedar Lake and Harlan share the same estimation engine — `creel_design`, `add_counts`, `add_interviews`, `add_catch`, `estimate_effort`, `estimate_total_harvest`, `estimate_catch_rate` — but the two surveys differ in nearly every operational detail. Comparing them reveals which parts of the workflow are universal and which require lake-specific decisions.
+Cedar Lake and Harlan share the same estimation engine, but the surveys differ in most operational details. The comparison below shows which pieces of the workflow stay fixed and which depend on the lake.
 
 ```{r}
 #| label: cedar-harlan-compare
@@ -562,25 +552,25 @@ knitr::kable(compare_tbl, align = "lll",
              caption = "Design and estimate comparison between Harlan Reservoir and Cedar Lake.")
 ```
 
-The most consequential difference is the incomplete-trip rate. Harlan was operated as an access-point survey, so most interviews captured completed trips; Cedar Lake's roving protocol contacts parties mid-trip, meaning `r fmt_pct(100 * n_incomp / n_int)` of all records are incomplete. The effect on total-count estimation is asymmetric: total-catch requires the complete trip record (n = `r n_comp`), while harvest and release totals draw on the full interview pool. Catch rates are less affected — the MOR estimator uses every mid-trip contact as an instantaneous rate observation, so CPUE precision is not penalized by the high incomplete-trip rate. The binding precision constraint for roving surveys is total catch, not CPUE; managers who need tighter total-catch confidence intervals must increase sampled days or supplement with access-point exits.
+The main difference is the incomplete-trip rate. Harlan's access-point design mostly captured complete trips; Cedar Lake's roving protocol leaves `r fmt_pct(100 * n_incomp / n_int)` of records incomplete. Total catch depends on completed trips (`r n_comp`), while harvest, release, and CPUE use the fuller interview record. For roving surveys, total catch is the binding precision constraint.
 
-A second consequence of the roving design is the lower absolute effort estimate. Cedar Lake is a much smaller water body than Harlan — fewer anglers, shorter average trips, and a seasonal window limited to seven months. The per-angler-hour CPUE is actually higher at Cedar Lake (`r fmt_rate(cpue_all$estimates$estimate)` vs 1.51 fish/hr), reflecting the dense panfish community. Scale differences like this make across-lake comparisons misleading unless normalized per unit area or per unit effort.
+The roving design also produces a lower absolute effort estimate because Cedar Lake is smaller, has fewer anglers, and runs only seven months. CPUE is actually higher here (`r fmt_rate(cpue_all$estimates$estimate)` vs 1.51 fish/hr), so raw lake-to-lake comparisons are misleading without normalization.
 
 ## Takeaway {#sec-cedar-takeaway}
 
-Cedar Lake illustrates how the same tidycreel pipeline adapts to a fundamentally different field situation from the Harlan access-point design. Three decisions drove the analysis:
+Cedar Lake shows how the same tidycreel pipeline adapts to a different field situation from the Harlan access-point design. Three choices drove the analysis:
 
-**Roving contact → MOR estimator.** Because every interview captures a mid-trip observation, the mean-of-ratios estimator is the correct choice for catch rate. The ratio-of-means estimator used at Harlan — which divides total catch by total effort across the sample — assumes complete-trip records and would underestimate CPUE here by discarding the incomplete-trip catch-so-far data.
+**Roving contact → MOR estimator.** Mid-trip interviews make the mean-of-ratios estimator the right choice for catch rate.
 
-**High incomplete-trip rate → asymmetric precision.** At `r fmt_pct(100 * n_incomp / n_int)` incomplete contacts, total-catch precision (using only completed trips, n = `r n_comp`) is considerably tighter than total-harvest precision (using all contacts, n = `r n_int`). Managers who need better total-catch confidence intervals must target more sampled days or add an exit-point component, not improve the existing roving protocol.
+**High incomplete-trip rate → asymmetric precision.** At `r fmt_pct(100 * n_incomp / n_int)` incomplete contacts, total-catch precision is tighter than total-harvest precision because only completed trips contribute. Better total-catch intervals require more sampled days or an exit-point component.
 
-**Bank-dominant fishery → stratify by access point, not boat ramp.** An urban reservoir without a public boat ramp would gain nothing from stratifying by access type; the primary heterogeneity at Cedar Lake is temporal (weekday vs. weekend pressure), not spatial. The day-type strata captured the relevant variance structure.
+**Bank-dominant fishery → stratify by day type.** The main heterogeneity at Cedar Lake is temporal, not access-related, so the day-type strata capture the relevant variance structure.
 
-The season estimates — `r fmt_comma(eff_tot$estimates$estimate)` angler-hours, `r fmt_comma(harv_tot$estimates$estimate)` fish harvested, `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour — all fall within management-grade precision (CV < 20%). For a seven-month survey using two periods per sampled day and a single roving clerk, these results represent a cost-effective characterization of the urban fishery. The contrast with Harlan Reservoir confirms that waterbody size, angler mode, and survey type each interact to shape both what can be estimated and how precisely.
+The season estimates — `r fmt_comma(eff_tot$estimates$estimate)` angler-hours, `r fmt_comma(harv_tot$estimates$estimate)` fish harvested, `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour — all fall within management-grade precision (CV < 20%). For a seven-month survey with two periods per sampled day and one roving clerk, that is a cost-effective characterization of the urban fishery.
 
 ## Reproducibility note
 
-The Cedar Lake estimates in this chapter will reproduce exactly given the same seed, data files, and package version:
+The Cedar Lake estimates in this chapter reproduce exactly given the same seed, data files, and package version:
 
 ```{r}
 #| label: cedar-session
@@ -589,7 +579,7 @@ cat("R:         ", R.version$version.string, "\n")
 cat("Data seed: 2023 (set in data/cedar_*.rds generation)\n")
 ```
 
-Production use should version-control the four `.rds` files alongside the analysis script. Saving the design object avoids rerunning the pipeline for downstream reporting:
+Version-control the four `.rds` files alongside the analysis script. Saving the design object avoids rerunning the pipeline for downstream reporting:
 
 ```{r}
 #| label: cedar-save-design
@@ -597,4 +587,4 @@ Production use should version-control the four `.rds` files alongside the analys
 saveRDS(cedar_design, here("data/cedar_design_2023.rds"))
 ```
 
-Loading the saved design in a future session restores the full stratum structure, counts, and interview data in a single call — identical to rebuilding the design from raw tables, but without the preparation steps.
+Loading the saved design restores the full stratum structure, counts, and interview data in one call.

@@ -71,22 +71,15 @@ suppressMessages({
 ## Why effort comes first {#sec-effort-why}
 
 Every estimate produced by a creel survey is either effort itself or a product
-that uses effort as a scaling factor. Harvest per season equals estimated effort
-times estimated harvest rate per unit effort. Total catch equals estimated effort
-times estimated catch rate. Exploitation rate divides estimated harvest by an
-independently estimated population size — and the harvest estimate required for
-that calculation depends on effort. If effort is wrong, every downstream number
-built on it is also wrong, and the error propagates silently because the
-intermediate quantities look numerically reasonable at each step.
+that uses effort as a scaling factor. If effort is wrong, every downstream
+number built on it is wrong too.
 
-Effort estimation therefore sits at the foundation of the creel workflow, not as
-a reporting afterthought but as the primary quantity the count data were designed
-to estimate. The count schedule — which days to sample, how many periods per day,
-how many instantaneous counts per period — is determined by the precision
-requirements for effort, not by the requirements for catch rate or harvest.
-Getting effort right means understanding what the instantaneous count estimator
-actually targets, how stratification turns counts into a season total, and where
-variance comes from.
+Effort estimation therefore sits at the foundation of the creel workflow. The
+count schedule — which days to sample, how many periods per day, how many
+instantaneous counts per period — is determined by the precision requirements
+for effort, not by the requirements for catch rate or harvest. Getting effort
+right means understanding what the instantaneous count estimator targets, how
+stratification turns counts into a season total, and where variance comes from.
 
 This chapter works through effort estimation for the Harlan Reservoir 2022
 survey: the formula that converts an instantaneous angler count into an
@@ -98,7 +91,7 @@ in `tidycreel` that assembles all of these pieces in a single call.
 ## What effort means in a creel survey {#sec-effort-units}
 
 Creel surveys measure effort as the amount of fishing activity in a defined
-domain over a defined time period. That statement looks simple but requires three
+domain over a defined time period. That simple statement still requires three
 explicit choices before any arithmetic can begin.
 
 **The unit of effort.** Angler-hours — one angler fishing for one hour — is the
@@ -696,9 +689,9 @@ follows directly from the standard stratified sampling formula [@mccormick2013].
 
 ## Takeaway {#sec-effort-takeaway}
 
-Effort estimation is not a by-product of the creel interview process — it is
-the primary function of the count schedule and the foundation for every harvest
-and catch total the survey produces. Getting it right means three things.
+Effort estimation is the point of the count schedule and the foundation for
+every harvest and catch total the survey produces. Getting it right means three
+things.
 
 First, the instantaneous count estimator assumes that each count represents the
 instantaneous angler stock during the period. That assumption holds when counts
@@ -722,8 +715,6 @@ between-day component.
 The Harlan 2022 season estimate of approximately
 `r formatC(round(eff_season$estimates$estimate), big.mark=",")` angler-hours
 (95% CI `r formatC(round(eff_season$estimates$ci_lower), big.mark=",")`–`r formatC(round(eff_season$estimates$ci_upper), big.mark=",")`) is the
-number that Chapter 13 will use to scale harvest and catch estimates to seasonal
-totals. The confidence intervals on those downstream estimates will be
-correspondingly wide — because effort uncertainty multiplies through the product
-$\hat{E} \times \hat{R}$ — which makes the case for investing in effort precision
-before worrying about sample size for the interview component.
+number that Chapter 13 will use to scale harvest and catch totals. The
+downstream confidence intervals are wider because effort uncertainty
+multiplies through $\hat{E} \times \hat{R}$.

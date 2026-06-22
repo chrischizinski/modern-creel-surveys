@@ -67,9 +67,8 @@ A creel estimate without uncertainty information is only half an answer. The
 point estimate tells you how large the catch or effort was; the uncertainty
 wrapper tells you how much faith to put in that number and whether the design
 was precise enough to support the decisions that will follow. This chapter
-covers three questions that every creel analyst should be able to answer: where
-does uncertainty come from in these estimates, how should it be communicated,
-and how much sampling would be needed to hit a precision target?
+covers where uncertainty comes from, how to communicate it, and how much
+sampling is needed to hit a precision target.
 
 ## The anatomy of an estimate {#sec-uncertainty-anatomy}
 
@@ -107,11 +106,6 @@ eff$estimates |>
 The confidence interval runs from
 `r formatC(round(eff$estimates$ci_lower), big.mark = ",")` to
 `r formatC(round(eff$estimates$ci_upper), big.mark = ",")` angler-hours.
-That range spans roughly
-`r round((eff$estimates$ci_upper - eff$estimates$ci_lower) / eff$estimates$estimate * 100)`%
-of the point estimate, which is wide enough to matter for year-over-year
-comparisons but narrow enough to support most within-season management
-recommendations.
 
 ## Where variance comes from {#sec-uncertainty-decomp}
 
@@ -129,12 +123,9 @@ eff$estimates |>
 
 Between-day variance accounts for
 `r round(eff$estimates$se_between^2 / eff$estimates$se^2 * 100)`% of total
-variance at Harlan. Day-to-day differences in how many anglers arrive — driven
-by weather, weekday versus weekend, and season — are a larger source of
-uncertainty than moment-to-moment fluctuation within a shift. This is the
-expected pattern for reservoir access-point surveys: the arrival process is
-bursty by day, so sampling more days reduces uncertainty more than sampling
-more periods within the days already in the sample.
+variance at Harlan. Day-to-day differences in how many anglers arrive are a
+larger source of uncertainty than moment-to-moment fluctuation within a shift.
+That is the expected pattern for reservoir access-point surveys.
 
 ```{r}
 #| label: fig-ch15-variance-decomp
@@ -166,11 +157,8 @@ eff$estimates |>
   theme(legend.position = "bottom")
 ```
 
-For designs where within-day variance dominates instead — common in open-water
-boat fisheries where encounter rates shift sharply from morning to afternoon —
-the prescription runs the other direction: more counts per sampled day, not
-more days. The variance decomposition is the diagnostic that determines which
-lever is worth pulling.
+For designs where within-day variance dominates instead, the prescription is
+more counts per sampled day.
 
 ## Precision by stratum {#sec-uncertainty-stratum}
 
@@ -188,16 +176,8 @@ eff_strata <- suppressWarnings(
 eff_strata$estimates
 ```
 
-Weekend effort at Harlan carries a CV of
-`r round(eff_strata$estimates$se[eff_strata$estimates$day_type == "weekend"] /
-  eff_strata$estimates$estimate[eff_strata$estimates$day_type == "weekend"] * 100, 1)`%,
-roughly three times the weekday CV of
-`r round(eff_strata$estimates$se[eff_strata$estimates$day_type == "weekday"] /
-  eff_strata$estimates$estimate[eff_strata$estimates$day_type == "weekday"] * 100, 1)`%.
-That difference reflects both fewer weekend-eligible days in the season calendar
-and higher day-to-day variability in weekend attendance. Both strata meet the
-15% precision target, but the weekend stratum would benefit most from additional
-sampling if resources permitted reallocation.
+Weekend effort at Harlan carries a higher CV than weekday effort. Both strata
+meet the 15% precision target.
 
 ```{r}
 #| label: fig-ch15-stratum-ci
@@ -250,23 +230,11 @@ bind_rows(
 ```
 
 The CPUE estimate of
-`r round(cpue$estimates$estimate, 3)` fish per angler-hour carries a CV of
-`r round(cpue$estimates$se / cpue$estimates$estimate * 100, 1)`%, tighter than
-the effort CV of
-`r round(eff$estimates$se / eff$estimates$estimate * 100, 1)`%.
-That difference is typical: CPUE is estimated from interview data alone and
-does not propagate the additional uncertainty from the count-based effort
-expansion. Harvest, by contrast, propagates both sources — its CV will always
-be at least as large as the larger of the effort and catch-rate CVs.
+`r round(cpue$estimates$estimate, 3)` fish per angler-hour carries a tighter CV
+than the effort estimate because it is based on interview data alone.
 
-Communicating precision to non-technical audiences calls for a different
-framing than raw SE. A confidence interval in the units of the estimate
-— "between 13,900 and 22,900 angler-hours" — is usually more intuitive
-than the SE alone. For regulatory reporting, where a threshold matters (did
-harvest exceed the target?), the interval can be used to answer directly:
-does the entire interval sit below the threshold, or does it straddle it?
-Straddling a threshold is a qualitatively different result from an estimate
-comfortably below it, even if both point estimates look similar.
+Communicating precision to non-technical audiences calls for a confidence
+interval in the units of the estimate rather than the SE alone.
 
 ## Sampling coverage as a diagnostic {#sec-uncertainty-coverage}
 
@@ -301,8 +269,7 @@ coverage
 Coverage at Harlan ranges from
 `r round(min(coverage$pct_sampled) * 100)`% to
 `r round(max(coverage$pct_sampled) * 100)`% across month-stratum combinations,
-with no complete gaps. That consistency indicates the design was implemented
-as planned, which supports the validity of the variance estimates.
+with no complete gaps.
 
 ```{r}
 #| label: fig-ch15-coverage
@@ -325,10 +292,8 @@ coverage |>
   theme(legend.position = "bottom")
 ```
 
-When coverage varies widely across months — for instance, a July with only
-25% of weekdays sampled because of access closures — those months contribute
-a disproportionately imprecise stratum mean to the seasonal total. A coverage
-plot surfaces this before it becomes invisible inside an aggregate CV.
+When coverage varies widely across months, those months contribute a less
+precise stratum mean to the seasonal total.
 
 ## How many sampling days are enough? {#sec-precision-samplesize}
 
@@ -391,14 +356,9 @@ bind_rows(
   select(cv_target, weekday, weekend, total)
 ```
 
-The Harlan 2022 design sampled 83 weekdays and 35 weekends — 118 days total.
+The Harlan 2022 design sampled 83 weekdays and 35 weekends, or 118 days total.
 Hitting a 15% CV requires only 32 weekday days and 14 weekend days under
-Neyman allocation, which means the 2022 design was substantially
-over-sampled relative to that target. The extra sampling was not wasted:
-it buys insurance against unexpected variability and supports finer-grained
-analyses by species, month, or angler type that a minimum-n design would not
-support. But for a new reservoir where budget is tight, the sample size table
-provides a defensible lower bound.
+Neyman allocation.
 
 ## Validating the current design {#sec-precision-validate}
 
@@ -421,19 +381,11 @@ design_report <- validate_design(
 design_report$results
 ```
 
-Both strata pass with substantial margin: the achieved CV for weekday days is
-`r round(design_report$results$cv_actual[design_report$results$stratum == "weekday"] * 100, 1)`%
-against a 15% target, and
-`r round(design_report$results$cv_actual[design_report$results$stratum == "weekend"] * 100, 1)`%
-for weekend days. The report also records the minimum n required for each
-stratum, making it easy to see how much headroom exists before the design
-would fall below threshold.
+Both strata pass against the 15% target. The report also records the minimum n
+required for each stratum.
 
-The design report serves a documentation purpose as well as a diagnostic one.
-Including it in a survey report gives readers explicit evidence that the
-sampling plan met its stated precision goals — or, where a stratum fell
-short, an honest accounting of which estimates to treat with additional
-caution.
+The design report also serves a documentation purpose: it shows whether the
+sampling plan met its stated precision goals.
 
 ## Power to detect change {#sec-precision-power}
 
@@ -462,8 +414,7 @@ creel_power(
 ```
 
 With a historical CV of 30% and 118 sampling days per year, power to detect
-a 30% change exceeds 90%. The picture changes substantially for smaller surveys
-with more variable effort.
+a 30% change exceeds 90%.
 
 ```{r}
 #| label: fig-ch15-power-curve
@@ -507,12 +458,7 @@ crossing(
 
 For a stable reservoir fishery like Harlan with an observed CV of 12%, 80%
 power to detect a 30% change requires fewer than 20 sampling days per year.
-For a more variable fishery — coastal runs, fluctuating ice-out timing,
-reservoir drawdowns — where the CV might reach 50%, the same detection
-threshold requires roughly 120 days. The power analysis reframes budget
-decisions: if management requires detecting a 20% change, the power curve
-specifies the minimum sampling commitment needed to make that detection
-statistically credible.
+For a more variable fishery, the same threshold requires far more days.
 
 `power_creel()` provides a unified interface for the same computation
 expressed as a table, which is more convenient when generating design
@@ -598,26 +544,17 @@ tibble(n_interviews = seq(20, 500, by = 10)) |>
   theme_creel()
 ```
 
-The curve shows sharply diminishing returns: moving from 50 to 150 interviews
-produces a large precision gain, but the incremental benefit from 200 to 400
-interviews is modest. The 15% CV threshold is crossed near 100 interviews —
-well below the 390 the 2022 survey collected. The extra interviews are not
-wasted: they support species-specific CPUE, monthly breakdowns, and angler-type
-comparisons that require precision within each domain rather than just the
-season total.
+The curve shows sharply diminishing returns. The 15% CV threshold is crossed
+near 100 interviews, well below the 390 the 2022 survey collected.
 
 For a new reservoir without historical data, `cv_from_n()` can be used
-prospectively by borrowing cv_catch and cv_effort estimates from a comparable
-fishery. The sensitivity of the result to the input CVs is worth exploring:
-doubling cv_catch roughly doubles the required interview count for a given
-precision target.
+prospectively by borrowing `cv_catch` and `cv_effort` from a comparable fishery.
 
 ## Diagnostics alongside uncertainty {#sec-uncertainty-diagnostics}
 
 Uncertainty quantifies sampling error. Diagnostics assess whether the data
-structure behind the estimate is sound enough to trust the estimates in the
-first place. A precise estimate built on a biased or incomplete frame is not
-a good result — it is a confident wrong answer.
+structure behind the estimate is sound enough to trust it. A precise estimate
+built on a biased or incomplete frame is a confident wrong answer.
 
 Three diagnostic questions are worth asking before reporting any estimate:
 
@@ -639,26 +576,18 @@ were treated as anomalies" — is more informative than the interval alone when
 the estimate is leverage-heavy.
 
 These diagnostics belong in the same section of the survey report as the
-precision table. Separating them into a technical appendix invites readers
-to skip one and accept the other without context.
+precision table.
 
 ## Takeaway {#sec-uncertainty-takeaway}
 
 Every estimate produced by a creel survey has two parts: the point estimate
 and its uncertainty wrapper. `estimate_effort()` and `estimate_catch_rate()`
-return both in a single call, along with the variance decomposition needed to
-diagnose whether adding sampling days or sampling intervals would be the more
-efficient investment.
+return both in a single call.
 
 `creel_n_effort()`, `validate_design()`, and `creel_power()` connect the
-completed survey to the next season's design. Sample size calculations
-grounded in the current survey's variance estimates are the most defensible
-basis for a budget request. Power calculations make the detection threshold
-explicit rather than leaving managers to infer it from the CV alone.
+completed survey to the next season's design.
 
 The coefficient of variation is the most useful single summary of precision
-for management communication. A CV below 15% is generally considered adequate
-for season-total effort and harvest; a CV below 20% is acceptable for CPUE
-when interviews are limited. Both thresholds assume the frame is complete,
-the design assumptions are met, and the diagnostics described in Chapter 11
-have been applied before estimation.
+for management communication. A CV below 15% is generally adequate for season-
+total effort and harvest; a CV below 20% is acceptable for CPUE when interviews
+are limited.
