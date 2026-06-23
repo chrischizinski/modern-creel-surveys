@@ -43,7 +43,7 @@ In practice, frame construction begins with a site inventory. Every location whe
 
 At Harlan Reservoir, the frame covers the primary boat ramp, a secondary bank-fishing area, and the connecting access road. Section `0` in the data represents the combined access network as a single spatial unit. In a design with multiple distinct access points — a bus-route design, treated in the next section — each site would carry its own inclusion probability.
 
-Once spatial coverage is settled, the temporal frame must be defined. For Harlan, the frame spans 211 days from April through October 2022, divided into two strata — weekdays (Monday–Thursday) and weekends (Friday–Sunday plus holidays). Of those 211 days, 116 were sampled. Each sampled day was assigned to one of two shift periods: a morning period (roughly 6 a.m. to 2 p.m.) or an afternoon period (roughly 2 p.m. to 8 p.m.).
+Once spatial coverage is settled, the temporal frame must be defined. For Harlan, the frame spans 211 days from April through October 2022, divided into two strata — weekdays (Monday–Friday) and weekends (Saturday–Sunday plus holidays). Of those 211 days, 116 were sampled. Each sampled day was assigned to one of two shift periods: a morning period (roughly 6 a.m. to 2 p.m.) or an afternoon period (roughly 2 p.m. to 8 p.m.).
 
 ## The bus-route design
 
@@ -250,8 +250,8 @@ The weekday and weekend strata produce separate effort estimates that are then s
 
 ```{r}
 #| label: fig-daily-effort
-#| fig-cap: "Distribution of estimated angler-hours per shift period at Harlan Reservoir by day type and period. Each point is one sampled shift. Morning shifts (period 1) typically yield higher effort than afternoon shifts. Weekend days show wider variability than weekdays, consistent with higher and more irregular recreational use."
-#| fig-alt: "Strip chart of shift-level effort estimates with higher values on weekend mornings and visible spread within strata."
+#| fig-cap: "Distribution of estimated angler-hours per shift period at Harlan Reservoir by day type and period. Each point is one sampled shift. Morning shifts (period 1) yield higher effort than afternoon shifts in both strata. Weekday shifts produce substantially higher mean effort than weekend shifts, with greater absolute spread as well."
+#| fig-alt: "Strip chart of shift-level effort estimates with higher values on weekday mornings and visible spread within strata."
 
 daily_effort |>
   mutate(
@@ -279,7 +279,7 @@ When a party is interviewed as it leaves, the interview captures the entire trip
 
 Compare this with a survey that intercepts anglers mid-trip. A party interrupted at midday has fished some fraction of their eventual trip. If the interview uses the hours-so-far as the denominator in a catch-rate calculation, the result can be biased in ways that are difficult to quantify. Short-trip parties are more likely to have completed their trip when the interviewer arrives; long-trip parties are more likely to still be fishing. This creates a selection probability that depends on trip length — and trip length is correlated with what anglers catch.
 
-The completed-trip feature of access-point surveys breaks that correlation. At departure, every party - short-trip or long-trip - has the same probability of being intercepted, assuming the technician is present and interviews all departing parties. The selection probability does not depend on trip duration. That is why the ratio-of-means is the right estimator here.
+The completed-trip feature of access-point surveys breaks that correlation. At departure, every party — short-trip or long-trip — has the same probability of being intercepted, assuming the technician is present and interviews all departing parties. The selection probability does not depend on trip duration. That is why the ratio-of-means is the right estimator here.
 
 Put another way, the access-point interview sees the trip only after it is finished, so the numerator and denominator describe the same completed event. That is what makes the ratio meaningful without extra correction.
 

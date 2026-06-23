@@ -16,7 +16,7 @@ harlan_catch      <- readRDS(here::here("data/harlan_catch.rds"))
 
 ## What the design object is for {#sec-design-purpose}
 
-The linked tables built in Chapter 9 contain all the raw survey data, but they do
+The linked tables built in @sec-linked-why contain all the raw survey data, but they do
 not encode the sampling design. The schedule table records which days were sampled,
 but it does not specify the sampling units, the strata, or the inclusion
 probabilities that estimation requires. The counts table records observed anglers,
@@ -31,7 +31,7 @@ incorrectly — at every estimation step.
 
 `tidycreel` addresses this with the `creel_design` object. The design object
 holds the calendar, the strata, the counts, the interviews, and the species-level
-catch in a single structure. Estimation functions in Chapters 12 through 15 take a
+catch in a single structure. Estimation functions from @sec-effort-why through @sec-uncertainty-anatomy take a
 `creel_design` as their first argument, so the design object is the handoff point
 between data preparation and estimation.
 
@@ -399,7 +399,7 @@ scratch.
 
 ## The design object as the estimation handoff {#sec-design-handoff}
 
-Every estimation function in Chapters 12 through 15 takes a `creel_design` as its
+Every estimation function from @sec-effort-why through @sec-uncertainty-anatomy takes a `creel_design` as its
 first argument. The design carries the information those functions need without
 requiring the analyst to re-specify it at each call:
 
@@ -409,7 +409,7 @@ requiring the analyst to re-specify it at each call:
 - Species-level catch by outcome (`catch`)
 - The underlying `survey.design2` with correct strata weights
 
-The functions that were held as `eval: false` placeholders in Chapter 5 —
+The functions that were held as `eval: false` placeholders in @sec-roving —
 `estimate_catch_rate()`, `validate_incomplete_trips()`, and `summarize_trips()` —
 all require a `creel_design` object of this form. The design built in this chapter
 is the prerequisite for running those functions with real output.
@@ -515,7 +515,7 @@ the design was built, `add_catch()` must be called again on the updated data. Th
 species-level records inside the design object are a snapshot of the catch table at
 the time `add_catch()` was called; they do not update automatically.
 
-**An interview exclusion.** Chapter 11 covers data cleaning decisions that remove
+**An interview exclusion.** @sec-cleaning-inference covers data cleaning decisions that remove
 or adjust specific interviews. Any such exclusion should be made on the raw
 interview table before the design is built, not by operating on the design object
 after the fact. The correct workflow is:

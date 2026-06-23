@@ -270,6 +270,7 @@ Holiday windows that cross month boundaries are handled correctly. A Labor Day w
 ```{r}
 #| label: fig-schedule-plot
 #| fig-cap: "Sampled days for a seven-month creel season on a reservoir with weekday, weekend, and high-use strata. Each colored cell represents one sampled day. The three-stratum structure ensures that holiday use patterns are estimated separately from ordinary weekend use."
+#| fig-alt: "Calendar grid from April through October 2024 with colored cells marking sampled days. Weekday cells (blue), weekend cells (orange), and high-use holiday cells (a third color) are scattered across the months, showing roughly proportional coverage of each stratum."
 
 autoplot(sched_hu)
 ```

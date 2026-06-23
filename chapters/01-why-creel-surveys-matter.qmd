@@ -35,15 +35,17 @@ This chapter covers:
 
 This book is organized around the estimation workflow, not around individual concepts. Each chapter takes the output of the previous chapter as its input and produces output that feeds into the next. That structure mirrors what a practitioner actually does when working a real creel dataset from scratch.
 
-Chapters 2 and 3 lay the statistical foundation: Chapter 2 defines estimands formally, introduces notation, and describes the reporting domains that bound creel inference. Chapter 3 develops the design-based estimator, derives the variance formula, and works through the Harlan dataset from raw counts to a stratified effort estimate with a confidence interval. If you want the definitions first, start with @sec-estimands; if you want the sampling logic that turns field records into totals, go to @sec-inference.
+**Part I: Foundations** (Chapters 1–3 plus Quick Start) lays the statistical foundation. Chapter 2 defines estimands formally, introduces notation, and describes the reporting domains that bound creel inference. Chapter 3 develops the design-based estimator, derives the variance formula, and works through a stratified effort estimate end to end. If you want the definitions first, start with @sec-estimands; if you want the sampling logic, go to @sec-inference. The Quick Start chapter that closes Part I runs the entire estimation pipeline on Harlan data in a single session, front to back, before the formal treatment begins.
 
-Chapters 4 through 8 address the estimation pipeline: total catch, harvest, release, catch rate, and the handling of incomplete trips. These chapters introduce the core `tidycreel` estimation functions and demonstrate their application to the Harlan dataset. Each chapter includes a section on diagnostics — how to check whether the estimator's assumptions are met and what to do when they are not.
+**Part II: Survey Designs** covers the four field methods in common use — access-point, roving, aerial and camera-assisted, and stratified designs — and closes with pre-survey planning (sample size, power analysis, schedule generation using `creel_power()` and `generate_schedule()`) and a chapter on bias and failure modes. This part is where design decisions are made; the estimation chapters that follow assume those decisions are already locked.
 
-Chapters 9 through 12 cover biological data: length frequencies, weight estimation, age composition, and their integration with catch estimates to produce biological reference points. These chapters draw on the `estimate_length_distribution()` and related functions.
+**Part III: From Field to R** bridges the gap between field collection and analysis. One chapter covers instrument design, interview protocols, and schedule validation using `creel_schema()` and `validate_creel_schedule()`. The other introduces `tidycreel.connect`, the companion package for reading creel data from CSV, SQL Server, and REST API backends into the linked-table structure that the rest of the book assumes.
 
-Chapters 13 through 16 address design: power analysis for proposed surveys, stratification decisions, spatial designs for large reservoirs, and temporal allocation of sampling effort. These chapters use `creel_power()` and `generate_schedule()` to demonstrate prospective design evaluation before field work begins.
+**Part IV: Data Structures and Validation** (Chapters 9–11) covers the four-table data model, the `creel_design` object, and the cleaning steps — outlier flagging, species standardization, incomplete-trip review — that change estimates before analysis begins.
 
-Chapter 17 applies all methods to a real published dataset, closing the loop from synthetic teaching data to documented agency practice.
+**Part V: Estimation and Reporting** (Chapters 12–16 plus three specialty chapters) introduces the core `tidycreel` estimation functions: `estimate_effort()`, `estimate_total_harvest()`, `estimate_catch_rate()`, and their release and biological counterparts. Additional chapters cover length and biomass estimation, uncertainty diagnostics and power analysis, full-season reporting, and multi-year trend detection with `compare_designs()` and weighted linear regression.
+
+**Part VI: Case Studies** applies all methods to Cedar Lake, a roving creel survey on a warmwater reservoir, demonstrating the full pipeline from raw data to a management-ready report for a fishery that differs structurally from the Harlan access-point example used throughout the book.
 
 ## Recreational fisheries as partially observed systems {#sec-partial-obs}
 
@@ -212,7 +214,7 @@ How much precision is enough? There is no universal answer, but practical guidan
 
 The relevant question is not "how precise can we get?" but "how precise do we need to be to support the management decision at hand?" A harvest estimate used to trigger a regulation review does not need the same precision as one used to parameterize a stock assessment model. Writing down the precision requirement before designing the survey is the creel equivalent of a power analysis: it translates an abstract statistical goal into a concrete sample size.
 
-Chapter 6 develops the full power analysis framework using `creel_power()`, which accepts a hypothesized CV target and returns the number of sampled days needed to achieve it under a range of variance assumptions. Running this calculation before the first field day — not after — is the single most effective way to avoid underpowered surveys.
+The pre-survey planning chapter in Part II develops the full power analysis framework using `creel_power()`, which accepts a hypothesized CV target and returns the number of sampled days needed to achieve it under a range of variance assumptions. Running this calculation before the first field day — not after — is the single most effective way to avoid underpowered surveys.
 
 ### The role of auxiliary data
 
@@ -453,7 +455,7 @@ What does the distribution of effort look like across sampled days?
 
 ```{r}
 #| label: fig-effort-dist
-#| fig-cap: "Distribution of total boat-angler counts per sampled day at Harlan Reservoir, by day type. Each observation is the sum of boat anglers recorded across all count periods on a given day."
+#| fig-cap: "Distribution of total boat-angler counts per sampled day at Harlan Reservoir, by day type. Each observation is the sum of boat anglers recorded across all count periods on a given day. Weekend counts are shifted substantially higher than weekday counts, confirming the temporal heterogeneity that motivates day-type stratification."
 #| fig-alt: "Overlapping histograms showing weekend counts shifted higher than weekday counts."
 
 harlan_counts |>
@@ -492,7 +494,7 @@ How long do anglers fish? The trip duration distribution matters for estimation 
 
 ```{r}
 #| label: fig-trip-duration
-#| fig-cap: "Distribution of completed trip durations (hours fished) at Harlan Reservoir, by angler type. Only complete trips are shown; incomplete trips are excluded from this display."
+#| fig-cap: "Distribution of completed trip durations (hours fished) at Harlan Reservoir, by angler type. Only complete trips are shown; incomplete trips are excluded from this display. Boat anglers fish longer trips on average than bank anglers, with a heavier right tail reflecting the greater logistical investment required to launch a boat."
 #| fig-alt: "Overlapping density curves showing boat anglers have longer average trips than bank anglers."
 
 harlan_interviews |>
@@ -527,7 +529,7 @@ What species did anglers harvest, and in what proportions?
 
 ```{r}
 #| label: fig-species-harvest
-#| fig-cap: "Total harvested fish by species at Harlan Reservoir across the 2022 survey season. Species are ordered by total harvest."
+#| fig-cap: "Total harvested fish by species at Harlan Reservoir across the 2022 survey season, ordered by total harvest. White Bass and Walleye account for the largest share of angler harvest; this is raw interview-reported harvest, not a design-weighted estimate."
 #| fig-alt: "Horizontal bar chart showing harvested fish counts for 11 species, with White Bass and Walleye having the highest totals."
 
 harlan_catch |>

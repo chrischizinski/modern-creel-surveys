@@ -155,7 +155,7 @@ The output tibble has five columns: `estimate` is the ratio-of-means CPUE,
 
 The overall CPUE estimate is 1.51 fish per angler-hour (95% CI: [1.32, 1.69]).
 The standard error of 0.093 yields a CV of about 6.2%, which falls comfortably
-below the 15% precision threshold used in Chapter 15. The 390 completed-trip
+below the 15% precision threshold used in @sec-uncertainty-anatomy. The 390 completed-trip
 sample is adequate for a precise ratio estimate at the survey-wide level.
 
 This estimate is the average catch rate for all anglers in all strata combined.

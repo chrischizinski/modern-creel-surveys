@@ -285,7 +285,7 @@ effort_strata$estimates
 
 ```{r}
 #| label: fig-qs-effort
-#| fig-cap: "Seasonal angler-hour estimates with 95% confidence intervals at Harlan Reservoir, by day type. Error bars reflect between-day variability in angler counts scaled by the stratum expansion weight. The relative widths of the confidence intervals reflect both stratum sample size and day-to-day variability in counts."
+#| fig-cap: "Seasonal angler-hour estimates with 95% confidence intervals at Harlan Reservoir, by day type. Weekdays accumulate more total effort than weekends because there are roughly 2.5× more eligible weekday days in the season, even though per-day effort is similar across day types. Error bars reflect between-day variability in angler counts scaled by the stratum expansion weight."
 #| fig-alt: "Bar chart showing weekday and weekend estimated angler-hours with confidence interval error bars."
 
 effort_strata$estimates |>
@@ -407,7 +407,7 @@ The overall CPUE of `r round(cpue$estimates$estimate, 2)` fish per angler-hour a
 
 ```{r}
 #| label: fig-qs-harvest-type
-#| fig-cap: "Harvest per party by angler type at Harlan Reservoir (completed trips only). Points are individual party records, with median and interquartile range overlaid. Differences in harvest distributions between boat and bank anglers motivate domain-restricted estimates in Chapter 13. The overall harvest and CPUE estimates from this chapter pool both types; Chapter 13 disaggregates them."
+#| fig-cap: "Harvest per party by angler type at Harlan Reservoir (completed trips only). Boat anglers tend to harvest more fish per party than bank anglers, with a longer upper tail. Both distributions are strongly right-skewed with many zero-harvest parties. These differences motivate domain-restricted estimates in Chapter 13, which disaggregates the pooled estimates produced in this chapter."
 #| fig-alt: "Box plots showing harvest per party for bank and boat anglers, with boat anglers showing a wider spread at the upper end."
 
 harlan_interviews_prep |>

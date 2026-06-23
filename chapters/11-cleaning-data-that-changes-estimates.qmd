@@ -529,7 +529,7 @@ harlan_interviews |>
   mutate(pct = round(n / sum(n) * 100, 1))
 ```
 
-Most parties are 1–2 anglers (75.5%). Parties of 7–9 exist but are rare (0.8%
+Most parties are 1–2 anglers (75.5%). Parties of 7–9 exist but are rare (0.9%
 of interviews). At $k = 1.5$, `flag_outliers()` sets the fence at 2 anglers,
 flagging all parties of 3 or more — nearly half the dataset. This illustrates
 why $k$ must be calibrated to the variable's natural distribution: `n_anglers`

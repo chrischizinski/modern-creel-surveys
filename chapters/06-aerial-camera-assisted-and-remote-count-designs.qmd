@@ -274,7 +274,8 @@ the daily total.
 
 Remote count designs change how effort is estimated but leave the catch-rate
 pipeline unchanged. `estimate_catch_rate()` on an aerial design object behaves
-identically to Ch04 and Ch13:
+identically to a standard access-point design (Chapter 4) and the catch
+estimation pipeline in Chapter 13:
 
 ```{r}
 #| label: aerial-cpue

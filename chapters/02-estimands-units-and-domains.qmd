@@ -97,7 +97,7 @@ The five core estimands — effort, total catch, total harvest, total release, a
 
 **Party size distribution** describes the frequency distribution of the number of anglers per party. This is not usually a management target but is needed for converting party-level quantities to individual-level quantities correctly. If mean party size is used in a conversion, the conversion is biased when party size and fishing duration are correlated (as shown in @sec-units). Retaining the full distribution avoids this problem.
 
-**Length-class harvest** is harvest partitioned into length categories — often regulatory length classes such as "sublegal," "slot limit," and "trophy." This is derived by joining interview harvest counts to biological data (lengths measured from harvested fish brought to the ramp) and assigning each fish to a length class. Chapter 9 covers this estimand in full. It is particularly important in slot-limit regulations where harvest of fish within the slot is prohibited.
+**Length-class harvest** is harvest partitioned into length categories — often regulatory length classes such as "sublegal," "slot limit," and "trophy." This is derived by joining interview harvest counts to biological data (lengths measured from harvested fish brought to the ramp) and assigning each fish to a length class. The biological data chapter in Part V covers this estimand in full using `est_length_distribution()` and `est_compliance()`. It is particularly important in slot-limit regulations where harvest of fish within the slot is prohibited.
 
 **Angler-days** is total effort expressed as angler-days (complete eight- or ten-hour outings) rather than angler-hours. It is used mainly for access capacity planning and is computed from the same count-based effort framework with a different time unit. Because "angler-day" is an ambiguous unit (does it mean 8, 10, or 12 hours?), statements using it should always define the denominator.
 
@@ -229,7 +229,7 @@ The book-level rule is to state the narrowest domain you actually need before th
 
 ```{r}
 #| label: fig-catch-by-species-type
-#| fig-cap: "Total fish counted in interviews at Harlan Reservoir, by species and catch type. Species with substantial release numbers relative to harvest reflect catch-and-release behavior for that species in this fishery."
+#| fig-cap: "Total fish counted in interviews at Harlan Reservoir, by species and catch type. Walleye show the largest release counts relative to harvest, reflecting size-limit compliance and angler catch-and-release behavior for that species. These are raw interview totals, not design-weighted estimates."
 #| fig-alt: "Grouped horizontal bar chart with species on the y-axis and bars split by catch type (harvested vs. released)."
 
 harlan_catch |>

@@ -156,8 +156,8 @@ that case.
 
 ## Preparing catch data for estimation {#sec-catch-prep}
 
-The design construction in this chapter differs from Chapter 12 in one
-important respect. Chapter 12 passed a single harvest column to
+The design construction in this chapter differs from @sec-effort-prep in one
+important respect. That section passed a single harvest column to
 `add_interviews()` as the `catch` argument. Here, we need separate quantities
 for total catch and harvest. Released fish follow automatically from their
 difference.
@@ -208,7 +208,7 @@ feeds a different estimation function downstream.
 ## Building the design object {#sec-ch13-design}
 
 With three catch columns available, the design pipeline is identical to
-Chapter 12 except that we now pass both `catch` and `harvest` to
+@sec-effort-prep except that we now pass both `catch` and `harvest` to
 `add_interviews()`. The `harvest` argument tells `tidycreel` which column
 represents retained fish.
 
@@ -247,7 +247,7 @@ suppressMessages({
 harlan_design_ch13
 ```
 
-Count data preparation mirrors Chapter 12: shift lengths convert instantaneous
+Count data preparation mirrors @sec-effort-prep: shift lengths convert instantaneous
 angler counts to angler-hours, so effort and rates share the same time units.
 
 ## Harvest rates by day type {#sec-harvest-rate}
@@ -344,7 +344,7 @@ estimate_total_harvest(harlan_design_ch13, target = "stratum_total")
 ```
 
 On sampled days only, estimated harvest was 11,052 fish (95% CI: 8,092–14,012).
-Expanding to all days in the season yields 19,825 fish (95% CI: 14,643–25,006).
+Expanding to all days in the season yields 19,825 fish (95% CI: 14,649–25,000).
 The difference reflects the unsampled days: the creel did not cover every day
 on the calendar, but the expansion assumes those days had fishing activity at
 the same rate structure as sampled days. The sampled-days total describes what
@@ -395,7 +395,7 @@ Weekdays account for roughly four times more harvest than weekends in absolute
 terms (15,793 vs. 4,032 fish). Even though the per-hour harvest rate is higher
 on weekends, weekday effort at Harlan is substantially larger — enough to
 reverse the relationship between rate and total. This is the harvest analog of
-the effort result from Chapter 12: a higher rate does not guarantee a higher
+the effort result from @sec-effort-by-stratum: a higher rate does not guarantee a higher
 total when the two strata differ in total effort by a wide margin.
 
 ## Estimating total catch and release {#sec-catch-release}
@@ -484,7 +484,7 @@ species-specific quantity not estimated by the creel.
 
 The estimates above report totals across all species combined. Species-specific
 harvest estimates require species-level catch rates from
-`estimate_catch_rate(by = species)`, which Chapter 14 covers in detail.
+`estimate_catch_rate(by = species)`, which @sec-cpue-estimators covers in detail.
 For composition analysis — understanding which species anglers encounter and
 what fraction they retain — the raw catch table is the right tool. It records
 the actual species and catch type for every fish without expansion to the
@@ -552,7 +552,7 @@ ggplot(species_comp, aes(x = n_fish, y = species, fill = catch_type)) +
 The species composition in raw catch records describes which species anglers
 encounter and what they do with them. It does not, by itself, produce an
 expanded season total per species — that requires design-based species-level
-CPUE estimates applied to total effort, which Chapter 14 covers using
+CPUE estimates applied to total effort, which @sec-cpue-estimators covers using
 `estimate_catch_rate(by = species)`.
 
 ## What the creel can and cannot measure {#sec-ch13-limits}

@@ -382,7 +382,7 @@ tibble(
 
 The discrepancy between ROM (0.61 fish/hour) and MOR with truncation (0.29 fish/hour) is large — more than two-to-one. The gap has a structural explanation: ROM for incomplete trips gives disproportionate weight to high catch-rate observations in the denominator, while MOR averages individual rates and the truncation removes the most extreme observations. Neither estimate is "right" in an absolute sense; what matters is which estimator correctly targets the population quantity of interest given the incomplete-trip observation structure.
 
-For comparison, the access-point (completed trip) Walleye catch rate using ROM from Chapter 4 was approximately 0.91 fish/hour — higher than both incomplete-trip estimators. This gap is consistent with length-of-stay bias operating in the expected direction: shorter trips (which dominate the incomplete interview record) are less likely to represent the productive, fish-retaining trips that make up a larger share of completed-trip duration.
+For comparison, the completed-trip total Walleye CPUE (harvest + release) using ROM is approximately 0.91 fish/hour — higher than both incomplete-trip estimators. This is not the harvest-only rate from Chapter 4 (which was 0.082 fish/hour; Harlan Walleye are predominantly catch-and-release, with 1,699 fish released versus 200 harvested). The ordering — completed-trip total CPUE (0.91) > ROM-all incomplete (0.61) > MOR-trunc (0.29) — is consistent with length-of-stay bias: shorter trips dominate the incomplete interview record and are less likely to represent the productive, fish-retaining sessions that make up a larger share of completed-trip fishing time.
 
 ### The truncation decision
 
@@ -394,6 +394,7 @@ In practice, the analyst should examine the trip duration distribution before se
 #| label: fig-incomplete-duration
 #| echo: true
 #| fig-cap: "Distribution of elapsed trip durations for incomplete interviews at Harlan Reservoir, 2022. The vertical dashed line marks the 0.5-hour truncation threshold recommended by Hoenig et al. (1997). Trips to the left of this line are excluded from the mean-of-ratios catch rate calculation."
+#| fig-alt: "Right-skewed histogram of elapsed trip durations for 210 incomplete interviews, with many contacts under 1 hour. A vertical dashed line at 0.5 hours marks the truncation threshold; 58 trips fall below it."
 
 ggplot(walleye_incomplete, aes(x = hours_fished)) +
   geom_histogram(binwidth = 0.5, fill = creel_palette()["primary"], color = "white") +
@@ -610,4 +611,4 @@ Understanding these constraints is not an argument against roving surveys. It is
 
 Roving surveys extend creel sampling to fisheries that access-point designs cannot reach. The price of that flexibility is methodological discipline: effort must come from counts, catch rate must come from mid-trip interviews using the mean-of-ratios estimator, and trips shorter than 30 minutes should be excluded to keep variance manageable. The length-of-stay bias that is intrinsic to roving contact cannot be corrected from within the survey data, but its direction and approximate magnitude can be assessed by comparing mean elapsed interview time to the mean completed-trip duration from any completed-trip contacts available in the same program.
 
-At Harlan, the 210 incomplete interviews produced a Walleye MOR of approximately 0.29 fish/hour after truncation — a substantially lower figure than the ROM applied naively (0.61 fish/hour) or than the completed-trip ROM from access-point contacts (0.91 fish/hour). The gap between those three numbers summarizes the main risks of misapplying estimators: the wrong formula does not produce a warning, it just produces a number that looks plausible and is wrong.
+At Harlan, the 210 incomplete interviews produced a Walleye MOR of approximately 0.29 fish/hour after truncation — substantially lower than the ROM applied naively to all incomplete trips (0.61 fish/hour) and lower than the completed-trip total Walleye CPUE using ROM (0.91 fish/hour; harvest + release combined, not the harvest-only rate of 0.082 fish/hour reported in Chapter 4). The gap among those three numbers summarizes the main risks of misapplying estimators: the wrong formula does not produce a warning, it just produces a number that looks plausible and is wrong.

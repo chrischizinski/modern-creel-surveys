@@ -262,7 +262,7 @@ creel_n_cpue(
 
 Setting `rho = 0` is conservative: it over-estimates the required sample size
 because it ignores the variance-reducing effect of positive catch–effort covariance.
-The observed ρ = 0.35 reduces the 20%-CV interview requirement from 78 to 59. Using
+The observed ρ = 0.35 reduces the 20%-CV interview requirement from 80 to 59. Using
 the observed correlation is appropriate when pilot data are reliable; in the absence
 of pilot data, the conservative `rho = 0` default is the safer choice.
 
@@ -543,7 +543,7 @@ ggplot(power_grid, aes(
 ```
 
 Two contrasts stand out. First, for the low-variance fishery (CV = 0.80, dashed),
-80% power to detect a 30% change requires only about 90 interviews — a feasible
+80% power to detect a 30% change requires only about 120 interviews — a feasible
 season target. For Harlan (CV = `r round(cv_historical, 2)`, solid), the same
 target requires more than 1,200 interviews per season. Second, a 50% CPUE change
 is detectable with 80% power at approximately 450 interviews for Harlan — a large

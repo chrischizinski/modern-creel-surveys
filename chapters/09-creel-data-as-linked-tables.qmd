@@ -89,7 +89,7 @@ problem rather than a legitimate observation.
 
 Count rounds record the instantaneous number of anglers observed at each site
 during a sampled day. This is the raw observation that gets converted to an
-estimate of angler effort (Chapter 12). Each row is
+estimate of angler effort (@sec-effort-why). Each row is
 one count at one site at one moment in time.
 
 ```{r}
@@ -313,7 +313,7 @@ Of the `r nrow(harlan_interviews)` interviews,
 `r nrow(no_catch_interviews)` produced no catch records. The breakdown by
 `trip_status` shows that most of these are incomplete trips. Parties still fishing
 when intercepted often had not yet landed fish, so the absence of catch records is
-consistent with the data — not an error. Chapter 11 covers how to handle
+consistent with the data — not an error. @sec-trip-status covers how to handle
 incomplete-trip catch in the estimation step.
 
 ### Schedule versus counts

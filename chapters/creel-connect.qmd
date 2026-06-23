@@ -89,7 +89,7 @@ schema <- creel_schema(
 schema
 ```
 
-The schema prints as a readable mapping: each canonical name appears on the left with its agency counterpart on the right. Any slot left as `NULL` — such as `angler_type_col` here — means that field is not present in the agency data and will not be available for domain analysis (see Chapter 14 for the estimation consequences of missing fields).
+The schema prints as a readable mapping: each canonical name appears on the left with its agency counterpart on the right. Any slot left as `NULL` — such as `angler_type_col` here — means that field is not present in the agency data and will not be available for domain analysis (see @sec-constraints for the estimation consequences of missing fields).
 
 ```{r}
 #| label: tbl-schema-mapping
@@ -593,7 +593,7 @@ The validator returns a structured report, not a silent pass/fail. Each check is
 
 ## From connection to analysis {#sec-connection-to-analysis}
 
-The fetch functions return plain data frames with canonical `tidycreel` column names. These are the same objects that Chapters 9–11 use directly from `.rds` files. The only difference is origin: CSV files through a connection vs. pre-packaged R data objects.
+The fetch functions return plain data frames with canonical `tidycreel` column names. These are the same objects that @sec-linked-why, @sec-design-purpose, and @sec-cleaning-inference use directly from `.rds` files. The only difference is origin: CSV files through a connection vs. pre-packaged R data objects.
 
 ```{r}
 #| label: handoff
@@ -613,7 +613,7 @@ design <- add_interviews(
 )
 ```
 
-Chapters 9 and 10 walk through the complete construction of a `creel_design` object. Chapter 12 begins the estimation sequence. The connection layer described in this chapter is the upstream step that ensures all of those functions receive data in the shape they expect.
+@sec-linked-why and @sec-design-purpose walk through the complete construction of a `creel_design` object. @sec-effort-why begins the estimation sequence. The connection layer described in this chapter is the upstream step that ensures all of those functions receive data in the shape they expect.
 
 ## Takeaway {#sec-connect-takeaway}
 

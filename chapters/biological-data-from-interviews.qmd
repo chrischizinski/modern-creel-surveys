@@ -24,7 +24,7 @@ theme_creel <- function(base_size = 11) {
 }
 ```
 
-Chapters 12 through 14 estimated how many fish were caught, kept, and released. Those are count quantities — numbers that answer "how many?" But many management decisions require a different kind of question: "what size?" A walleye harvest total of 4,000 fish means something very different depending on whether those fish averaged 300 mm or 500 mm. A size-limit regulation can only be evaluated if the agency knows how many harvested fish were actually legal-sized. A population assessment comparing creel data to electrofishing samples requires both surveys to speak the same biological language.
+@sec-effort-why through @sec-cpue-estimators estimated how many fish were caught, kept, and released. Those are count quantities — numbers that answer "how many?" But many management decisions require a different kind of question: "what size?" A walleye harvest total of 4,000 fish means something very different depending on whether those fish averaged 300 mm or 500 mm. A size-limit regulation can only be evaluated if the agency knows how many harvested fish were actually legal-sized. A population assessment comparing creel data to electrofishing samples requires both surveys to speak the same biological language.
 
 Creel surveys have always produced biological data alongside catch and effort data. Interview clerks routinely measure harvested fish, record lengths of fish returned to the water, and sometimes collect scale or fin ray samples for aging. That information lives in a separate table — one row per fish measured, linked back to the interview by a common identifier — and it requires a distinct estimation workflow. This chapter covers that workflow from data preparation through design-weighted length-frequency estimation to regulatory compliance analysis.
 
@@ -69,7 +69,7 @@ The column names and mixed types in `length` (numeric for harvest, character for
 
 ## Building the design with length data {#sec-bio-design}
 
-The length table attaches to the creel design after `add_interviews()`. As in Chapter 13, the interview table must carry species-level catch summaries as separate columns before being passed to `add_interviews()`.
+The length table attaches to the creel design after `add_interviews()`. As in @sec-catch-prep, the interview table must carry species-level catch summaries as separate columns before being passed to `add_interviews()`.
 
 ```{r}
 #| label: bio-prep
@@ -129,7 +129,7 @@ lf_raw <- summarize_length_freq(design_bio, type = "harvest", by = species, bin_
 lf_raw
 ```
 
-@fig-length-freq-raw shows these distributions side by side. The three species have strikingly different shapes: White Bass form a compact, near-symmetric distribution around 265 mm; Walleye are spread broadly from 300 mm to 550 mm with a mode near 425 mm and a visible left tail below the 381-mm size limit; Channel Catfish span the widest range, 250–625 mm, reflecting the wide age and size structure typical of catfish populations.
+@fig-length-freq-raw shows these distributions side by side. The three species have strikingly different shapes: White Bass form a compact, near-symmetric distribution around 265 mm; Walleye are spread broadly from about 275 mm to 550 mm with a mode near 425 mm and a visible left tail below the 381-mm size limit; Channel Catfish span the widest range, 250–625 mm, reflecting the wide age and size structure typical of catfish populations.
 
 ```{r}
 #| label: fig-length-freq-raw
@@ -259,7 +259,7 @@ coverage
 
 Length records were collected from approximately `r round(mean(coverage$pct_with_lengths))`% of interviews in each stratum. Coverage that is roughly equal across strata — as it is here — means that subsampling is not systematically biasing the length distribution toward one day type. If weekday interviews had dramatically lower coverage than weekend interviews, the estimated distribution would lean toward the weekend fish composition, which could differ in size structure if fishing pressure and selectivity differ by day type.
 
-The subsample rate also has a direct effect on precision. More measured fish within an interview reduces within-interview variability in the length column; more interviews with any length records reduces between-interview variability. For a fixed field budget, measuring a few fish across more interviews is more efficient than measuring many fish in fewer interviews, because between-interview variance dominates total variance in stratified survey estimators — a pattern visible in the variance decomposition for effort in Chapter 15.
+The subsample rate also has a direct effect on precision. More measured fish within an interview reduces within-interview variability in the length column; more interviews with any length records reduces between-interview variability. For a fixed field budget, measuring a few fish across more interviews is more efficient than measuring many fish in fewer interviews, because between-interview variance dominates total variance in stratified survey estimators — a pattern visible in the variance decomposition for effort in @sec-uncertainty-anatomy.
 
 `est_length_distribution()` offers three variance estimation methods (set via the `variance` argument): `"taylor"` (default, delta-method), `"bootstrap"`, and `"jackknife"`. For small biological subsamples — fewer than twenty to thirty interviews with length records — the bootstrap or jackknife approaches often give more conservative and reliable uncertainty bounds than the delta-method approximation.
 
@@ -469,6 +469,6 @@ Biological data from creel interviews require a two-stage estimation approach: f
 
 At Harlan Reservoir, the design-weighted Walleye harvest compliance estimate was `r round(walleye_compliance$compliance_prop * 100, 1)`% (95% CI: `r round(walleye_compliance$compliance_ci_lower * 100, 1)`–`r round(walleye_compliance$compliance_ci_upper * 100, 1)`%). The complementary release distribution — concentrated below the size limit — confirms that anglers at Harlan were returning sublegal fish rather than harvesting them. Together, these two distributions provide the regulatory evidence base that effort and catch totals alone cannot supply.
 
-Chapter 15 covers precision diagnostics for effort and catch-rate estimates; the same CV-based framework applies to length distribution estimates, where the coefficient of variation on key bins (the sublegal fraction, the modal bin) is the natural precision target for planning biological subsampling intensity in future seasons.
+@sec-uncertainty-anatomy covers precision diagnostics for effort and catch-rate estimates; the same CV-based framework applies to length distribution estimates, where the coefficient of variation on key bins (the sublegal fraction, the modal bin) is the natural precision target for planning biological subsampling intensity in future seasons.
 
 The biological estimation workflow adds one step to the standard pipeline — `add_lengths()` after `add_interviews()` — and unlocks the full suite of biological summary functions. The complete sequence from linked tables to design-weighted compliance, mean length, and biomass requires no additional packages beyond `tidycreel` and `tidyverse`.

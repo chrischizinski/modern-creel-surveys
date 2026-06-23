@@ -208,10 +208,10 @@ $$\hat{E} = \sum_h \hat{E}_h$$
 
 For Harlan, the sampling calendar covers 211 days (April 2 to October 29, 2022),
 divided into weekday ($N_{\text{weekday}} = 150$) and weekend
-($N_{\text{weekend}} = 61$) strata. Of these, 82 weekday period-days and
-34 weekend period-days were sampled. Because Harlan runs two periods per day, the
-count data has 118 sampled period-day records (83 weekday + 35 weekend, combining
-both periods).
+($N_{\text{weekend}} = 61$) strata. Of these, 82 weekday days and
+34 weekend days were sampled. Each sampled day is assigned to one shift — either
+morning (period 1, 8 hours) or afternoon (period 2, 6 hours) — giving 118
+period-day records in the count data (83 weekday + 35 weekend).
 
 ```{r}
 #| label: stratum-sizes
@@ -227,7 +227,7 @@ harlan_schedule |>
   )
 ```
 
-Weekdays are sampled at a slightly higher rate than weekends (55% vs. 56%), but
+Weekdays are sampled at a slightly lower rate than weekends (55% vs. 56%), but
 the stratum sizes are very different: 150 weekday days vs. 61 weekend days. The
 weekend stratum is smaller in both total days and sampled days, which matters for
 precision — smaller strata with fewer sampled days produce wider confidence
@@ -377,7 +377,7 @@ harlan_design_effort <- creel_design(
   )
 ```
 
-The design holds the same survey structure built in Chapter 10 — calendar,
+The design holds the same survey structure built in @sec-design-purpose — calendar,
 strata, interviews, catch — but the `counts` slot now carries `angler_hours`
 as its single numeric count variable. This ensures all downstream effort
 estimates are in angler-hours rather than raw angler counts.
@@ -680,9 +680,9 @@ follows directly from the standard stratified sampling formula [@mccormick2013].
 **Not in scope for this chapter:**
 
 - Bus-route effort estimation — handled by `estimate_effort_br()`, covered in
-  Chapter 4 context but not demonstrated here
+  @sec-access-point but not demonstrated here
 - Aerial and camera-trap designs — handled by `estimate_effort_aerial()` and
-  `estimate_effort_camera()`, introduced in Chapter 6
+  `estimate_effort_camera()`, introduced in @sec-remote-why
 - Sample size planning — requires external calculation using variance estimates
   from this chapter as inputs; `tidycreel` does not currently provide an
   `optimal_n()` function (see `TIDYCREEL-WISHLIST.md`)
@@ -715,6 +715,6 @@ between-day component.
 The Harlan 2022 season estimate of approximately
 `r formatC(round(eff_season$estimates$estimate), big.mark=",")` angler-hours
 (95% CI `r formatC(round(eff_season$estimates$ci_lower), big.mark=",")`–`r formatC(round(eff_season$estimates$ci_upper), big.mark=",")`) is the
-number that Chapter 13 will use to scale harvest and catch totals. The
+number that @sec-catch-distinctions will use to scale harvest and catch totals. The
 downstream confidence intervals are wider because effort uncertainty
 multiplies through $\hat{E} \times \hat{R}$.

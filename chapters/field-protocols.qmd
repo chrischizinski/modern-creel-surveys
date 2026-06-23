@@ -109,7 +109,7 @@ harlan_interviews |>
   head(6)
 ```
 
-The separation between the interview table and the catch table is a deliberate design choice, not a database artifact. It mirrors the physical data collection workflow: the interview form captures party-level metadata, while the catch recording (species, count, fate) happens per-fish or per-species in a separate tally. Chapter 9 explains why premature flattening of this structure — joining catch into the interview row — causes problems for estimation.
+The separation between the interview table and the catch table is a deliberate design choice, not a database artifact. It mirrors the physical data collection workflow: the interview form captures party-level metadata, while the catch recording (species, count, fate) happens per-fish or per-species in a separate tally. @sec-linked-why explains why premature flattening of this structure — joining catch into the interview row — causes problems for estimation.
 
 ### Core fields
 
@@ -277,7 +277,7 @@ The Harlan survey is nearly all rod-and-reel throughout the season. One bow-fish
 
 ## Schedule compliance {#sec-schedule}
 
-Before moving from the field phase to the analysis phase, confirm that the sampling schedule was executed as planned. `validate_creel_schedule()` checks whether each scheduled sample day has at least one interview or count record.
+Before moving from the field phase to the analysis phase, confirm that the sampling schedule was executed as planned. `validate_creel_schedule()` validates the schedule's required columns and value types, then returns the schedule for inspection. The `sampled` column records which days were actually sampled.
 
 ```{r}
 #| label: schedule-check
@@ -290,7 +290,7 @@ Each row is one day in the season frame. The `sampled` column is `TRUE` when at 
 
 ```{r}
 #| label: fig-schedule-coverage
-#| fig-cap: "Harlan Reservoir 2022 sampling schedule coverage by month and day type. Green tiles are sampled days; grey tiles are unsampled days in the season frame. Coverage is consistent within both strata across the season — no systematic gaps in weekend or weekday sampling — confirming that the stratified design executed as planned (see Chapter 7)."
+#| fig-cap: "Harlan Reservoir 2022 sampling schedule coverage by month and day type. Green tiles are sampled days; grey tiles are unsampled days in the season frame. Coverage is consistent within both strata across the season — no systematic gaps in weekend or weekday sampling — confirming that the stratified design executed as planned (see @sec-realized)."
 #| fig-alt: "Tile chart showing 211 days in the season frame. Sampled days shown in green, unsampled days in grey, arranged by month and calendar week. Weekend and weekday days are labeled. The majority of days are sampled with some gaps."
 #| echo: true
 
@@ -371,13 +371,13 @@ summarize_refusals(refusal_design) |>
   theme_creel()
 ```
 
-The Harlan 2022 form did not record refusals, so this analysis uses `example_interviews`, which includes a `refused` column. If you plan to assess nonresponse bias — or to apply the `adjust_nonresponse()` correction from Chapter 8 — the refused flag must be on every form from day one of the survey season.
+The Harlan 2022 form did not record refusals, so this analysis uses `example_interviews`, which includes a `refused` column. If you plan to assess nonresponse bias — or to apply the `adjust_nonresponse()` correction from @sec-bias-nonresponse — the refused flag must be on every form from day one of the survey season.
 
 ## Standardization across crews {#sec-standardization}
 
 The same interview form used by different technicians can produce incompatible data if terminology is not standardized. Three fields are especially vulnerable:
 
-**Species names.** Technicians who record species verbally rather than using standard codes produce strings like `"Walleye"`, `"walleye"`, `"Wall Eye"`, and `"Yellow Pike"` for the same species. `standardize_species()` (Chapter 11) resolves these to AFS species codes automatically for most species, but the cleaning burden is proportional to the inconsistency introduced in the field. A laminated species reference card with standard codes — taped to the interview board — eliminates most of this variation at the source.
+**Species names.** Technicians who record species verbally rather than using standard codes produce strings like `"Walleye"`, `"walleye"`, `"Wall Eye"`, and `"Yellow Pike"` for the same species. `standardize_species()` (@sec-species-codes) resolves these to AFS species codes automatically for most species, but the cleaning burden is proportional to the inconsistency introduced in the field. A laminated species reference card with standard codes — taped to the interview board — eliminates most of this variation at the source.
 
 **Trip status values.** `"complete"`, `"Complete"`, `"COMPLETE"`, `"C"`, and `"done"` are all plausible entries for a completed trip in a text field. `tidycreel` expects `"complete"` and `"incomplete"`. Pre-defined dropdowns or checkboxes on digital forms prevent this; a fixed vocabulary in technician training prevents it on paper.
 
@@ -409,10 +409,10 @@ tibble::tribble(
 
 The constraint table is not a checklist of nice-to-have variables. It is a mapping between management questions and instrument requirements. If a regulation revision requires estimating the proportion of catch that is harvested vs. released — a post-season request that could not have been anticipated — and the form recorded only total catch, the analysis is impossible regardless of sample size.
 
-The variables that are hardest to add retroactively — `refused`, `species_sought`, `harvest` as a separate column — are also the ones most likely to be deprioritized in form design discussions because their value is not apparent until after data collection ends. Reviewing @tbl-constraints before finalizing the field form, and mapping each "You cannot compute" cell to a real management use case, makes the cost of omission concrete before it is irreversible. Chapter 8 covers the bias implications of several of these omissions in more detail, particularly nonresponse and avidity bias.
+The variables that are hardest to add retroactively — `refused`, `species_sought`, `harvest` as a separate column — are also the ones most likely to be deprioritized in form design discussions because their value is not apparent until after data collection ends. Reviewing @tbl-constraints before finalizing the field form, and mapping each "You cannot compute" cell to a real management use case, makes the cost of omission concrete before it is irreversible. @sec-bias-nonresponse and @sec-bias-avidity cover the bias implications of several of these omissions in more detail.
 
 ## Takeaway {#sec-field-protocols-takeaway}
 
 The interview and count forms are the first link in the estimation chain. In tidy survey analysis, every downstream function call — `estimate_total_harvest()`, `estimate_catch_rate(by = "angler_type")`, `adjust_nonresponse()` — depends on variables that either exist in the raw data or do not. There is no imputation for a field that was never recorded [@pollock1994].
 
-Reviewing `creel_schema()` before a survey season begins, and mapping every schema slot to a specific form question, reduces the risk of discovering a missing variable only after data collection ends. Chapter 9 shows how the resulting raw tables should be structured, and Chapter 10 shows how `creel_design()` binds them into an analysis-ready object. Before either of those steps, the data must come from somewhere — the subject of the next chapter.
+Reviewing `creel_schema()` before a survey season begins, and mapping every schema slot to a specific form question, reduces the risk of discovering a missing variable only after data collection ends. @sec-linked-why shows how the resulting raw tables should be structured, and @sec-design-purpose shows how `creel_design()` binds them into an analysis-ready object. Before either of those steps, the data must come from somewhere — the subject of the next chapter.
