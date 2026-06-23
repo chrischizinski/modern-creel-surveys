@@ -569,9 +569,10 @@ confirming that the changes in CPUE and harvest reflect population dynamics rath
 than shifts in angler behavior.
 
 From a workflow standpoint, this chapter connects three elements: the single-year
-pipeline from the access-point case study (@sec-harlan-takeaway; the 2022 estimates sit
-on the same trajectory as the monitoring series), the method introductions from @sec-trend-why through
-@sec-trend-design, and the management context that motivates the analysis. The
+pipeline from the access-point case study (@sec-harlan-takeaway), where the 2022
+estimates sit on the same trajectory as the monitoring series; the method
+introductions from @sec-trend-why through @sec-trend-design; and the management
+context that motivates the analysis. The
 distinction between a methods chapter and a case study chapter is emphasis: here
 the goal is to answer a specific management question — did the regulation work? —
 rather than to demonstrate how the methods operate.
