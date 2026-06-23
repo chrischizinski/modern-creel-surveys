@@ -570,12 +570,12 @@ months — create structural bias that the variance estimator cannot detect.
 **Are any strata under-replicated?** A stratum with two or three sampled days
 cannot support a reliable variance estimate. The `validate_design()` output
 identifies strata where the proposed $n$ fell short of the required minimum;
-`audit_strata()` (Chapter 10) flags strata present in the frame but absent
+`audit_strata()` (@sec-design-inspect) flags strata present in the frame but absent
 from the count data.
 
 **Are any estimates driven by a small number of records?** A single high-harvest
 day or an outlier interview can dominate a stratum mean. `flag_outliers()`
-(Chapter 11) identifies those records before estimation. Including a sensitivity
+(@sec-trip-duration) identifies those records before estimation. Including a sensitivity
 note — "the harvest estimate would change by X% if the three highest-count days
 were treated as anomalies" — is more informative than the interval alone when
 the estimate is leverage-heavy.

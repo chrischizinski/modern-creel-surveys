@@ -415,7 +415,7 @@ The Harlan data validate cleanly on this dimension: 318 of 600 total interviews 
 
 Recording errors at the field level — wrong species codes, transposed digits in angler counts, ambiguous trip status records — can introduce bias if they are not random. A pattern of systematic overrecording of fish counts (a clerk who rounds up, or who transcribes the number of fish in the cooler rather than the number reported by the angler) produces upward bias across the whole dataset.
 
-Chapter @sec-cleaning-inference covers the `flag_outliers()` and `standardize_species()` tools for detecting and correcting these errors. The cleaning and the bias assessment are linked: if `flag_outliers()` turns up a cluster of anomalously large catches all recorded by the same clerk on the same set of dates, that is an operational failure, not random variation.
+@sec-cleaning-inference covers the `flag_outliers()` and `standardize_species()` tools for detecting and correcting these errors. The cleaning and the bias assessment are linked: if `flag_outliers()` turns up a cluster of anomalously large catches all recorded by the same clerk on the same set of dates, that is an operational failure, not random variation.
 
 ### Species misidentification
 
@@ -444,7 +444,7 @@ These problems cannot be fixed by cleaning the data, choosing a better estimator
 
 Operational problems can sometimes be partially corrected in analysis — by removing anomalous records, imputing missing counts from similar dates, or weighting by response rate — but only if the problem is detected early enough. An operational problem discovered three months after the season ends, after field staff have moved on, is much harder to address than one caught in week two of the survey.
 
-The field log and the data QC pass are the primary detection tools for operational problems. Neither the validation report nor the outlier flags in Chapter @sec-cleaning-inference can catch a problem that was not recorded. A shift that was cancelled but recorded as completed, or a set of interviews collected by a clerk who only approached fishing parties, leaves no visible trace in the data.
+The field log and the data QC pass are the primary detection tools for operational problems. Neither the validation report nor the outlier flags in @sec-cleaning-inference can catch a problem that was not recorded. A shift that was cancelled but recorded as completed, or a set of interviews collected by a clerk who only approached fishing parties, leaves no visible trace in the data.
 
 ## What `tidycreel` can and cannot fix {#sec-bias-tidycreel}
 

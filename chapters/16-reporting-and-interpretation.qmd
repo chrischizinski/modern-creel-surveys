@@ -519,7 +519,7 @@ standard error on either side of the point estimate.
 
 If specific estimates consistently fall above the CV threshold across years,
 the appropriate response is to revisit the sampling design rather than to
-report the numbers without comment. Chapter 15 showed how `creel_power()` and
+report the numbers without comment. @sec-precision-samplesize and @sec-precision-power showed how `creel_power()` and
 `cv_from_n()` can guide sample size decisions toward a precision target. The
 precision profile here identifies which quantities need that investment.
 

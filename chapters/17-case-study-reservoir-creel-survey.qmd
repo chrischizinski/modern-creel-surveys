@@ -134,6 +134,7 @@ Sampling was weighted toward summer months when angler pressure is highest. Eigh
 ```{r}
 #| label: fig-cedar-season
 #| fig-cap: "Monthly sampling effort and mean instantaneous angler count at Cedar Lake, 2023. Left: number of sampled days per month by stratum. Right: mean total anglers per count by month. Zero-count days from adverse weather appear in both panels."
+#| fig-alt: "Two-panel bar chart. Left: stacked weekday/weekend sampled-day counts by month; peak in June–August. Right: mean anglers per count by month, peaking in August."
 #| fig-width: 8
 #| fig-height: 3.5
 
@@ -176,6 +177,7 @@ Bank anglers dominate the count record, with only modest month-to-month movement
 ```{r}
 #| label: fig-cedar-bankboat
 #| fig-cap: "Monthly angler composition at Cedar Lake, 2023, from instantaneous count records. Bank anglers (dark) dominate throughout the season; the boat fraction increases slightly in midsummer. Zero-count days from adverse weather reduce monthly totals without changing the proportion."
+#| fig-alt: "Stacked proportional bar chart. Bank anglers (green) fill the majority of each month's bar from April through October; the boat fraction (blue) is small and increases slightly in July–August."
 #| fig-width: 6.5
 #| fig-height: 3.2
 
@@ -301,6 +303,7 @@ eff_strat$estimates
 ```{r}
 #| label: fig-cedar-effort
 #| fig-cap: "Season-total effort estimates by day-type stratum, Cedar Lake 2023. Points are ratio-of-means estimates; bars are 95% confidence intervals."
+#| fig-alt: "Horizontal dot-and-CI plot with weekday and weekend rows. Both effort estimates are similar in magnitude with overlapping confidence intervals."
 #| fig-width: 5.5
 #| fig-height: 2.8
 
@@ -328,6 +331,7 @@ Cedar Lake targets three species with different management priorities: channel c
 ```{r}
 #| label: fig-cedar-species
 #| fig-cap: "Total fish recorded in Cedar Lake interviews by species and catch type. Bars show absolute counts from the interview catch table before expansion; proportions within species reflect true harvest and release fractions."
+#| fig-alt: "Horizontal stacked bar chart with three species rows. Bluegill has the most records split between harvested and released. Channel catfish bars are predominantly harvested. White crappie has the fewest records."
 #| fig-width: 6
 #| fig-height: 3.2
 
@@ -396,6 +400,7 @@ Bank and boat anglers differ in access, target species, and technique. Bank angl
 ```{r}
 #| label: fig-cedar-cpue-type
 #| fig-cap: "Catch per angler-hour by angler type at Cedar Lake, 2023. Points are mean-of-ratios estimates using all interviewed trips; bars are 95% confidence intervals. Boat stratum sample size is small (n < 50 contacts); variance estimate is less stable."
+#| fig-alt: "Horizontal dot-and-CI plot with bank and boat rows. A dashed vertical line marks the overall CPUE. Boat CI is wider than bank CI, reflecting the smaller boat sample."
 #| fig-width: 5.5
 #| fig-height: 2.8
 
@@ -440,6 +445,7 @@ cv_tbl
 ```{r}
 #| label: fig-cedar-precision
 #| fig-cap: "Coefficient of variation (%) for season-level estimates, Cedar Lake 2023. Dashed line at 20% is a common management-grade threshold for acceptable precision."
+#| fig-alt: "Horizontal bar chart showing CV for five estimates. Total catch has the highest CV; CPUE and effort have the lowest. A dashed vertical line marks the 20% management-grade threshold."
 #| fig-width: 6
 #| fig-height: 3.2
 
@@ -463,7 +469,7 @@ Quantities above 20% CV deserve a caveated interpretation. For Cedar Lake 2023, 
 
 ## Final report assembly
 
-All seven estimates are assembled into a single reporting tibble, formatted for a non-technical audience. The pattern mirrors Chapter 16: bind rows, add formatted strings, compute CV.
+All seven estimates are assembled into a single reporting tibble, formatted for a non-technical audience. The pattern mirrors @sec-report-assemble: bind rows, add formatted strings, compute CV.
 
 ```{r}
 #| label: cedar-report-assembly
