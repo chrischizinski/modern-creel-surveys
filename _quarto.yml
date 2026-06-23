@@ -49,6 +49,7 @@ book:
       chapters:
         - chapters/17-case-study-reservoir-creel-survey.qmd
         - chapters/18-case-study-harlan-reservoir.qmd
+        - chapters/19-case-study-multi-year-monitoring.qmd
     - part: Appendices
       chapters:
         - appendices/01-notation.qmd

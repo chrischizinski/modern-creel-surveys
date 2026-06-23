@@ -1,0 +1,601 @@
+---
+title: "Case Study: Harlan Reservoir Walleye Monitoring, 2018–2023"
+---
+
+```{r}
+#| label: setup-ch19
+#| include: false
+library(tidycreel)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(patchwork)
+library(here)
+
+harlan_annual <- readRDS(here("data/harlan_annual_estimates.rds"))
+
+reg_year <- 2021
+
+theme_creel <- function(base_size = 11) {
+  theme_minimal(base_size = base_size) +
+    theme(
+      panel.grid.minor = element_blank(),
+      axis.line        = element_line(colour = "grey70"),
+      axis.ticks       = element_line(colour = "grey70")
+    )
+}
+
+# Split by regulation period for contrast computations
+before <- harlan_annual |> dplyr::filter(regulation == "before")
+after  <- harlan_annual |> dplyr::filter(regulation == "after")
+
+# Precision-weighted mean and SE helper
+wt_mean <- function(est, se) {
+  w <- 1 / se^2
+  list(mean = sum(w * est) / sum(w), se = sqrt(1 / sum(w)))
+}
+
+# Before-after contrast helper
+ba_contrast <- function(b_est, b_se, a_est, a_se) {
+  b <- wt_mean(b_est, b_se)
+  a <- wt_mean(a_est, a_se)
+  delta <- a$mean - b$mean
+  se    <- sqrt(b$se^2 + a$se^2)
+  z     <- delta / se
+  p     <- 2 * pnorm(-abs(z))
+  list(before = b$mean, after = a$mean,
+       delta = delta, se = se, z = z, p = p)
+}
+
+cpue_con <- ba_contrast(before$cpue_est,    before$cpue_se,
+                        after$cpue_est,     after$cpue_se)
+harv_con <- ba_contrast(before$harvest_est, before$harvest_se,
+                        after$harvest_est,  after$harvest_se)
+```
+
+Chapter 18 traced a single season of Harlan Reservoir access-point creel data
+from raw field records to final estimates. The 2022 survey yielded roughly
+`r round(harlan_annual$effort_est[harlan_annual$year == 2022])` estimated
+angler-hours of fishing effort, a multi-species catch dominated by White Bass and
+Walleye, and a Walleye size-limit compliance rate of 74.1% at the 381 mm
+minimum. Those numbers describe one season well. What they cannot reveal is
+whether 2022 was a typical year or an outlier, whether Walleye catch rates have
+been changing over time, or whether the 2021 minimum size-limit increase has had
+a measurable effect on the fishery.
+
+This chapter addresses those questions using a six-year access-point monitoring
+series spanning 2018 through 2023. Rather than rebuilding individual survey
+pipelines for each year, this case study works directly from `harlan_annual_estimates.rds`,
+which contains annual point estimates and standard errors for three key metrics:
+total angling effort, Walleye catch rate (CPUE), and estimated Walleye harvest.
+The emphasis throughout is on answering a specific management question — did the
+2021 size-limit change produce the intended outcome? — rather than demonstrating
+estimation methods, which are covered in Chapters 12–14 and in the trend
+detection chapter.
+
+This chapter proceeds in four analytical steps. First, angling effort is examined
+to confirm that fishing participation did not change in response to the regulation.
+Second, Walleye CPUE and estimated harvest are plotted across the full monitoring
+series to identify the pattern of change. Third, a formal before-after statistical
+contrast (@sec-monitoring-contrast) quantifies whether the observed changes are
+distinguishable from sampling variability. Fourth, a piecewise linear trend model
+(@sec-monitoring-trend) separates the transition year's contraction from the
+subsequent recovery period. Throughout, precision diagnostics confirm that the
+annual survey designs are consistent enough to support cross-year comparison.
+
+## Monitoring program overview {#sec-monitoring-overview}
+
+The Nebraska Game and Parks Commission initiated systematic access-point creel
+monitoring at Harlan Reservoir in 2018, motivated by growing concern that Walleye
+harvest was outpacing recruitment in the reservoir's warm, productive waters. The
+survey design stratified sampling by day type (weekday versus weekend), covered
+the April–October open-water season, and used two sampling periods per day — a
+morning shift of eight hours and an afternoon shift of six hours. That design
+remained consistent across all six monitoring years, making the annual estimates
+directly comparable.
+
+In 2021, the commission raised the Walleye minimum size limit from 305 mm
+(12 inches) to 381 mm (15 inches), targeting a cohort of fish in the 305–380 mm
+range that had been heavily harvested under the previous regulation. The question
+driving this chapter is whether the monitoring series shows evidence that the
+change is working: stable angling effort (fishing activity not deterred), declining
+harvest (fewer fish removed), and eventually recovering CPUE (more catchable fish
+as protected cohorts grow).
+
+@tbl-annual-summary shows the full six-year series. Three patterns are
+immediately apparent: effort is relatively stable, CPUE declined from 2018 to
+2021 and then began recovering, and harvest fell sharply in the first
+post-regulation year and has remained below pre-regulation levels.
+
+```{r}
+#| label: tbl-annual-summary
+#| tbl-cap: "Six-year Harlan Reservoir Walleye monitoring summary (2018–2023). Estimates cover the April–October open-water season. CV = coefficient of variation (%). The 2021 minimum size-limit increase (305 mm to 381 mm) divides the series into pre- and post-regulation periods."
+harlan_annual |>
+  mutate(
+    cv_effort  = round(effort_se  / effort_est  * 100, 1),
+    cv_cpue    = round(cpue_se    / cpue_est    * 100, 1),
+    cv_harvest = round(harvest_se / harvest_est * 100, 1)
+  ) |>
+  mutate(across(c(effort_est, effort_se, harvest_est, harvest_se),
+                \(x) round(x, 1))) |>
+  mutate(across(c(cpue_est, cpue_se), \(x) round(x, 3))) |>
+  select(
+    Year       = year,
+    Period     = regulation,
+    `Effort`   = effort_est,
+    `Eff. SE`  = effort_se,
+    `Eff. CV`  = cv_effort,
+    `CPUE`     = cpue_est,
+    `CPUE SE`  = cpue_se,
+    `CPUE CV`  = cv_cpue,
+    `Harvest`  = harvest_est,
+    `Harv. SE` = harvest_se,
+    `Harv. CV` = cv_harvest
+  ) |>
+  knitr::kable()
+```
+
+## Was angling effort affected by the regulation? {#sec-monitoring-effort}
+
+A minimum size-limit increase that substantially reduces the number of legal-size
+fish available to harvest may reduce angler satisfaction and, over time, lead
+anglers to fish elsewhere. A sustained decline in angling effort following
+regulation would indicate that the policy changed behavior in ways beyond the
+intended harvest reduction. Conversely, stable or increasing effort provides
+evidence that anglers continue to value fishing at Harlan even if the harvest
+opportunity is more restricted.
+
+@fig-monitoring-effort shows estimated angling effort for each year from 2018 to
+2023, with 95% confidence intervals. The vertical dashed line marks the 2021
+regulation change.
+
+```{r}
+#| label: fig-monitoring-effort
+#| fig-cap: "Annual angling effort at Harlan Reservoir, 2018–2023, with 95% confidence intervals. Pre-regulation years (gray) and post-regulation years (blue) show overlapping ranges with no directional trend. Effort ranged from `r round(min(harlan_annual$effort_est))` to `r round(max(harlan_annual$effort_est))` angler-hours per season. The 2021 size-limit increase did not reduce angling participation at the reservoir."
+#| fig-alt: "Line chart of annual angling effort at Harlan Reservoir from 2018 to 2023. Gray points and connecting line represent pre-regulation years 2018 through 2020. Dark blue points and line represent post-regulation years 2021 through 2023. A vertical dashed line marks the 2021 regulation change. Shaded ribbons show 95 percent confidence intervals. Effort fluctuates between approximately 680 and 820 angler-hours per season with no clear upward or downward trend. Confidence intervals are wide and overlap substantially across all years."
+ggplot(harlan_annual, aes(
+    x      = year,
+    y      = effort_est,
+    colour = regulation,
+    fill   = regulation
+  )) +
+  geom_ribbon(aes(ymin = effort_lo, ymax = effort_hi), alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 3) +
+  geom_vline(xintercept = reg_year - 0.5, linetype = "dashed", colour = "grey50") +
+  annotate("text", x = reg_year - 0.6, y = max(harlan_annual$effort_hi) * 0.97,
+           label = "Size limit\nincreased", hjust = 1, size = 3.2, colour = "grey40") +
+  scale_colour_manual(values = c(before = "grey50", after = "#1B4F8A"),
+                      labels = c(before = "Pre-regulation (2018–2020)",
+                                 after  = "Post-regulation (2021–2023)")) +
+  scale_fill_manual(  values = c(before = "grey50", after = "#1B4F8A"),
+                      labels = c(before = "Pre-regulation (2018–2020)",
+                                 after  = "Post-regulation (2021–2023)")) +
+  scale_x_continuous(breaks = 2018:2023) +
+  labs(x = "Year", y = "Angling effort (angler-hours)",
+       colour = NULL, fill = NULL) +
+  theme_creel() +
+  theme(legend.position = "bottom")
+```
+
+Effort ranged from
+`r round(min(harlan_annual$effort_est))` angler-hours in
+`r harlan_annual$year[which.min(harlan_annual$effort_est)]` to
+`r round(max(harlan_annual$effort_est))` angler-hours in
+`r harlan_annual$year[which.max(harlan_annual$effort_est)]`.
+No directional trend is apparent before or after the regulation change, and
+the confidence intervals in each year overlap substantially with every adjacent
+year. The 2021 and 2022 post-regulation seasons in fact produced the two highest
+effort estimates in the series, though that difference is well within sampling
+uncertainty. The working conclusion is that angling participation at Harlan
+Reservoir was not affected by the size-limit change — a prerequisite for
+interpreting changes in CPUE and harvest as reflecting changes in the fish
+population rather than changes in fishing pressure.
+
+## Walleye catch rates across the monitoring period {#sec-monitoring-cpue}
+
+Catch rate — CPUE, expressed as fish per angler-hour — is the primary metric of
+Walleye abundance and vulnerability to angling. Under a minimum size-limit
+increase, CPUE is expected to follow a characteristic pattern: an initial decline
+in the transition year as fish that were previously legal size become sub-legal
+under the new minimum, followed by a recovery as those cohorts grow past the new
+threshold and become available again. The magnitude and timing of the recovery
+depend on growth rates, natural mortality, and recruitment — quantities that the
+creel survey itself cannot estimate but that the monitoring series can inform.
+
+@fig-monitoring-cpue shows annual Walleye CPUE with 95% confidence intervals.
+The pre-regulation years exhibit a declining trend, with CPUE falling from
+`r round(harlan_annual$cpue_est[harlan_annual$year == 2018], 3)` fish/hr in
+2018 to `r round(harlan_annual$cpue_est[harlan_annual$year == 2020], 3)` fish/hr
+in 2020. This decline predates the regulation change and suggests the fishery was
+already under sustained harvest pressure at the original 305 mm minimum — more
+fish were being removed annually than the population could replace.
+
+```{r}
+#| label: fig-monitoring-cpue
+#| fig-cap: "Annual Walleye CPUE at Harlan Reservoir, 2018–2023, with 95% confidence intervals. Pre-regulation CPUE (gray) declined from 0.302 fish/hr in 2018 to 0.197 fish/hr in 2020. Following the 2021 size-limit increase (dashed line), CPUE reached its six-year low in the transition year before recovering to 0.288 fish/hr by 2023 — approaching the 2018 starting value."
+#| fig-alt: "Line chart of annual Walleye CPUE at Harlan Reservoir from 2018 to 2023 with 95 percent confidence intervals shown as shaded ribbons. Gray points and line connect the pre-regulation years 2018, 2019, and 2020 with a downward slope. Dark blue points and line connect post-regulation years 2021, 2022, and 2023 with a V-shaped recovery: lowest in 2021 near 0.17 fish per angler-hour, then rising to 0.25 in 2022 and 0.29 in 2023. A vertical dashed line marks the 2021 regulation change."
+ggplot(harlan_annual, aes(
+    x      = year,
+    y      = cpue_est,
+    colour = regulation,
+    fill   = regulation
+  )) +
+  geom_ribbon(aes(ymin = cpue_lo, ymax = cpue_hi), alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 3) +
+  geom_vline(xintercept = reg_year - 0.5, linetype = "dashed", colour = "grey50") +
+  annotate("text", x = reg_year - 0.6, y = max(harlan_annual$cpue_hi) * 0.96,
+           label = "Size limit\nincreased", hjust = 1, size = 3.2, colour = "grey40") +
+  scale_colour_manual(values = c(before = "grey50", after = "#1B4F8A"),
+                      labels = c(before = "Pre-regulation (2018–2020)",
+                                 after  = "Post-regulation (2021–2023)")) +
+  scale_fill_manual(  values = c(before = "grey50", after = "#1B4F8A"),
+                      labels = c(before = "Pre-regulation (2018–2020)",
+                                 after  = "Post-regulation (2021–2023)")) +
+  scale_x_continuous(breaks = 2018:2023) +
+  labs(x = "Year", y = "CPUE (fish per angler-hour)",
+       colour = NULL, fill = NULL) +
+  theme_creel() +
+  theme(legend.position = "bottom")
+```
+
+The 2021 transition year produced the lowest CPUE in the series
+(`r round(harlan_annual$cpue_est[harlan_annual$year == 2021], 3)` fish/hr),
+consistent with the immediate contraction of the catchable pool following the
+size-limit increase. Fish in the 305–380 mm range — previously legal and thus
+catchable by harvest-oriented anglers — became catch-and-release only in 2021,
+effectively removing a cohort from the harvest-available fraction of the
+population without immediately replacing it. By 2022, CPUE had recovered to
+`r round(harlan_annual$cpue_est[harlan_annual$year == 2022], 3)` fish/hr, and
+by 2023 to
+`r round(harlan_annual$cpue_est[harlan_annual$year == 2023], 3)` fish/hr.
+The 2022 estimate from Chapter 18 — produced by the full single-year pipeline —
+falls directly on this trajectory, confirming that the 2022 access-point survey
+results are consistent with the broader monitoring trend.
+
+## Walleye harvest trends {#sec-monitoring-harvest}
+
+Where CPUE measures the catchable abundance visible to anglers, estimated harvest
+measures the actual number of fish removed from the population each season. For
+a size-limit regulation to produce a population-level benefit, harvest must
+decline. @fig-monitoring-harvest shows the six-year harvest trajectory.
+
+```{r}
+#| label: fig-monitoring-harvest
+#| fig-cap: "Annual estimated Walleye harvest at Harlan Reservoir, 2018–2023, with 95% confidence intervals. Harvest declined steadily from 124 fish in 2018 to 88 fish in 2020 under pre-regulation conditions, then dropped sharply to 62 fish in 2021 — the first year under the 381 mm minimum size limit. Harvest recovered partially to 82–84 fish per season in 2022–2023, remaining well below pre-regulation levels."
+#| fig-alt: "Line chart of estimated annual Walleye harvest at Harlan Reservoir from 2018 to 2023. Gray points and line show pre-regulation years 2018 through 2020 declining from 124 to 88 fish. Dark blue points and line show post-regulation years 2021 through 2023 with a low of 62 fish in 2021 and partial recovery to approximately 82 to 84 fish in 2022 and 2023. A vertical dashed line marks the 2021 regulation change. Confidence intervals are widest in 2018 and narrowest in 2021, reflecting lower variability when harvest is lower."
+ggplot(harlan_annual, aes(
+    x      = year,
+    y      = harvest_est,
+    colour = regulation,
+    fill   = regulation
+  )) +
+  geom_ribbon(aes(ymin = harvest_lo, ymax = harvest_hi), alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 3) +
+  geom_vline(xintercept = reg_year - 0.5, linetype = "dashed", colour = "grey50") +
+  annotate("text", x = reg_year - 0.6, y = max(harlan_annual$harvest_hi) * 0.97,
+           label = "Size limit\nincreased", hjust = 1, size = 3.2, colour = "grey40") +
+  scale_colour_manual(values = c(before = "grey50", after = "#1B4F8A"),
+                      labels = c(before = "Pre-regulation (2018–2020)",
+                                 after  = "Post-regulation (2021–2023)")) +
+  scale_fill_manual(  values = c(before = "grey50", after = "#1B4F8A"),
+                      labels = c(before = "Pre-regulation (2018–2020)",
+                                 after  = "Post-regulation (2021–2023)")) +
+  scale_x_continuous(breaks = 2018:2023) +
+  labs(x = "Year", y = "Estimated harvest (fish)",
+       colour = NULL, fill = NULL) +
+  theme_creel() +
+  theme(legend.position = "bottom")
+```
+
+Estimated harvest fell from
+`r round(harlan_annual$harvest_est[harlan_annual$year == 2018])` fish in 2018
+— the monitoring period's peak — to
+`r round(harlan_annual$harvest_est[harlan_annual$year == 2021])` fish in 2021,
+a reduction of
+`r round((1 - harlan_annual$harvest_est[harlan_annual$year == 2021] / harlan_annual$harvest_est[harlan_annual$year == 2018]) * 100)`%
+from the pre-regulation high. Harvest had already been declining modestly in 2019
+and 2020 — consistent with the CPUE decline in those years suggesting a
+population under pressure — and the regulation accelerated that reduction sharply.
+Post-regulation harvests of
+`r round(harlan_annual$harvest_est[harlan_annual$year == 2022])` and
+`r round(harlan_annual$harvest_est[harlan_annual$year == 2023])` fish in 2022
+and 2023, respectively, represent a partial recovery from the 2021 low but remain
+`r round((1 - mean(after$harvest_est) / mean(before$harvest_est)) * 100)`% below
+the pre-regulation weighted mean. Fish that previously would have been retained at
+305–380 mm are now being released, keeping more individuals in the population to
+grow toward the 381 mm minimum and eventually beyond.
+
+## Before-after statistical contrast {#sec-monitoring-contrast}
+
+Visual inspection of the time series is useful for identifying patterns, but it
+cannot distinguish a real change from sampling noise. The before-after statistical
+contrast described in @sec-trend-ba addresses this by computing
+precision-weighted means for each period and testing whether the difference
+between periods is significantly different from zero. Years with tighter
+confidence intervals receive more weight in the period mean than years with wider
+intervals.
+
+For each metric, the weighted mean is
+
+$$\bar{y}_w = \frac{\sum_t w_t \hat{y}_t}{\sum_t w_t}, \quad w_t = \frac{1}{\widehat{\text{SE}}(\hat{y}_t)^2}$$
+
+with period standard error $\text{SE}(\bar{y}_w) = 1 / \sqrt{\sum_t w_t}$.
+Because the two periods are based on independent samples, the standard error of
+the difference is $\text{SE}(\hat{\delta}) = \sqrt{\text{SE}_\text{before}^2 + \text{SE}_\text{after}^2}$,
+and a z-test follows directly.
+
+```{r}
+#| label: tbl-contrast
+#| tbl-cap: "Before-after statistical contrast for Walleye CPUE and estimated harvest at Harlan Reservoir. Precision-weighted means are computed for the pre-regulation period (2018–2020) and post-regulation period (2021–2023). The z-statistic and two-sided p-value test whether the difference between periods is distinguishable from zero. Both metrics changed significantly."
+tibble(
+  Metric = c("CPUE (fish/hr)", "Harvest (fish)"),
+  Before = c(round(cpue_con$before, 3), round(harv_con$before, 1)),
+  After  = c(round(cpue_con$after,  3), round(harv_con$after,  1)),
+  Change = c(round(cpue_con$delta,  3), round(harv_con$delta,  1)),
+  SE     = c(round(cpue_con$se,     3), round(harv_con$se,     1)),
+  z      = c(round(cpue_con$z,      2), round(harv_con$z,      2)),
+  p      = c(round(cpue_con$p,      4), round(harv_con$p,      4))
+) |>
+  knitr::kable()
+```
+
+The precision-weighted mean CPUE was
+`r round(cpue_con$before, 3)` fish/hr in the pre-regulation period and
+`r round(cpue_con$after, 3)` fish/hr post-regulation
+(z = `r round(cpue_con$z, 2)`, p = `r round(cpue_con$p, 4)`).
+The precision-weighted mean harvest was
+`r round(harv_con$before, 1)` fish pre-regulation and
+`r round(harv_con$after, 1)` fish post-regulation
+(z = `r round(harv_con$z, 2)`, p = `r round(harv_con$p, 4)`).
+Both differences are statistically significant.
+
+The direction of the CPUE change — negative — may appear to contradict a
+regulation intended to increase Walleye abundance. However, this contrast
+includes the 2021 transition year, when the catchable pool contracted immediately
+as previously legal fish became sub-legal under the new minimum. The
+before-after contrast is the correct tool for answering "did anything change?"
+but a piecewise trend model (see @sec-monitoring-trend) is better suited to
+separating the transition year's contraction from the subsequent recovery.
+
+## Monitoring program precision: is the design stable? {#sec-monitoring-precision}
+
+Cross-year comparisons are only valid if the survey designs in each year are
+sufficiently consistent to produce comparable estimates. A year with anomalously
+low sampling coverage or high within-stratum variance will produce wide confidence
+intervals, which the precision-weighted analysis will down-weight — but it is
+still important to verify that no single year is so different in design quality
+that comparisons are compromised.
+
+The coefficient of variation (CV) for each metric summarizes annual design
+precision in a scale-independent way. A stable CV across years indicates that
+sampling quality was consistent; a large CV in one year flags that year as a
+potential outlier worth investigating.
+
+```{r}
+#| label: cv-compute
+cv_long <- harlan_annual |>
+  mutate(
+    Effort  = effort_se  / effort_est  * 100,
+    CPUE    = cpue_se    / cpue_est    * 100,
+    Harvest = harvest_se / harvest_est * 100
+  ) |>
+  select(year, regulation, Effort, CPUE, Harvest) |>
+  pivot_longer(cols = c(Effort, CPUE, Harvest),
+               names_to = "Metric", values_to = "cv") |>
+  mutate(Metric = factor(Metric, levels = c("Effort", "CPUE", "Harvest")))
+```
+
+```{r}
+#| label: fig-monitoring-cv
+#| fig-cap: "Annual coefficient of variation (CV, %) for effort, CPUE, and harvest at Harlan Reservoir, 2018–2023. All three metrics remain below the 20% precision guideline in every year, indicating consistent design quality across the monitoring period. Harvest carries the highest CV because it compounds variance from both the effort estimate and the per-trip harvest rate."
+#| fig-alt: "Faceted line chart with one panel each for Effort, CPUE, and Harvest. Each panel shows CV in percent from 2018 to 2023. All three metrics maintain CVs below 20 percent across all six years. CPUE has the lowest CVs near 6 to 7 percent. Effort CVs range from approximately 12 to 14 percent. Harvest CVs range from approximately 13 to 15 percent. No single year shows a notably elevated CV relative to adjacent years, indicating consistent design quality throughout."
+ggplot(cv_long, aes(x = year, y = cv, colour = Metric, group = Metric)) +
+  geom_hline(yintercept = 20, linetype = "dashed", colour = "grey60", linewidth = 0.5) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.5) +
+  annotate("text", x = 2018.1, y = 21.2, label = "20% guideline",
+           hjust = 0, size = 3, colour = "grey50") +
+  scale_x_continuous(breaks = 2018:2023) +
+  scale_colour_manual(
+    values = c(Effort = "#5B8DB8", CPUE = "#1B4F8A", Harvest = "#8B3A3A")
+  ) +
+  facet_wrap(~Metric, ncol = 1, scales = "free_y") +
+  labs(x = "Year", y = "CV (%)") +
+  theme_creel() +
+  theme(legend.position = "none")
+```
+
+All three metrics maintained CVs below 20% in every year of the monitoring
+period — the conventional upper threshold for management-grade estimates.
+CPUE CVs were the lowest of the three
+(`r round(min(cv_long$cv[cv_long$Metric == "CPUE"]), 1)` to
+`r round(max(cv_long$cv[cv_long$Metric == "CPUE"]), 1)`%),
+reflecting the ratio estimator's efficiency when catch rates are relatively
+stable within strata. Effort CVs ranged from
+`r round(min(cv_long$cv[cv_long$Metric == "Effort"]), 1)` to
+`r round(max(cv_long$cv[cv_long$Metric == "Effort"]), 1)`%,
+and harvest CVs — the highest of the three — ranged from
+`r round(min(cv_long$cv[cv_long$Metric == "Harvest"]), 1)` to
+`r round(max(cv_long$cv[cv_long$Metric == "Harvest"]), 1)`%.
+The absence of any outlier year confirms that the precision-weighted comparisons
+in this chapter are supported by consistently reliable design quality.
+
+## Piecewise trend: separating transition from recovery {#sec-monitoring-trend}
+
+The before-after contrast established that CPUE and harvest both changed
+significantly across the 2021 regulation. What it cannot show is whether the
+post-regulation period represents sustained decline or, as hypothesized, an
+initial transition dip followed by recovery. A piecewise weighted linear model —
+fitting separate slopes for the pre- and post-regulation periods — addresses this
+directly. The method is covered in @sec-trend-piecewise; here it is applied to
+CPUE to characterize the direction of change within each period.
+
+```{r}
+#| label: piecewise-model
+fit_pw <- lm(
+  cpue_est ~ year * regulation,
+  weights  = 1 / cpue_se^2,
+  data     = harlan_annual
+)
+
+coefs        <- coef(fit_pw)
+slope_before <- coefs["year"]
+slope_after  <- coefs["year"] + coefs["year:regulationafter"]
+```
+
+```{r}
+#| label: piecewise-predictions
+pred_before <- data.frame(
+  year       = 2018:2020,
+  regulation = factor("before", levels = c("before", "after"))
+)
+pred_after <- data.frame(
+  year       = 2021:2023,
+  regulation = factor("after", levels = c("before", "after"))
+)
+pred_before$cpue_pred <- predict(fit_pw, newdata = pred_before)
+pred_after$cpue_pred  <- predict(fit_pw, newdata = pred_after)
+pred_all <- bind_rows(pred_before, pred_after)
+```
+
+```{r}
+#| label: fig-monitoring-piecewise
+#| fig-cap: "Piecewise weighted linear trend in Walleye CPUE at Harlan Reservoir, with separate slopes fitted for pre-regulation (gray) and post-regulation (blue) periods. The pre-regulation slope is `r round(slope_before, 4)` fish/hr/yr (declining), consistent with sustained overharvest under the 305 mm minimum. The post-regulation slope is `r round(slope_after, 4)` fish/hr/yr (recovering), indicating a directional reversal following the 2021 size-limit increase."
+#| fig-alt: "Scatter plot of annual Walleye CPUE at Harlan Reservoir from 2018 to 2023. Vertical error bars show 95 percent confidence intervals for each annual estimate. A gray declining line is fitted through the pre-regulation points 2018, 2019, and 2020. A dark blue recovering line is fitted through the post-regulation points 2021, 2022, and 2023. The two lines meet near 2021 at the lowest observed CPUE value of approximately 0.17 fish per angler-hour and the post-regulation line slopes upward to the right. A vertical dashed line marks the 2021 regulation change."
+ggplot(harlan_annual, aes(x = year, y = cpue_est)) +
+  geom_vline(xintercept = reg_year - 0.5, linetype = "dashed", colour = "grey50") +
+  geom_errorbar(aes(ymin = cpue_lo, ymax = cpue_hi),
+                width = 0.15, colour = "grey60") +
+  geom_point(aes(colour = regulation), size = 3) +
+  geom_line(data = pred_all,
+            aes(y = cpue_pred, colour = regulation),
+            linewidth = 1) +
+  annotate("text", x = reg_year - 0.6, y = max(harlan_annual$cpue_hi) * 0.97,
+           label = "Size limit\nincreased", hjust = 1, size = 3.2, colour = "grey40") +
+  scale_colour_manual(values = c(before = "grey50", after = "#1B4F8A"),
+                      labels = c(before = "Pre-regulation (2018–2020)",
+                                 after  = "Post-regulation (2021–2023)")) +
+  scale_x_continuous(breaks = 2018:2023) +
+  labs(x = "Year", y = "CPUE (fish per angler-hour)",
+       colour = NULL) +
+  theme_creel() +
+  theme(legend.position = "bottom")
+```
+
+The pre-regulation slope is
+`r round(slope_before, 4)` fish/hr/yr — a declining trend of approximately
+`r abs(round(slope_before * 100, 1))` fish per hundred angler-hours per year
+under the 305 mm minimum. The post-regulation slope is
+`r round(slope_after, 4)` fish/hr/yr — a recovering trajectory of approximately
+`r abs(round(slope_after * 100, 1))` fish per hundred angler-hours per year.
+The sign reversal — from negative to positive — is the key qualitative finding.
+CPUE was declining under the previous size limit and has been recovering since
+the change. Whether either individual slope is statistically distinguishable from
+zero is less important than their directional consistency with the biological
+hypothesis: protected cohorts accumulating in the 305–380 mm range are growing
+toward the 381 mm minimum and beginning to appear in completed-trip interviews as
+legal catches.
+
+It is worth noting the limits of three-year slopes. With only three data points
+per period, the piecewise model cannot reliably estimate nonlinear patterns within
+each period, and the interaction test for different slopes has low statistical
+power. The slopes here should be interpreted as summaries of direction, not
+precise rates of change. Extending the monitoring series through 2024 and 2025
+will substantially improve the power to detect whether the post-regulation
+recovery trajectory is sustained or whether it plateaus.
+
+## Management interpretation {#sec-monitoring-interpretation}
+
+The six-year monitoring record supports three findings, each with a direct
+management implication.
+
+**Angling effort is stable.** Effort estimates fluctuated around
+`r round(mean(harlan_annual$effort_est))` angler-hours per season with no
+directional trend before or after the 2021 regulation. This matters because it
+rules out the most common alternative explanation for changes in CPUE and harvest:
+that anglers shifted their behavior in response to the rule change. The same
+amount of fishing is occurring; what changed is the fish population and the
+composition of the catch.
+
+**Harvest decreased substantially and has remained lower post-regulation.**
+Estimated harvest fell roughly
+`r round((1 - mean(after$harvest_est) / mean(before$harvest_est)) * 100)`%
+from the pre-regulation weighted mean
+(`r round(harv_con$before, 1)` fish) to the post-regulation weighted mean
+(`r round(harv_con$after, 1)` fish). This reduction is statistically significant
+and biologically meaningful. Fish that were previously retained at 305–380 mm are
+now being released under the new minimum, contributing to the protected cohort
+growing toward 381 mm. The partial harvest recovery in 2022–2023 is consistent
+with some of those larger fish becoming legal as they grow past the 381 mm
+threshold.
+
+**CPUE declined in the transition year but has been recovering.** The piecewise
+model shows a positive post-regulation slope, and by 2023 CPUE had returned to
+`r round(harlan_annual$cpue_est[harlan_annual$year == 2023], 3)` fish/hr —
+close to the 2018 starting value of
+`r round(harlan_annual$cpue_est[harlan_annual$year == 2018], 3)` fish/hr before
+the decline began. The before-after contrast shows a statistically significant
+reduction in the weighted mean CPUE across periods, driven largely by the 2021
+transition year. Whether the recovery observed in 2022–2023 will continue to
+improve and eventually exceed pre-decline levels will depend on the year-class
+strength of fish now in the 305–380 mm range, which cannot be estimated from
+catch rates alone.
+
+The monitoring program's immediate recommendation is to continue the survey at
+the current design and precision for at least two additional years. The current
+design achieves CPUE CVs of approximately 6–7% and harvest CVs of 13–15%.
+At those precision levels, the survey can detect changes of roughly 20–30% in
+CPUE between adjacent years at 80% power. A continued recovery of 10–15% per year
+will not be distinguishable in any single year comparison but will be clearly
+visible in the accumulated series by 2025. Changing the survey design now would
+break the comparability that makes the before-after contrast valid.
+
+## Takeaway {#sec-monitoring-takeaway}
+
+This case study illustrates the monitoring application of creel surveys: using a
+consistent access-point design across multiple years to generate annually
+comparable estimates, then applying formal statistical methods to evaluate whether
+a management action has produced its intended outcome.
+
+At Harlan Reservoir, six years of systematic monitoring show that a Walleye
+minimum size-limit increase in 2021 coincided with a statistically significant
+decline in estimated harvest, a temporary contraction of CPUE in the transition
+year, and a subsequent CPUE recovery trajectory consistent with the protected
+cohort growing toward the new minimum. Angling effort remained stable throughout,
+confirming that the changes in CPUE and harvest reflect population dynamics rather
+than shifts in angler behavior.
+
+From a workflow standpoint, this chapter connects three elements: the single-year
+pipeline from Chapter 18 (the 2022 estimates sit on the same trajectory as the
+monitoring series), the method introductions from @sec-trend-why through
+@sec-trend-design, and the management context that motivates the analysis. The
+distinction between a methods chapter and a case study chapter is emphasis: here
+the goal is to answer a specific management question — did the regulation work? —
+rather than to demonstrate how the methods operate.
+
+Key workflow steps for a multi-year monitoring case study:
+
+- Load pre-computed annual estimates rather than re-running individual year
+  pipelines for every analysis
+- Inspect the full time series visually before fitting any statistical models —
+  the plots in this chapter would have flagged a data problem in any single year
+- Confirm that design precision is consistent across years before comparing
+  estimates; a year with an outlying CV should be investigated before being
+  included in a weighted contrast
+- Apply a precision-weighted before-after contrast rather than an unweighted
+  t-test; years with tight confidence intervals carry more information and should
+  contribute more to the period mean
+- Use a piecewise model to separate the regulation transition year from the
+  subsequent recovery; a single pre-versus-post contrast cannot distinguish these
+  two phases
+- Report all three metrics — effort, CPUE, and harvest — together; no single
+  metric tells the full story of a fishery's response to regulation
+- Maintain the same survey design across years; changing stratification,
+  shift structure, or sampling intensity resets the comparability baseline and
+  undermines the monitoring program's core value
+- Communicate the uncertainty alongside every point estimate to managers;
+  a change that "looks big" in a bar chart may not be statistically detectable,
+  and a monitoring program is only useful if decision-makers trust its precision
