@@ -44,6 +44,7 @@ book:
         - chapters/biological-data-from-interviews.qmd
         - chapters/15-uncertainty-diagnostics-and-precision.qmd
         - chapters/16-reporting-and-interpretation.qmd
+        - chapters/visualization-guide.qmd
         - chapters/trend-detection-and-multi-year-comparisons.qmd
     - part: Case Studies
       chapters:

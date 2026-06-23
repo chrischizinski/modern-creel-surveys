@@ -1,0 +1,516 @@
+---
+title: "Visualization Reference for Creel Survey Estimates"
+---
+
+```{r}
+#| label: setup-viz
+#| include: false
+library(tidycreel)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(forcats)
+library(lubridate)
+library(patchwork)
+library(here)
+
+# ── Load Harlan Reservoir data ────────────────────────────────────────────────
+harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
+harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
+harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
+harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
+harlan_annual     <- readRDS(here("data/harlan_annual_estimates.rds"))
+
+shift_hours <- c("1" = 8L, "2" = 6L)
+
+harlan_counts_effort <- harlan_counts |>
+  mutate(
+    period       = as.character(period),
+    angler_hours = (boat_anglers + bank_anglers) * shift_hours[period]
+  ) |>
+  select(reservoir, date, day_type, period, section, count_time, angler_hours)
+
+harvest_by_int <- harlan_catch |>
+  filter(catch_type == "harvested") |>
+  group_by(interview_id) |>
+  summarise(total_harvest = sum(n_fish), .groups = "drop")
+
+release_by_int <- harlan_catch |>
+  filter(catch_type == "released") |>
+  group_by(interview_id) |>
+  summarise(total_released = sum(n_fish), .groups = "drop")
+
+harlan_int2 <- harlan_interviews |>
+  mutate(period = as.character(period)) |>
+  left_join(harvest_by_int, by = "interview_id") |>
+  left_join(release_by_int, by = "interview_id") |>
+  mutate(
+    total_harvest  = if_else(is.na(total_harvest),  0L, as.integer(total_harvest)),
+    total_released = if_else(is.na(total_released), 0L, as.integer(total_released)),
+    total_catch    = total_harvest + total_released
+  )
+
+suppressMessages({
+  harlan_design <- creel_design(
+    calendar = harlan_schedule,
+    date     = "date",
+    strata   = "day_type"
+  ) |>
+    add_counts(harlan_counts_effort, count_time_col = "count_time") |>
+    add_interviews(
+      interviews    = harlan_int2,
+      catch         = "total_catch",
+      harvest       = "total_harvest",
+      effort        = "hours_fished",
+      trip_duration = "hours_fished",
+      trip_status   = "trip_status",
+      angler_type   = "angler_type"
+    ) |>
+    add_catch(
+      data          = harlan_catch,
+      catch_uid     = "interview_id",
+      interview_uid = "interview_id",
+      species       = "species",
+      count         = "n_fish",
+      catch_type    = "catch_type"
+    )
+})
+
+# ── Run all estimates ─────────────────────────────────────────────────────────
+effort_overall    <- estimate_effort(harlan_design)$estimates
+effort_by_stratum <- estimate_effort(harlan_design, by = "day_type")$estimates
+effort_by_month <- harlan_counts_effort |>
+  mutate(month = month(date, label = TRUE, abbr = FALSE)) |>
+  group_by(month) |>
+  summarise(mean_ah = mean(angler_hours),
+            se      = sd(angler_hours) / sqrt(n()),
+            lower   = mean_ah - 1.96 * se,
+            upper   = mean_ah + 1.96 * se,
+            .groups = "drop")
+
+harvest_overall    <- estimate_total_harvest(harlan_design)$estimates
+harvest_by_stratum <- estimate_total_harvest(harlan_design, by = "day_type")$estimates
+
+catch_overall    <- estimate_total_catch(harlan_design)$estimates
+release_overall  <- estimate_total_release(harlan_design)$estimates
+
+cpue_overall     <- estimate_catch_rate(harlan_design)$estimates
+cpue_by_daytype  <- estimate_catch_rate(harlan_design, by = "day_type")$estimates
+cpue_by_angler   <- estimate_catch_rate(harlan_design, by = "angler_type")$estimates
+
+hpue_overall     <- estimate_harvest_rate(harlan_design)$estimates
+rpue_overall     <- estimate_release_rate(harlan_design)$estimates
+
+# ── Species CPUE ─────────────────────────────────────────────────────────────
+species_cpue <- suppressMessages(
+  estimate_catch_rate(harlan_design, by = species)$estimates
+)
+
+# ── Shared theme ──────────────────────────────────────────────────────────────
+theme_creel <- function(base_size = 11) {
+  theme_minimal(base_size = base_size) +
+    theme(
+      panel.grid.minor = element_blank(),
+      axis.line        = element_line(colour = "grey70"),
+      axis.ticks       = element_line(colour = "grey70")
+    )
+}
+```
+
+Estimation chapters (12–16) introduce each plot type in the context of a specific
+estimator. This chapter collects the key visualization patterns in one place as a
+reference for analysts building reports or adapting code for a new survey.
+Every plot uses the 2022 Harlan Reservoir data; the same patterns apply to any
+survey run through `creel_design()`.
+
+The chapter is organized by visual goal rather than by function. Each section
+shows the core `ggplot2` code with real estimates, notes when to use each plot
+type, and identifies where the underlying estimator is introduced. Cross-references
+point to the chapters where each estimator is first developed.
+
+## Effort visualization {#sec-viz-effort}
+
+Effort plots answer two questions: how much fishing occurred, and is that effort
+distributed evenly across strata and time periods? Three plot types cover most
+reporting needs: a stratum comparison with confidence intervals, a monthly
+time series, and a paired comparison that shows both absolute effort and
+proportional distribution.
+
+### Effort by stratum with confidence intervals
+
+The most common effort summary is a bar chart comparing effort across strata —
+typically weekday versus weekend — with 95% confidence intervals. Displaying the
+CI is essential: effort estimates carry substantial uncertainty, and a bar chart
+without error bars overstates precision. See @sec-effort-by-stratum for the
+underlying estimator.
+
+```{r}
+#| label: fig-viz-effort-stratum
+#| fig-cap: "Estimated angling effort at Harlan Reservoir in 2022 by day type, with 95% confidence intervals. Weekend effort exceeds weekday effort in absolute terms despite weekends comprising only two-sevenths of the calendar. The confidence intervals are wide enough that weekday and weekend estimates overlap substantially, cautioning against strong inference about the ratio from a single season."
+#| fig-alt: "Horizontal bar chart with two bars: Weekend on top, Weekday below. Weekend effort is approximately 200 angler-hours; weekday is approximately 615 angler-hours. Both bars have horizontal error bars extending left and right indicating 95 percent confidence intervals. The intervals are wide and partially overlap, suggesting the difference between day types is imprecisely estimated."
+effort_by_stratum |>
+  mutate(day_type = fct_reorder(day_type, estimate)) |>
+  ggplot(aes(x = estimate, y = day_type)) +
+  geom_col(fill = "#1B4F8A", width = 0.55) +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper), height = 0.25) +
+  labs(x = "Angling effort (angler-hours)", y = NULL,
+       title = "Estimated effort by day type") +
+  theme_creel()
+```
+
+### Monthly effort trend
+
+A monthly time series reveals seasonal patterns — peak months, slow periods,
+and any unusual dips. `estimate_effort(by = "month")` groups estimates within
+the season. Plot as a line with a shaded ribbon, not a bar chart: the ribbon
+communicates that the CI is continuous across time, not a discrete interval per
+bar.
+
+```{r}
+#| label: fig-viz-effort-monthly
+#| fig-cap: "Mean angler-hours per sampled day by month at Harlan Reservoir, April–October 2022, with approximate 95% confidence intervals (mean ± 1.96 SE across sampled days within each month). Effort per sampled day is lowest in April and October and peaks in June–July, consistent with seasonal angling participation patterns at Harlan."
+#| fig-alt: "Line chart with shaded ribbon showing mean angler-hours per sampled day from April through October 2022. The line starts low in April, rises to a peak in June and July, then declines through August, September, and October. The shaded ribbon represents approximate 95 percent confidence intervals based on variation among sampled days within each month."
+effort_by_month |>
+  mutate(month = factor(month, levels = month.name)) |>
+  ggplot(aes(x = month, y = mean_ah, group = 1)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#1B4F8A",
+              alpha = 0.2) +
+  geom_line(colour = "#1B4F8A", linewidth = 0.9) +
+  geom_point(colour = "#1B4F8A", size = 2.5) +
+  labs(x = NULL, y = "Mean angler-hours per sampled day",
+       title = "Seasonal effort trend") +
+  theme_creel() +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+```
+
+## Catch, harvest, and release visualization {#sec-viz-harvest}
+
+Harvest and release estimates carry the same confidence interval structure as
+effort. The key plotting decision is whether to show them separately or combined.
+A combined three-metric plot helps readers see the partition between harvested
+and released fish without needing to add numbers mentally. See @sec-ch-estimation
+for the estimators underlying these plots.
+
+### Combined catch, harvest, and release
+
+Plotting total catch alongside its components (harvest and release) reveals the
+relative importance of each disposition type. A horizontal bar chart works well
+here: the three estimates share the same unit (number of fish), and sorting by
+magnitude makes the partition immediately clear.
+
+```{r}
+#| label: fig-viz-catch-components
+#| fig-cap: "Estimated total catch, harvest, and release at Harlan Reservoir in 2022, with 95% confidence intervals. Catch is the sum of harvest and release; plotting all three makes the partition visible. Released fish substantially outnumber harvested fish, indicating a catch-and-release-dominant fishery for the species sampled."
+#| fig-alt: "Horizontal bar chart with three bars: Total catch at the top (longest bar), Released fish in the middle, and Harvested fish at the bottom (shortest bar). All three bars have horizontal error bars showing 95 percent confidence intervals. The catch bar extends to approximately 50,000 fish; the release bar to approximately 30,000; and the harvest bar to approximately 20,000. Confidence intervals are proportionally similar in width across all three."
+bind_rows(
+  catch_overall   |> mutate(metric = "Total catch"),
+  release_overall |> mutate(metric = "Released"),
+  harvest_overall |> mutate(metric = "Harvested")
+) |>
+  mutate(metric = fct_reorder(metric, estimate)) |>
+  ggplot(aes(x = estimate, y = metric)) +
+  geom_col(fill = "#1B4F8A", width = 0.55) +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper), height = 0.25) +
+  scale_x_continuous(labels = scales::comma) +
+  labs(x = "Estimated fish", y = NULL,
+       title = "Catch, harvest, and release") +
+  theme_creel()
+```
+
+### Harvest by stratum
+
+When harvest differs substantially between strata, a stratum breakdown informs
+allocation decisions — both for future sampling and for management. A grouped
+bar chart with CIs shows both the stratum totals and their uncertainty.
+
+```{r}
+#| label: fig-viz-harvest-stratum
+#| fig-cap: "Estimated Walleye harvest at Harlan Reservoir in 2022 by day type, with 95% confidence intervals. Weekday harvest substantially exceeds weekend harvest, consistent with weekday dominance in total effort. The wide confidence intervals reflect that harvest is estimated as a product of two random quantities (effort and per-trip harvest rate), compounding variance from both sources."
+#| fig-alt: "Horizontal bar chart with two bars: Weekday on top with a longer bar indicating higher estimated harvest, Weekend below with a shorter bar. Both have horizontal error bars showing 95 percent confidence intervals. Weekday harvest is approximately 15,000 to 16,000 fish; weekend harvest is approximately 4,000 fish. The weekday confidence interval is much wider in absolute terms than the weekend interval."
+harvest_by_stratum |>
+  mutate(day_type = fct_reorder(day_type, estimate)) |>
+  ggplot(aes(x = estimate, y = day_type)) +
+  geom_col(fill = "#8B3A3A", width = 0.55) +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper), height = 0.25) +
+  scale_x_continuous(labels = scales::comma) +
+  labs(x = "Estimated harvest (fish)", y = NULL,
+       title = "Harvest by day type") +
+  theme_creel()
+```
+
+## CPUE visualization {#sec-viz-cpue}
+
+CPUE plots show catch rate rather than totals, making them suitable for
+comparisons across time periods or angler groups where effort differs. The key
+design principle is the same: always show the confidence interval. A forest plot
+— a point-and-range display with one row per domain — is the standard format
+for comparing CPUE across multiple levels of a grouping variable.
+See @sec-cpue-estimators for estimator choices.
+
+### CPUE by angler type
+
+A forest plot comparing CPUE across angler types (bank versus boat) is one of
+the most common creel survey outputs. The horizontal layout with sorted rows
+makes the ordering clear without requiring the reader to scan a legend.
+
+```{r}
+#| label: fig-viz-cpue-angler
+#| fig-cap: "Walleye CPUE at Harlan Reservoir in 2022 by angler type, with 95% confidence intervals. Bank anglers recorded a substantially higher CPUE than boat anglers, indicating that bank-accessible areas of Harlan held higher densities of catchable Walleye per unit of angling time during the 2022 season."
+#| fig-alt: "Horizontal forest plot with two rows: Bank anglers on top with a point to the right near 2.9 fish per angler-hour, and Boat anglers below with a point near 1.4 fish per angler-hour. Both rows have horizontal error bars showing 95 percent confidence intervals. A vertical dashed line indicates zero. The bank angler confidence interval is much wider, reflecting smaller sample sizes for that group."
+cpue_by_angler |>
+  mutate(angler_type = fct_reorder(angler_type, estimate)) |>
+  ggplot(aes(x = estimate, y = angler_type)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper), height = 0.2,
+                 colour = "#1B4F8A") +
+  geom_point(size = 3.5, colour = "#1B4F8A") +
+  labs(x = "CPUE (fish per angler-hour)", y = NULL,
+       title = "CPUE by angler type") +
+  theme_creel()
+```
+
+### CPUE forest plot across multiple domains
+
+When comparing CPUE across many levels — such as angler type and day type
+together — a faceted or combined forest plot avoids cluttered grouped bar charts.
+Patchwork assembles multiple forest plots into a single figure.
+
+```{r}
+#| label: fig-viz-cpue-forest
+#| fig-cap: "Walleye CPUE at Harlan Reservoir in 2022 by day type (left) and angler type (right), with 95% confidence intervals. Weekend CPUE slightly exceeds weekday CPUE, though the difference is within sampling uncertainty. The angler-type comparison shows a more pronounced difference, with bank anglers recording higher CPUE than boat anglers."
+#| fig-alt: "Two side-by-side forest plots produced by patchwork. Left panel shows CPUE by day type: Weekend above Weekday, with Weekend having a slightly higher point estimate. Right panel shows CPUE by angler type: Bank above Boat, with Bank having a noticeably higher estimate. Both panels use horizontal point-and-error-bar format with a dashed vertical reference line at zero."
+p_daytype <- cpue_by_daytype |>
+  mutate(day_type = fct_reorder(day_type, estimate)) |>
+  ggplot(aes(x = estimate, y = day_type)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
+                 height = 0.2, colour = "#1B4F8A") +
+  geom_point(size = 3.5, colour = "#1B4F8A") +
+  labs(x = "CPUE (fish/hr)", y = NULL, title = "By day type") +
+  theme_creel()
+
+p_angler <- cpue_by_angler |>
+  mutate(angler_type = fct_reorder(angler_type, estimate)) |>
+  ggplot(aes(x = estimate, y = angler_type)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
+                 height = 0.2, colour = "#5B8DB8") +
+  geom_point(size = 3.5, colour = "#5B8DB8") +
+  labs(x = "CPUE (fish/hr)", y = NULL, title = "By angler type") +
+  theme_creel()
+
+p_daytype + p_angler
+```
+
+## Species CPUE visualization {#sec-viz-species}
+
+Species-level CPUE plots communicate the composition of the catch in rate terms,
+making them more comparable across surveys with different effort levels than raw
+count tables. Ordering species by estimated CPUE and including confidence
+intervals is essential: low-CPUE species often have intervals that span zero or
+near-zero, which should be visible rather than hidden by a table.
+
+```{r}
+#| label: fig-viz-species-cpue
+#| fig-cap: "Species-specific CPUE at Harlan Reservoir in 2022 for six common species, with 95% confidence intervals. White Bass and Walleye dominate the catch by rate, consistent with their abundance and catchability in Harlan's warm, productive waters. Bluegill and Largemouth Bass have the lowest estimated CPUEs among the species shown; the widths of their confidence intervals relative to their point estimates indicate that these estimates carry proportionally high uncertainty."
+#| fig-alt: "Horizontal forest plot with six rows, one per species, sorted by estimated CPUE from highest at top to lowest at bottom. White Bass is highest near 0.6 fish per angler-hour, followed by Walleye near 0.3, Wiper near 0.015, Channel Catfish near 0.008, Largemouth Bass near 0.006, and Bluegill near 0.004. Error bars show 95 percent confidence intervals. White Bass and Walleye have relatively narrow intervals compared to their point estimates; the other four species have wider intervals."
+species_cpue |>
+  mutate(species = fct_reorder(species, estimate)) |>
+  ggplot(aes(x = estimate, y = species)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
+                 height = 0.25, colour = "#1B4F8A") +
+  geom_point(size = 3, colour = "#1B4F8A") +
+  labs(x = "CPUE (fish per angler-hour)", y = NULL,
+       title = "Species CPUE at Harlan Reservoir, 2022") +
+  theme_creel()
+```
+
+Two patterns are immediately visible: White Bass and Walleye dominate the catch
+by rate, and the four lower-CPUE species have confidence intervals that are wide
+relative to their point estimates. The practical implication is that species
+with very low CPUE — those in the tail of the distribution — often cannot be
+estimated precisely from a standard creel design that was sized for the dominant
+species. Targeted subsampling or stratified sampling by location can improve
+precision for low-CPUE species if they are of management interest.
+
+## Precision diagnostic visualization {#sec-viz-precision}
+
+Precision plots communicate the reliability of estimates rather than the estimates
+themselves. They are most useful during survey planning (to justify sample sizes)
+and in reporting (to help managers understand which estimates should drive
+decisions and which carry too much uncertainty to act on). See @sec-uncertainty-anatomy
+for the precision framework.
+
+### CV profile across metrics
+
+A CV profile plot shows the coefficient of variation for each key metric,
+making it easy to see at a glance which estimates are most and least precise.
+A horizontal reference line at the agency's target CV (commonly 15–20%)
+anchors the interpretation.
+
+```{r}
+#| label: fig-viz-cv-profile
+#| fig-cap: "Coefficient of variation (CV, %) for key Harlan Reservoir estimates in 2022. CPUE achieves the lowest CV, reflecting the ratio estimator's efficiency when catch rates are relatively consistent across trips. Harvest and release carry higher CVs because they compound variance from both the effort estimate and the per-trip rate. All estimates fall below the 20% guideline commonly used for management-grade creel data."
+#| fig-alt: "Horizontal bar chart showing CV in percent for six metrics: CPUE (catch rate), Effort, Harvest, Catch, CPUE harvest rate, and CPUE release rate. CPUE has the lowest bar near 6 percent. Effort is near 13 percent. Harvest and total catch are near 13 to 14 percent. All bars fall well to the left of a vertical dashed line at 20 percent, which marks the management-grade precision threshold."
+bind_rows(
+  tibble(metric = "CPUE (overall)",   est = cpue_overall$estimate,
+         se = cpue_overall$se),
+  tibble(metric = "Effort",           est = effort_overall$estimate,
+         se = effort_overall$se),
+  tibble(metric = "Harvest",          est = harvest_overall$estimate,
+         se = harvest_overall$se),
+  tibble(metric = "Total catch",      est = catch_overall$estimate,
+         se = catch_overall$se),
+  tibble(metric = "HPUE",            est = hpue_overall$estimate,
+         se = hpue_overall$se),
+  tibble(metric = "RPUE",            est = rpue_overall$estimate,
+         se = rpue_overall$se)
+) |>
+  mutate(cv     = se / est * 100,
+         metric = fct_reorder(metric, -cv)) |>
+  ggplot(aes(x = cv, y = metric)) +
+  geom_vline(xintercept = 20, linetype = "dashed", colour = "grey50") +
+  geom_col(fill = "#1B4F8A", width = 0.55) +
+  annotate("text", x = 21, y = 1, label = "20% guideline",
+           hjust = 0, size = 3, colour = "grey50") +
+  labs(x = "CV (%)", y = NULL,
+       title = "Precision profile: 2022 Harlan estimates") +
+  theme_creel()
+```
+
+### Comparing CPUE and HPUE precision
+
+When both CPUE and HPUE are reported, a side-by-side point-and-range display
+helps readers see that harvest-based rates are typically less precise than
+catch-based rates — because harvest trips are a subset of all completed trips,
+reducing the effective sample size.
+
+```{r}
+#| label: fig-viz-rate-comparison
+#| fig-cap: "Overall CPUE, HPUE, and RPUE at Harlan Reservoir in 2022 with 95% confidence intervals. HPUE has the narrowest confidence interval in relative terms (lowest CV) because harvest events are less variable per trip than total catch events, which include both harvest and catch-and-release. RPUE has the widest interval because release rates exhibit higher between-trip variability."
+#| fig-alt: "Horizontal forest plot with three rows: CPUE at top, HPUE in the middle, RPUE at bottom. CPUE point estimate is near 1.5 fish per angler-hour; HPUE is near 0.6; RPUE is near 0.9. Each row has a horizontal error bar showing 95 percent confidence interval. HPUE has the proportionally narrowest CI; RPUE has the widest in absolute terms."
+bind_rows(
+  tibble(rate = "CPUE\n(catch rate)",   est = cpue_overall$estimate,
+         lower = cpue_overall$ci_lower, upper = cpue_overall$ci_upper),
+  tibble(rate = "HPUE\n(harvest rate)", est = hpue_overall$estimate,
+         lower = hpue_overall$ci_lower, upper = hpue_overall$ci_upper),
+  tibble(rate = "RPUE\n(release rate)", est = rpue_overall$estimate,
+         lower = rpue_overall$ci_lower, upper = rpue_overall$ci_upper)
+) |>
+  mutate(rate = fct_reorder(rate, est)) |>
+  ggplot(aes(x = est, y = rate)) +
+  geom_errorbarh(aes(xmin = lower, xmax = upper),
+                 height = 0.2, colour = "#1B4F8A") +
+  geom_point(size = 3.5, colour = "#1B4F8A") +
+  labs(x = "Rate (fish per angler-hour)", y = NULL,
+       title = "CPUE, HPUE, and RPUE with 95% CI") +
+  theme_creel()
+```
+
+## Multi-year overview visualization {#sec-viz-multi-year}
+
+When monitoring data span multiple seasons, a three-panel overview figure
+combining effort, CPUE, and harvest is often the most compact way to present
+a full monitoring series. The panels share the same x-axis (year) and a common
+color scheme for the regulation period, allowing a manager to read the
+key story across all three metrics simultaneously. This is the format used in
+@sec-monitoring-overview; the code is reproduced here as a gallery template.
+
+```{r}
+#| label: fig-viz-three-panel
+#| fig-cap: "Three-panel monitoring overview for Harlan Reservoir Walleye, 2018–2023, combining annual effort (top), CPUE (middle), and harvest (bottom) with 95% confidence intervals. All three panels share the same x-axis and color scheme: gray for pre-regulation years (2018–2020) and dark blue for post-regulation years (2021–2023). Reading the three panels together reveals the complete monitoring story: stable effort, transitional CPUE decline followed by recovery, and a sustained post-regulation harvest reduction."
+#| fig-alt: "Three vertically stacked line charts sharing the same x-axis from 2018 to 2023. Top panel shows angling effort in angler-hours with overlapping confidence ribbons and no directional trend. Middle panel shows Walleye CPUE with a declining gray line from 2018 to 2020 and a V-shaped dark blue recovery from 2021 to 2023. Bottom panel shows estimated Walleye harvest with a declining gray line and a sharp drop at 2021 followed by partial recovery. A vertical dashed line in all three panels marks the 2021 regulation change."
+reg_year <- 2021
+
+p_effort <- ggplot(harlan_annual, aes(x = year, y = effort_est,
+                                      colour = regulation,
+                                      fill   = regulation)) +
+  geom_ribbon(aes(ymin = effort_lo, ymax = effort_hi),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.5) +
+  geom_vline(xintercept = reg_year - 0.5,
+             linetype = "dashed", colour = "grey50") +
+  scale_colour_manual(values = c(before = "grey50", after = "#1B4F8A"),
+                      guide = "none") +
+  scale_fill_manual(  values = c(before = "grey50", after = "#1B4F8A"),
+                      guide = "none") +
+  scale_x_continuous(breaks = 2018:2023) +
+  labs(x = NULL, y = "Effort (hr)") +
+  theme_creel()
+
+p_cpue <- ggplot(harlan_annual, aes(x = year, y = cpue_est,
+                                    colour = regulation,
+                                    fill   = regulation)) +
+  geom_ribbon(aes(ymin = cpue_lo, ymax = cpue_hi),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.5) +
+  geom_vline(xintercept = reg_year - 0.5,
+             linetype = "dashed", colour = "grey50") +
+  scale_colour_manual(values = c(before = "grey50", after = "#1B4F8A"),
+                      guide = "none") +
+  scale_fill_manual(  values = c(before = "grey50", after = "#1B4F8A"),
+                      guide = "none") +
+  scale_x_continuous(breaks = 2018:2023) +
+  labs(x = NULL, y = "CPUE (fish/hr)") +
+  theme_creel()
+
+p_harvest <- ggplot(harlan_annual, aes(x = year, y = harvest_est,
+                                       colour = regulation,
+                                       fill   = regulation)) +
+  geom_ribbon(aes(ymin = harvest_lo, ymax = harvest_hi),
+              alpha = 0.15, colour = NA) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.5) +
+  geom_vline(xintercept = reg_year - 0.5,
+             linetype = "dashed", colour = "grey50") +
+  scale_colour_manual(values = c(before = "grey50", after = "#1B4F8A"),
+                      labels = c(before = "Pre-regulation",
+                                 after  = "Post-regulation"),
+                      name   = NULL) +
+  scale_fill_manual(  values = c(before = "grey50", after = "#1B4F8A"),
+                      guide  = "none") +
+  scale_x_continuous(breaks = 2018:2023) +
+  labs(x = "Year", y = "Harvest (fish)") +
+  theme_creel() +
+  theme(legend.position = "bottom")
+
+p_effort / p_cpue / p_harvest
+```
+
+The three-panel layout works best when all three metrics are needed and the reader
+is a manager familiar with creel survey outputs. For stakeholder communications
+where one metric dominates the story — such as a harvest reduction after a size
+limit change — a single panel with annotation is often cleaner than three panels
+that require mental integration. Adapt the layout to the audience and the
+management question being answered.
+
+## Quick reference: plot types and when to use them
+
+The table below summarizes the key plot types in this chapter and their
+appropriate contexts. Each row maps a visual goal to the recommended geometry
+and the chapter where the underlying estimator is introduced.
+
+| Visual goal | Geometry | Estimator chapter |
+|---|---|---|
+| Total effort or harvest by stratum | Horizontal bar + `geom_errorbarh` | @sec-effort-by-stratum, @sec-ch-estimation |
+| Seasonal effort trend | Line + `geom_ribbon` | @sec-effort-by-stratum |
+| Catch component partition | Horizontal bar (separate rows) | @sec-ch-estimation |
+| CPUE by domain | Forest plot (point + range) | @sec-cpue-estimators |
+| Species CPUE comparison | Sorted forest plot | @sec-cpue-estimators |
+| Precision profile | Horizontal bar (CV %) | @sec-uncertainty-anatomy |
+| Multi-year monitoring | Stacked panels via `patchwork` | @sec-trend-ts |
+
+Two formatting rules apply across all plot types in this chapter:
+
+**Always show uncertainty.** An estimate without a confidence interval communicates
+false precision. Managers and reviewers should be able to see whether two
+estimates are distinguishable from each other or whether the data are consistent
+with no difference.
+
+**Sort by estimate, not alphabetically.** When showing multiple domains — species,
+angler types, strata — ordering the rows by the point estimate makes the ranking
+immediately legible. Alphabetical ordering forces readers to scan for the largest
+and smallest values rather than reading directly from position.
