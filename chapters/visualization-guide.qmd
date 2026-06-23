@@ -64,6 +64,7 @@ suppressMessages({
       effort        = "hours_fished",
       trip_duration = "hours_fished",
       trip_status   = "trip_status",
+      n_anglers     = "n_anglers",
       angler_type   = "angler_type"
     ) |>
     add_catch(
@@ -146,8 +147,8 @@ underlying estimator.
 
 ```{r}
 #| label: fig-viz-effort-stratum
-#| fig-cap: "Estimated angling effort at Harlan Reservoir in 2022 by day type, with 95% confidence intervals. Weekend effort exceeds weekday effort in absolute terms despite weekends comprising only two-sevenths of the calendar. The confidence intervals are wide enough that weekday and weekend estimates overlap substantially, cautioning against strong inference about the ratio from a single season."
-#| fig-alt: "Horizontal bar chart with two bars: Weekend on top, Weekday below. Weekend effort is approximately 200 angler-hours; weekday is approximately 615 angler-hours. Both bars have horizontal error bars extending left and right indicating 95 percent confidence intervals. The intervals are wide and partially overlap, suggesting the difference between day types is imprecisely estimated."
+#| fig-cap: "Estimated angling effort at Harlan Reservoir in 2022 by day type, with 95% confidence intervals. Weekday effort substantially exceeds weekend effort in absolute terms, consistent with Harlan's rural location where mid-week fishing dominates total seasonal pressure (see @sec-effort-by-stratum). The confidence intervals for the two strata do not overlap, indicating a well-detected difference between day types in total seasonal effort."
+#| fig-alt: "Horizontal bar chart with two bars: Weekday on top with a longer bar indicating higher estimated effort (approximately 15,500 angler-hours), Weekend below with a shorter bar (approximately 2,800 angler-hours). Both bars have horizontal error bars showing 95 percent confidence intervals. The weekday interval spans approximately 11,500 to 19,500 angler-hours; the weekend interval spans approximately 1,400 to 4,300 angler-hours. The intervals do not overlap."
 effort_by_stratum |>
   mutate(day_type = fct_reorder(day_type, estimate)) |>
   ggplot(aes(x = estimate, y = day_type)) +
@@ -188,7 +189,7 @@ effort_by_month |>
 Harvest and release estimates carry the same confidence interval structure as
 effort. The key plotting decision is whether to show them separately or combined.
 A combined three-metric plot helps readers see the partition between harvested
-and released fish without needing to add numbers mentally. See @sec-ch-estimation
+and released fish without needing to add numbers mentally. See @sec-combined-reporting
 for the estimators underlying these plots.
 
 ### Combined catch, harvest, and release
@@ -201,7 +202,7 @@ magnitude makes the partition immediately clear.
 ```{r}
 #| label: fig-viz-catch-components
 #| fig-cap: "Estimated total catch, harvest, and release at Harlan Reservoir in 2022, with 95% confidence intervals. Catch is the sum of harvest and release; plotting all three makes the partition visible. Released fish substantially outnumber harvested fish, indicating a catch-and-release-dominant fishery for the species sampled."
-#| fig-alt: "Horizontal bar chart with three bars: Total catch at the top (longest bar), Released fish in the middle, and Harvested fish at the bottom (shortest bar). All three bars have horizontal error bars showing 95 percent confidence intervals. The catch bar extends to approximately 50,000 fish; the release bar to approximately 30,000; and the harvest bar to approximately 20,000. Confidence intervals are proportionally similar in width across all three."
+#| fig-alt: "Horizontal bar chart with three bars: Total catch at the top (longest bar), Released fish in the middle, and Harvested fish at the bottom (shortest bar). All three bars have horizontal error bars showing 95 percent confidence intervals. The catch bar extends to approximately 28,000 fish; the release bar to approximately 17,000; and the harvest bar to approximately 11,000. Confidence intervals are proportionally similar in width across all three."
 bind_rows(
   catch_overall   |> mutate(metric = "Total catch"),
   release_overall |> mutate(metric = "Released"),
@@ -225,8 +226,8 @@ bar chart with CIs shows both the stratum totals and their uncertainty.
 
 ```{r}
 #| label: fig-viz-harvest-stratum
-#| fig-cap: "Estimated Walleye harvest at Harlan Reservoir in 2022 by day type, with 95% confidence intervals. Weekday harvest substantially exceeds weekend harvest, consistent with weekday dominance in total effort. The wide confidence intervals reflect that harvest is estimated as a product of two random quantities (effort and per-trip harvest rate), compounding variance from both sources."
-#| fig-alt: "Horizontal bar chart with two bars: Weekday on top with a longer bar indicating higher estimated harvest, Weekend below with a shorter bar. Both have horizontal error bars showing 95 percent confidence intervals. Weekday harvest is approximately 15,000 to 16,000 fish; weekend harvest is approximately 4,000 fish. The weekday confidence interval is much wider in absolute terms than the weekend interval."
+#| fig-cap: "Estimated all-species harvest at Harlan Reservoir in 2022 by day type, with 95% confidence intervals. Weekday harvest substantially exceeds weekend harvest, consistent with weekday dominance in total effort. The wide confidence intervals reflect that harvest is estimated as a product of two random quantities (effort and per-trip harvest rate), compounding variance from both sources."
+#| fig-alt: "Horizontal bar chart with two bars: Weekday on top with a longer bar indicating higher estimated harvest, Weekend below with a shorter bar. Both have horizontal error bars showing 95 percent confidence intervals. Weekday harvest is approximately 8,500 to 9,000 fish; weekend harvest is approximately 2,300 fish. The weekday confidence interval is much wider in absolute terms than the weekend interval."
 harvest_by_stratum |>
   mutate(day_type = fct_reorder(day_type, estimate)) |>
   ggplot(aes(x = estimate, y = day_type)) +
@@ -351,8 +352,8 @@ anchors the interpretation.
 
 ```{r}
 #| label: fig-viz-cv-profile
-#| fig-cap: "Coefficient of variation (CV, %) for key Harlan Reservoir estimates in 2022. CPUE achieves the lowest CV, reflecting the ratio estimator's efficiency when catch rates are relatively consistent across trips. Harvest and release carry higher CVs because they compound variance from both the effort estimate and the per-trip rate. All estimates fall below the 20% guideline commonly used for management-grade creel data."
-#| fig-alt: "Horizontal bar chart showing CV in percent for six metrics: CPUE (catch rate), Effort, Harvest, Catch, CPUE harvest rate, and CPUE release rate. CPUE has the lowest bar near 6 percent. Effort is near 13 percent. Harvest and total catch are near 13 to 14 percent. All bars fall well to the left of a vertical dashed line at 20 percent, which marks the management-grade precision threshold."
+#| fig-cap: "Coefficient of variation (CV, %) for key Harlan Reservoir estimates in 2022. CPUE, HPUE, and RPUE all achieve CVs below 10%, reflecting the ratio estimator's efficiency in smoothing between-day variation in catch rates. Effort, total catch, and total harvest carry higher CVs (approximately 12–14%) because count-based expansion compounds between-day variance in angler density. All estimates fall below the 20% guideline commonly used for management-grade creel data."
+#| fig-alt: "Horizontal bar chart showing CV in percent for six metrics. CPUE (overall catch rate) has the lowest bar near 6 percent; HPUE and RPUE are near 8 percent. Effort is near 12 to 13 percent. Total catch and harvest are near 13 to 14 percent. All bars fall well to the left of a vertical dashed line at 20 percent, which marks the management-grade precision threshold."
 bind_rows(
   tibble(metric = "CPUE (overall)",   est = cpue_overall$estimate,
          se = cpue_overall$se),
@@ -388,8 +389,8 @@ reducing the effective sample size.
 
 ```{r}
 #| label: fig-viz-rate-comparison
-#| fig-cap: "Overall CPUE, HPUE, and RPUE at Harlan Reservoir in 2022 with 95% confidence intervals. HPUE has the narrowest confidence interval in relative terms (lowest CV) because harvest events are less variable per trip than total catch events, which include both harvest and catch-and-release. RPUE has the widest interval because release rates exhibit higher between-trip variability."
-#| fig-alt: "Horizontal forest plot with three rows: CPUE at top, HPUE in the middle, RPUE at bottom. CPUE point estimate is near 1.5 fish per angler-hour; HPUE is near 0.6; RPUE is near 0.9. Each row has a horizontal error bar showing 95 percent confidence interval. HPUE has the proportionally narrowest CI; RPUE has the widest in absolute terms."
+#| fig-cap: "Overall CPUE, HPUE, and RPUE at Harlan Reservoir in 2022 with 95% confidence intervals. CPUE has the narrowest confidence interval in relative terms (lowest CV at approximately 6%), reflecting the ratio estimator's efficiency across the full catch. HPUE and RPUE carry modestly higher CVs (approximately 8%) because harvest and release subsets are more variable across trips than total catch."
+#| fig-alt: "Horizontal forest plot with three rows: CPUE at top, HPUE in the middle, RPUE at bottom. CPUE point estimate is near 1.5 fish per angler-hour; HPUE is near 0.6; RPUE is near 0.9. Each row has a horizontal error bar showing 95 percent confidence interval. CPUE has the narrowest CI in both absolute and relative terms; RPUE has the widest in absolute terms."
 bind_rows(
   tibble(rate = "CPUE\n(catch rate)",   est = cpue_overall$estimate,
          lower = cpue_overall$ci_lower, upper = cpue_overall$ci_upper),
@@ -495,9 +496,9 @@ and the chapter where the underlying estimator is introduced.
 
 | Visual goal | Geometry | Estimator chapter |
 |---|---|---|
-| Total effort or harvest by stratum | Horizontal bar + `geom_errorbarh` | @sec-effort-by-stratum, @sec-ch-estimation |
+| Total effort or harvest by stratum | Horizontal bar + `geom_errorbarh` | @sec-effort-by-stratum, @sec-combined-reporting |
 | Seasonal effort trend | Line + `geom_ribbon` | @sec-effort-by-stratum |
-| Catch component partition | Horizontal bar (separate rows) | @sec-ch-estimation |
+| Catch component partition | Horizontal bar (separate rows) | @sec-combined-reporting |
 | CPUE by domain | Forest plot (point + range) | @sec-cpue-estimators |
 | Species CPUE comparison | Sorted forest plot | @sec-cpue-estimators |
 | Precision profile | Horizontal bar (CV %) | @sec-uncertainty-anatomy |
