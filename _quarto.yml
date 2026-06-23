@@ -48,6 +48,7 @@ book:
     - part: Case Studies
       chapters:
         - chapters/17-case-study-reservoir-creel-survey.qmd
+        - chapters/18-case-study-harlan-reservoir.qmd
     - part: Appendices
       chapters:
         - appendices/01-notation.qmd

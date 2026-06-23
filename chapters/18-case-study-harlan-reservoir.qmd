@@ -1,0 +1,653 @@
+---
+title: "Case Study: Harlan Reservoir Access-Point Creel Survey"
+---
+
+```{r}
+#| label: setup-ch18
+#| include: false
+library(tidycreel)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(forcats)
+library(patchwork)
+library(here)
+
+harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
+harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
+harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
+harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
+harlan_lengths    <- readRDS(here("data/harlan_lengths.rds"))
+
+# Period shift lengths: morning (P1) = 8 hr, afternoon (P2) = 6 hr
+shift_hours <- c("1" = 8L, "2" = 6L)
+
+# Pre-compute angler_hours; retain only the count variable
+harlan_counts_effort <- harlan_counts |>
+  mutate(
+    period        = as.character(period),
+    total_anglers = boat_anglers + bank_anglers,
+    angler_hours  = total_anglers * shift_hours[period]
+  ) |>
+  select(reservoir, date, day_type, period, section, count_time, angler_hours)
+
+# Derive per-interview harvest, release, and total catch from catch table
+harvest_by_int <- harlan_catch |>
+  filter(catch_type == "harvested") |>
+  group_by(interview_id) |>
+  summarise(total_harvest = sum(n_fish), .groups = "drop")
+
+release_by_int <- harlan_catch |>
+  filter(catch_type == "released") |>
+  group_by(interview_id) |>
+  summarise(total_released = sum(n_fish), .groups = "drop")
+
+harlan_int2 <- harlan_interviews |>
+  mutate(period = as.character(period)) |>
+  left_join(harvest_by_int, by = "interview_id") |>
+  left_join(release_by_int, by = "interview_id") |>
+  mutate(
+    total_harvest  = if_else(is.na(total_harvest),  0L, as.integer(total_harvest)),
+    total_released = if_else(is.na(total_released), 0L, as.integer(total_released)),
+    total_catch    = total_harvest + total_released
+  )
+
+# Build full design object
+suppressMessages({
+  harlan_design <- creel_design(
+    calendar = harlan_schedule,
+    date     = "date",
+    strata   = "day_type"
+  ) |>
+    add_counts(harlan_counts_effort, count_time_col = "count_time") |>
+    add_interviews(
+      interviews     = harlan_int2,
+      catch          = "total_catch",
+      harvest        = "total_harvest",
+      effort         = "hours_fished",
+      trip_duration  = "hours_fished",
+      trip_status    = "trip_status",
+      n_anglers      = "n_anglers",
+      angler_type    = "angler_type",
+      angler_method  = "angler_method",
+      interview_type = "access"
+    ) |>
+    add_catch(
+      data          = harlan_catch,
+      catch_uid     = "interview_id",
+      interview_uid = "interview_id",
+      species       = "species",
+      count         = "n_fish",
+      catch_type    = "catch_type"
+    )
+})
+
+# Pre-compute all season-level estimates
+eff_tot    <- estimate_effort(harlan_design, target = "stratum_total")
+eff_strat  <- estimate_effort(harlan_design, by = day_type, target = "stratum_total")
+harv_tot   <- estimate_total_harvest(harlan_design, target = "stratum_total")
+harv_strat <- estimate_total_harvest(harlan_design, by = day_type, target = "stratum_total")
+cat_tot    <- estimate_total_catch(harlan_design, target = "stratum_total")
+rel_tot    <- estimate_total_release(harlan_design, target = "stratum_total")
+cpue_all   <- estimate_catch_rate(harlan_design)
+cpue_dt    <- estimate_catch_rate(harlan_design, by = day_type)
+cpue_at    <- estimate_catch_rate(harlan_design, by = angler_type)
+cpue_sp    <- estimate_catch_rate(harlan_design, by = species)
+hpue_all   <- estimate_harvest_rate(harlan_design)
+rpue_all   <- estimate_release_rate(harlan_design)
+
+# Summary stats for inline R
+n_days      <- nrow(harlan_schedule)
+n_samp      <- sum(harlan_schedule$sampled)
+n_int       <- nrow(harlan_interviews)
+n_comp      <- sum(harlan_interviews$trip_status == "complete")
+n_incomp    <- sum(harlan_interviews$trip_status == "incomplete")
+pct_boat_cnt <- 100 * sum(harlan_counts$boat_anglers) /
+  (sum(harlan_counts$bank_anglers) + sum(harlan_counts$boat_anglers))
+
+# Walleye compliance stats (used in narrative and callout)
+walleye_lengths <- harlan_lengths |>
+  filter(species == "Walleye", length_type == "harvest") |>
+  mutate(length_mm = as.numeric(length),
+         legal     = length_mm >= 381)
+wl_n_legal   <- sum(walleye_lengths$legal, na.rm = TRUE)
+wl_pct_legal <- 100 * mean(walleye_lengths$legal, na.rm = TRUE)
+wl_released  <- harlan_catch |>
+  filter(species == "Walleye", catch_type == "released") |>
+  pull(n_fish) |> sum()
+wl_harvested <- harlan_catch |>
+  filter(species == "Walleye", catch_type == "harvested") |>
+  pull(n_fish) |> sum()
+wl_rel_pct   <- 100 * wl_released / (wl_released + wl_harvested)
+
+# CV helpers
+cv_eff   <- 100 * eff_tot$estimates$se   / eff_tot$estimates$estimate
+cv_harv  <- 100 * harv_tot$estimates$se  / harv_tot$estimates$estimate
+cv_catch <- 100 * cat_tot$estimates$se   / cat_tot$estimates$estimate
+cv_rel   <- 100 * rel_tot$estimates$se   / rel_tot$estimates$estimate
+cv_cpue  <- 100 * cpue_all$estimates$se  / cpue_all$estimates$estimate
+cv_hpue  <- 100 * hpue_all$estimates$se  / hpue_all$estimates$estimate
+cv_rpue  <- 100 * rpue_all$estimates$se  / rpue_all$estimates$estimate
+
+# Formatting helpers
+fmt_comma <- function(x) formatC(round(x), format = "f", digits = 0, big.mark = ",")
+fmt_rate  <- function(x) sprintf("%.2f", x)
+fmt_pct   <- function(x) sprintf("%.1f%%", x)
+```
+
+## Setting and design overview
+
+Harlan Reservoir has served as the running example throughout Parts III and IV, appearing in chapters on data structure, design assembly, effort estimation, catch and harvest, CPUE, and precision diagnostics. Those chapters worked through individual functions and isolated topics in depth. This chapter steps back and runs the full access-point pipeline from raw data tables to a final reporting summary — the same analysis a fisheries biologist would deliver at the end of a survey season.
+
+The 2022 Harlan survey used a **day-end access-point** design. Field clerks stationed at the reservoir's primary boat ramp intercepted departing anglers and recorded party composition, total hours fished, and catch and harvest by species. Instantaneous counts of visible anglers were taken twice per sampling period — once early and once late in each shift — to produce the replicate counts that drive the effort estimator.
+
+The survey spans two asymmetric periods per day: Period 1 covers eight hours (the primary boat-traffic window) and Period 2 covers six hours. That asymmetry must be encoded in the shift-length vector before angler-hours can be computed from instantaneous counts.
+
+The fishery is multi-species. White Bass and Walleye dominate the catch record, and Walleye are subject to a 381 mm minimum length limit that produces a high catch-and-release rate. The reservoir draws a predominantly boat-oriented angling public, though bank anglers using the shoreline adjacent to the access point are also intercepted.
+
+## Data overview
+
+Four linked tables describe the 2022 Harlan survey, plus a fifth lengths file used for size-limit compliance.
+
+```{r}
+#| label: harlan-summary
+cat(
+  "Survey period:   ", format(min(harlan_schedule$date), "%B %d"), "–",
+  format(max(harlan_schedule$date), "%B %d, %Y"), "\n",
+  "Total days:      ", n_days, "\n",
+  "Sampled days:    ", n_samp,
+  sprintf("(%.0f%%)\n", 100 * n_samp / n_days),
+  "Count records:   ", nrow(harlan_counts),
+  "(two replicates per sampled period)\n",
+  "Interviews:      ", n_int,
+  sprintf("(%d complete, %d incomplete)\n", n_comp, n_incomp),
+  "Catch records:   ", nrow(harlan_catch), "species-level entries\n",
+  "Length records:  ", nrow(harlan_lengths), "individual fish measurements\n",
+  sep = ""
+)
+```
+
+All four main tables pass the `validate_creel_data()` check:
+
+```{r}
+#| label: harlan-validate
+validate_creel_data(counts = harlan_counts, interviews = harlan_interviews)
+```
+
+The `r fmt_pct(100 * n_comp / n_int)` complete-trip rate is expected for a day-end access-point design: most parties are departing for the day, so the clerk records elapsed hours and total catch rather than a mid-trip snapshot. The remaining `r fmt_pct(100 * n_incomp / n_int)` incomplete contacts arise when anglers leave mid-day or when only the lead angler of a multi-party group is interviewed at the access point.
+
+### Seasonal survey coverage
+
+Sampling was distributed across the seven-month open-water season (April through October), with approximately two to six survey days per week in each stratum.
+
+```{r}
+#| label: fig-harlan-season
+#| fig-cap: "Monthly sampling effort and mean instantaneous angler count at Harlan Reservoir, 2022. Left: number of sampled days per month by stratum. Right: mean total anglers per count by month. The low April count reflects survey startup; May peaks near 50 anglers per count as the season opens."
+#| fig-alt: "Two-panel bar chart. Left: stacked weekday and weekend sampled-day counts from April through October, with roughly 15 to 17 days per month. Right: mean total anglers per count by month; April is below 2, May peaks near 50, then declines gradually through October to about 6."
+#| fig-width: 8
+#| fig-height: 3.5
+
+monthly_days <- harlan_schedule |>
+  filter(sampled) |>
+  mutate(month = factor(format(date, "%b"), levels = month.abb)) |>
+  count(month, day_type)
+
+monthly_counts <- harlan_counts |>
+  mutate(
+    month = factor(format(date, "%b"), levels = month.abb),
+    total = boat_anglers + bank_anglers
+  ) |>
+  group_by(month) |>
+  summarise(mean_count = mean(total), .groups = "drop")
+
+p1 <- ggplot(monthly_days, aes(month, n, fill = day_type)) +
+  geom_col(position = "stack") +
+  scale_fill_manual(values = c(weekday = "#6baed6", weekend = "#2171b5"),
+                    name = "Day type") +
+  labs(x = NULL, y = "Sampled days") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+
+p2 <- ggplot(monthly_counts, aes(month, mean_count)) +
+  geom_col(fill = "#74c476") +
+  geom_hline(yintercept = 0, linewidth = 0.3) +
+  labs(x = NULL, y = "Mean anglers per count") +
+  theme_minimal(base_size = 11)
+
+p1 + p2
+```
+
+Angler pressure rises sharply from April (`r round(monthly_counts$mean_count[monthly_counts$month == "Apr"], 1)` mean anglers per count) to a May peak of `r round(monthly_counts$mean_count[monthly_counts$month == "May"], 1)` anglers per count, then declines steadily through October (`r round(monthly_counts$mean_count[monthly_counts$month == "Oct"], 1)` mean anglers per count). The low April count reflects survey startup — sampling began April 2 and the reservoir had not yet reached peak fishing pressure.
+
+### Angler composition
+
+Harlan Reservoir is overwhelmingly boat-fished. Instantaneous counts record `r fmt_pct(pct_boat_cnt)` boat anglers across all count events — consistent with a deep-water reservoir where White Bass and Walleye are most accessible from a vessel.
+
+```{r}
+#| label: fig-harlan-composition
+#| fig-cap: "Monthly angler composition at Harlan Reservoir, 2022, from instantaneous count records. Boat anglers (blue) dominate throughout the open-water season. The bank-angling contingent is small but present in all months, concentrated near the shoreline access adjacent to the boat ramp."
+#| fig-alt: "Stacked proportional bar chart with months April through October on the y-axis. Boat anglers fill nearly all of each bar throughout the season. The bank fraction is visible as a thin green strip in each month."
+#| fig-width: 6.5
+#| fig-height: 3.2
+
+harlan_counts |>
+  mutate(month = factor(format(date, "%b"), levels = month.abb)) |>
+  group_by(month) |>
+  summarise(
+    bank = sum(bank_anglers),
+    boat = sum(boat_anglers),
+    .groups = "drop"
+  ) |>
+  pivot_longer(c(bank, boat), names_to = "type", values_to = "count") |>
+  ggplot(aes(month, count, fill = type)) +
+  geom_col(position = "fill") +
+  scale_fill_manual(values = c(bank = "#74c476", boat = "#2171b5"),
+                    name = "Angler type") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = NULL, y = "Fraction of counted anglers",
+       title = "Monthly bank vs. boat composition") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+The access-point interview composition differs from the count composition. Counts show `r fmt_pct(pct_boat_cnt)` boat anglers, but interviews split `r nrow(filter(harlan_interviews, angler_type == "boat"))` boat (`r fmt_pct(100 * mean(harlan_interviews$angler_type == "boat"))`) and `r nrow(filter(harlan_interviews, angler_type == "bank"))` bank (`r fmt_pct(100 * mean(harlan_interviews$angler_type == "bank"))`). Bank anglers exit through the same access point as boat anglers — they park and walk rather than launching a trailer — making them proportionally easier to contact at the ramp than their share of the on-water count would suggest. This difference is important context for angler-type CPUE comparisons: the design-based estimator uses counts for effort expansion and interviews for rates, so the asymmetry does not bias either quantity. It does, however, mean that bank-angler CPUE is estimated from a sample that overrepresents that group relative to their presence on the water.
+
+## Building the design object
+
+The Harlan pipeline follows the same four-step assembly used throughout Part III and in the Cedar Lake case study (@sec-cedar-takeaway). Three elements differ from the Cedar Lake roving build:
+
+1. **Asymmetric shift lengths.** Period 1 covers eight hours and Period 2 covers six. A named vector maps period labels to shift lengths before `add_counts()` converts instantaneous counts to angler-hours. Using a single constant shift length would mismatch effort by up to 25% within each period.
+2. **Two catch columns derived before joining.** The catch table stores species-level records with a `catch_type` flag. Per-interview harvest and release totals must be computed with `group_by(interview_id)` and then joined to the interview table. Both columns — `total_harvest` and `total_catch` (harvest + release) — are required by `add_interviews()`.
+3. **Access interview type.** Setting `interview_type = "access"` routes `estimate_catch_rate()` to the ratio-of-means estimator. Access-point designs capture complete trips at day end; ROM is appropriate because each interview contributes a full trip record.
+
+```{r}
+#| label: harlan-counts-prep
+# Period shift lengths
+shift_hours
+
+# Sample of preprocessed count records for one sampled day
+harlan_counts_effort |>
+  filter(date == as.Date("2022-07-15")) |>
+  select(date, day_type, period, count_time, angler_hours)
+```
+
+```{r}
+#| label: harlan-int-prep
+# Interview table with derived harvest, release, and total catch
+harlan_int2 |>
+  select(interview_id, date, trip_status, angler_type,
+         hours_fished, total_harvest, total_released, total_catch) |>
+  slice(1:6)
+```
+
+The split into `total_harvest` and `total_catch` is what allows the estimation layer to produce separate HPUE (harvest per unit effort) and CPUE (catch per unit effort) from the same interview record.
+
+```{r}
+#| label: harlan-design-build
+#| eval: false
+harlan_design <- creel_design(
+  calendar = harlan_schedule,
+  date     = "date",
+  strata   = "day_type"
+) |>
+  add_counts(harlan_counts_effort, count_time_col = "count_time") |>
+  add_interviews(
+    interviews     = harlan_int2,
+    catch          = "total_catch",
+    harvest        = "total_harvest",
+    effort         = "hours_fished",
+    trip_duration  = "hours_fished",
+    trip_status    = "trip_status",
+    n_anglers      = "n_anglers",
+    angler_type    = "angler_type",
+    angler_method  = "angler_method",
+    interview_type = "access"
+  ) |>
+  add_catch(
+    data          = harlan_catch,
+    catch_uid     = "interview_id",
+    interview_uid = "interview_id",
+    species       = "species",
+    count         = "n_fish",
+    catch_type    = "catch_type"
+  )
+```
+
+## Effort estimation
+
+Effort at Harlan comes from the same instantaneous count estimator used throughout Part IV: average within-period counts, scale by shift length, expand sampled-day effort to the full stratum. The asymmetric shift lengths are already encoded in `harlan_counts_effort`, so `estimate_effort()` reads the pre-computed `angler_hours` column directly.
+
+```{r}
+#| label: harlan-effort
+eff_tot$estimates
+```
+
+Harlan anglers logged an estimated `r fmt_comma(eff_tot$estimates$estimate)` angler-hours during the 2022 open-water season (95% CI: `r fmt_comma(eff_tot$estimates$ci_lower)`–`r fmt_comma(eff_tot$estimates$ci_upper)`). The effort CV is `r fmt_pct(cv_eff)`, driven primarily by between-day variance (SE between = `r round(eff_tot$estimates$se_between)` vs SE within = `r round(eff_tot$estimates$se_within)`) — the dominant pattern for reservoir access-point surveys where daily boat-ramp traffic varies substantially with weather and day of week.
+
+```{r}
+#| label: harlan-effort-strat
+eff_strat$estimates
+```
+
+```{r}
+#| label: fig-harlan-effort
+#| fig-cap: "Season-total effort estimates by day-type stratum, Harlan Reservoir 2022. Points are ratio-of-means estimates; bars are 95% confidence intervals. Weekday effort is substantially higher than weekend effort, reflecting both the larger weekday frame and higher mean counts on weekdays."
+#| fig-alt: "Horizontal dot-and-CI plot with weekday and weekend rows. The weekday point is near 28,000 angler-hours with a wide CI from about 21,000 to 35,000. The weekend point is near 5,000 with a narrower CI from about 2,500 to 7,400. The two intervals do not overlap."
+#| fig-width: 5.5
+#| fig-height: 2.8
+
+eff_strat$estimates |>
+  ggplot(aes(estimate, fct_rev(day_type))) +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
+                 height = 0.15, linewidth = 0.8) +
+  geom_point(size = 3, shape = 21, fill = "#6baed6") +
+  scale_x_continuous(labels = scales::comma) +
+  labs(x = "Estimated effort (angler-hours)", y = NULL,
+       title = "Season effort by day type") +
+  theme_minimal(base_size = 11)
+```
+
+Weekday effort (`r fmt_comma(eff_strat$estimates$estimate[eff_strat$estimates$day_type == "weekday"])` angler-hours) far exceeds weekend effort (`r fmt_comma(eff_strat$estimates$estimate[eff_strat$estimates$day_type == "weekend"])` angler-hours). The survey frame includes `r sum(harlan_schedule$day_type == "weekday")` weekday days versus `r sum(harlan_schedule$day_type == "weekend")` weekend days, so both the frame multiplier and higher mean weekday counts drive the difference. The non-overlapping confidence intervals confirm that the two strata genuinely differ and that stratification is adding information rather than noise to the effort estimate.
+
+## Catch, harvest, and release
+
+### Species catch composition
+
+Harlan hosts eleven species in the catch record, spanning managed game fish, forage fish, and rough fish.
+
+```{r}
+#| label: fig-harlan-species
+#| fig-cap: "Total fish recorded in Harlan Reservoir interviews by species and catch type, showing only species with at least ten total fish. White Bass dominates in absolute numbers with a moderate harvest fraction. Walleye shows a pronounced release majority, consistent with the 381 mm size limit. Freshwater Drum are mostly released; Yellow Perch are mostly kept."
+#| fig-alt: "Horizontal stacked bar chart. White Bass has the longest bar with a roughly 60-40 harvest-to-release split. Walleye has a long bar dominated by the green release segment. Freshwater Drum has mostly release. Yellow Perch bar is mostly orange. Channel Catfish bar is short and mostly release."
+#| fig-width: 6.5
+#| fig-height: 4
+
+harlan_catch |>
+  group_by(species, catch_type) |>
+  summarise(total = sum(n_fish), .groups = "drop") |>
+  group_by(species) |>
+  mutate(species_total = sum(total)) |>
+  ungroup() |>
+  filter(species_total >= 10) |>
+  mutate(species = fct_reorder(species, species_total)) |>
+  ggplot(aes(total, species, fill = catch_type)) +
+  geom_col(position = "stack") +
+  scale_fill_manual(values = c(harvested = "#fd8d3c", released = "#74c476"),
+                    name = "Catch type") +
+  scale_x_continuous(labels = scales::comma) +
+  labs(x = "Fish recorded in interviews", y = NULL,
+       title = "Interview catch composition by species (≥10 fish)") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+White Bass are kept at a moderate rate. Walleye show a high release fraction, driven by the 381 mm size limit — most fish encountered are sub-legal. Freshwater Drum are abundant but mostly released, reflecting low harvest interest despite no size restriction. Yellow Perch are kept at a high rate, consistent with their role as a preferred eating fish when encountered.
+
+### Season totals
+
+```{r}
+#| label: harlan-totals
+harv_tot$estimates
+cat_tot$estimates
+rel_tot$estimates
+```
+
+Season harvest: `r fmt_comma(harv_tot$estimates$estimate)` fish (95% CI: `r fmt_comma(harv_tot$estimates$ci_lower)`–`r fmt_comma(harv_tot$estimates$ci_upper)`). Total catch: `r fmt_comma(cat_tot$estimates$estimate)` fish (completed trips only, n = `r cat_tot$estimates$n`). Total release: `r fmt_comma(rel_tot$estimates$estimate)` fish.
+
+Harvest and release use all `r n_int` interviews; total catch uses only the `r n_comp` completed trips. That difference explains why the harvest CV (`r fmt_pct(cv_harv)`) is lower than the total-catch CV (`r fmt_pct(cv_catch)`): harvest accesses the full interview sample, while total catch is constrained to completed trips where both elapsed time and fish-in-hand are known.
+
+Weekday harvest dominates the season total:
+
+```{r}
+#| label: harlan-harv-strat
+harv_strat$estimates
+```
+
+Weekday harvest (`r fmt_comma(harv_strat$estimates$estimate[harv_strat$estimates$day_type == "weekday"])` fish) is approximately `r round(harv_strat$estimates$estimate[harv_strat$estimates$day_type == "weekday"] / harv_strat$estimates$estimate[harv_strat$estimates$day_type == "weekend"], 1)` times weekend harvest (`r fmt_comma(harv_strat$estimates$estimate[harv_strat$estimates$day_type == "weekend"])` fish). The weekday dominance mirrors the effort pattern: more days in the frame, higher mean counts, and a larger angling population on weekdays during the open-water season at Harlan.
+
+### Walleye catch-and-release fishery
+
+Walleye show `r wl_released` releases against `r wl_harvested` harvested fish in the raw interview table — a `r fmt_pct(wl_rel_pct)` release fraction. The 381 mm size limit is the primary driver: most fish contacted fall below legal size and must be returned.
+
+```{r}
+#| label: harlan-walleye-compliance
+walleye_lengths |>
+  summarise(
+    n          = n(),
+    n_legal    = sum(legal, na.rm = TRUE),
+    pct_legal  = mean(legal, na.rm = TRUE),
+    mean_len   = mean(length_mm, na.rm = TRUE),
+    min_len    = min(length_mm, na.rm = TRUE),
+    max_len    = max(length_mm, na.rm = TRUE)
+  )
+```
+
+Of the `r nrow(walleye_lengths)` harvested Walleye with measured lengths, `r fmt_pct(wl_pct_legal)` met the 381 mm minimum. Mean length of harvested fish was `r round(mean(walleye_lengths$length_mm, na.rm = TRUE))` mm — well above the limit — indicating that anglers disproportionately retain the larger fish they encounter. That is the expected size-selective harvest pattern under a minimum-length regulation: sub-legal fish are released, legal fish are mostly kept, so the harvested sample skews toward large individuals.
+
+## CPUE and harvest rate
+
+Access-point surveys use the ratio-of-means (ROM) estimator. Each completed trip contributes a fishing effort (`hours_fished`) and a catch total; the estimator divides the sum of catch across all trips by the sum of hours across all trips within a stratum. The ratio-of-means is appropriate here because access-point interviews capture full trips: start and end times are known, and the angler reports total catch for the entire trip.
+
+```{r}
+#| label: harlan-cpue-overall
+cpue_all$estimates
+hpue_all$estimates
+rpue_all$estimates
+```
+
+Overall CPUE is `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour (95% CI: `r fmt_rate(cpue_all$estimates$ci_lower)`–`r fmt_rate(cpue_all$estimates$ci_upper)`). The harvest rate is `r fmt_rate(hpue_all$estimates$estimate)` fish per angler-hour and the release rate is `r fmt_rate(rpue_all$estimates$estimate)` fish per angler-hour. Anglers released `r fmt_pct(100 * rpue_all$estimates$estimate / cpue_all$estimates$estimate)` of all fish caught — consistent with the high Walleye release fraction and moderate release rates for Freshwater Drum.
+
+### CPUE by day type
+
+```{r}
+#| label: harlan-cpue-daytype
+cpue_dt$estimates
+```
+
+Weekday and weekend CPUE are nearly identical (`r fmt_rate(cpue_dt$estimates$estimate[cpue_dt$estimates$day_type == "weekday"])` and `r fmt_rate(cpue_dt$estimates$estimate[cpue_dt$estimates$day_type == "weekend"])` fish per angler-hour, respectively) with overlapping confidence intervals. This is a common result in stratified creel surveys: stratification by day type is justified because effort differs between weekdays and weekends, but the catch rate experienced by individual anglers is roughly constant across the two groups. The stratum weights affect the effort total; they do not substantially affect the average rate.
+
+### CPUE by angler type
+
+Boat and bank anglers at Harlan target different areas and species assemblages. Boat anglers access open water for White Bass and Walleye; bank anglers fish near the access-point shoreline where panfish and Channel Catfish are more common.
+
+```{r}
+#| label: fig-harlan-cpue-type
+#| fig-cap: "Catch per angler-hour by angler type at Harlan Reservoir, 2022. Points are ratio-of-means estimates from completed trips; bars are 95% confidence intervals. A dashed vertical line marks the overall CPUE. The bank sample is small (n < 80 completed trips), producing a wide confidence interval."
+#| fig-alt: "Horizontal dot-and-CI plot with bank and boat rows. The bank point is near 2.95 fish per hour with a wide CI extending from about 1.8 to 4.1. The boat point is near 1.41 with a narrow CI from about 1.23 to 1.59. A dashed vertical line at 1.51 marks the overall CPUE."
+#| fig-width: 5.5
+#| fig-height: 2.8
+
+cpue_at$estimates |>
+  ggplot(aes(estimate, fct_rev(angler_type))) +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
+                 height = 0.15, linewidth = 0.8) +
+  geom_point(aes(shape = angler_type), size = 3, fill = "#6baed6") +
+  scale_shape_manual(values = c(bank = 21, boat = 24), guide = "none") +
+  geom_vline(xintercept = cpue_all$estimates$estimate, linetype = "dashed",
+             linewidth = 0.5, color = "grey50") +
+  annotate("text", x = cpue_all$estimates$estimate + 0.04,
+           y = Inf, vjust = 1.5, hjust = 0, size = 3,
+           label = sprintf("Overall: %.2f", cpue_all$estimates$estimate)) +
+  labs(x = "Catch per angler-hour", y = NULL,
+       title = "CPUE by angler type") +
+  theme_minimal(base_size = 11)
+```
+
+Bank anglers catch `r fmt_rate(cpue_at$estimates$estimate[cpue_at$estimates$angler_type == "bank"])` fish per angler-hour versus `r fmt_rate(cpue_at$estimates$estimate[cpue_at$estimates$angler_type == "boat"])` for boat anglers, but the bank-angler sample is small (`r cpue_at$estimates$n[cpue_at$estimates$angler_type == "bank"]` completed trips). The wide bank confidence interval means the two point estimates are statistically indistinguishable at this sample size. Report the apparent contrast with the sample sizes shown here so readers can assess the uncertainty.
+
+### Species CPUE
+
+With eleven species, the site-level CPUE conceals substantial species-level variation. `estimate_catch_rate(by = species)` produces a design-based estimate for each species using the same stratum weights.
+
+```{r}
+#| label: harlan-cpue-species
+cpue_sp$estimates |>
+  filter(estimate > 0.01) |>
+  select(species, estimate, se, ci_lower, ci_upper, n) |>
+  arrange(desc(estimate))
+```
+
+White Bass (`r fmt_rate(cpue_sp$estimates$estimate[cpue_sp$estimates$species == "White Bass"])` fish per angler-hour) and Walleye (`r fmt_rate(cpue_sp$estimates$estimate[cpue_sp$estimates$species == "Walleye"])` fish per angler-hour) together account for most of the catchable rate. Freshwater Drum, Yellow Perch, Channel Catfish, and Wiper are present at measurable levels. The five species not shown — Crappie, Gizzard Shad, Common Carp, Northern Pike, and Muskellunge — have estimates below 0.01 fish per angler-hour; Gizzard Shad, Common Carp, and Muskellunge have confidence intervals that include zero. All five should be reported as incidental catches rather than targeted quantities.
+
+## Precision and diagnostics
+
+A precision profile summarizes CV across all seven season-level estimates and identifies which quantities are solid enough for management use.
+
+```{r}
+#| label: harlan-cv-summary
+cv_tbl <- tibble::tibble(
+  quantity = c("Effort", "Total harvest", "Total catch",
+               "Total release", "CPUE", "HPUE", "RPUE"),
+  category = c("effort", "total", "total",
+               "total", "rate", "rate", "rate"),
+  cv = c(cv_eff, cv_harv, cv_catch, cv_rel, cv_cpue, cv_hpue, cv_rpue)
+)
+cv_tbl
+```
+
+```{r}
+#| label: fig-harlan-precision
+#| fig-cap: "Coefficient of variation (%) for season-level estimates, Harlan Reservoir 2022. Dashed line at 20% marks the common management-grade precision threshold. Rate estimates are most precise because the ratio form stabilizes variance. Total release carries the highest CV, reflecting high per-trip variability in fish returned."
+#| fig-alt: "Horizontal bar chart showing CV for seven estimates. Total release has the longest bar near 13.6%. Total harvest is near 13.3% and total catch near 12.8%. Effort is near 11.2%. RPUE and HPUE are near 8%; CPUE is lowest near 6.2%. The dashed line at 20% is not reached by any bar."
+#| fig-width: 6
+#| fig-height: 3.5
+
+cv_tbl |>
+  mutate(quantity = fct_reorder(quantity, cv)) |>
+  ggplot(aes(cv, quantity, fill = category)) +
+  geom_col() +
+  geom_vline(xintercept = 20, linetype = "dashed", linewidth = 0.6, color = "grey30") +
+  scale_fill_manual(
+    values = c(effort = "#6baed6", total = "#fd8d3c", rate = "#74c476"),
+    name = "Estimate type"
+  ) +
+  labs(x = "CV (%)", y = NULL, title = "Precision profile") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+All seven estimates fall below the 20% management-grade threshold. CPUE is the most precise at `r fmt_pct(cv_cpue)` because the ROM estimator uses all `r cpue_all$estimates$n` completed-trip observations and the ratio form stabilizes variance better than an expanded total. Effort CV at `r fmt_pct(cv_eff)` is acceptable for a reservoir survey; the between-day component dominates because boat-ramp traffic fluctuates substantially with weather. Total release has the highest CV at `r fmt_pct(cv_rel)`, reflecting higher per-trip variability in fish returned — occasional trips with large Walleye C&R events skew the release distribution. Total harvest (`r fmt_pct(cv_harv)`) and total catch (`r fmt_pct(cv_catch)`) are similar despite total catch using only the `r n_comp` completed trips.
+
+The precision profile is most useful as a communication tool. Managers reading a creel report can quickly see which estimates carry enough precision to inform a regulation decision and which quantities — typically stratified sub-domains and rare species — carry wider uncertainty and should be interpreted cautiously.
+
+## Final report assembly
+
+All estimates are assembled into a single reporting tibble, formatted for a non-technical audience, using the pattern from @sec-report-assemble.
+
+```{r}
+#| label: harlan-report-assembly
+report_summary <- bind_rows(
+  eff_tot$estimates  |> mutate(quantity = "Effort",         unit = "angler-hours"),
+  harv_tot$estimates |> mutate(quantity = "Total harvest",  unit = "fish"),
+  cat_tot$estimates  |> mutate(quantity = "Total catch",    unit = "fish"),
+  rel_tot$estimates  |> mutate(quantity = "Total release",  unit = "fish"),
+  cpue_all$estimates |> mutate(quantity = "CPUE",           unit = "fish/hr"),
+  hpue_all$estimates |> mutate(quantity = "HPUE",           unit = "fish/hr"),
+  rpue_all$estimates |> mutate(quantity = "RPUE",           unit = "fish/hr")
+) |>
+  select(quantity, unit, estimate, se, ci_lower, ci_upper)
+
+report_summary
+```
+
+```{r}
+#| label: harlan-report-table
+report_table <- report_summary |>
+  mutate(
+    cv = fmt_pct(100 * se / estimate),
+    estimate_fmt = if_else(
+      unit == "fish/hr",
+      fmt_rate(estimate),
+      fmt_comma(estimate)
+    ),
+    ci_fmt = paste0(
+      if_else(unit == "fish/hr", fmt_rate(ci_lower), fmt_comma(ci_lower)),
+      "–",
+      if_else(unit == "fish/hr", fmt_rate(ci_upper), fmt_comma(ci_upper))
+    )
+  ) |>
+  select(Quantity = quantity, Unit = unit,
+         Estimate = estimate_fmt, `95% CI` = ci_fmt, CV = cv)
+
+knitr::kable(report_table, align = "llrrr",
+             caption = "Harlan Reservoir 2022 creel survey season estimates.")
+```
+
+### Inline narrative
+
+Drawing directly from computed estimates, a one-page summary for managers reads:
+
+::: {.callout-note title="Example: manager one-page summary (excerpt)"}
+Harlan Reservoir anglers logged an estimated `r fmt_comma(eff_tot$estimates$estimate)` angler-hours during the 2022 open-water season (April 2–October 29). Total harvest was `r fmt_comma(harv_tot$estimates$estimate)` fish (95% CI: `r fmt_comma(harv_tot$estimates$ci_lower)`–`r fmt_comma(harv_tot$estimates$ci_upper)` fish). Anglers caught `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour and harvested `r fmt_rate(hpue_all$estimates$estimate)` fish per angler-hour across `r n_samp` sampled days and `r n_int` interviews. Walleye showed a `r fmt_pct(wl_rel_pct)` release rate; `r fmt_pct(wl_pct_legal)` of harvested Walleye with measured lengths met the 381 mm minimum.
+:::
+
+::: {.callout-note title="Example: technical report footnote"}
+Effort uses ratio-of-means with day-type stratification from instantaneous count data (two replicates per period; Period 1 = 8 hr, Period 2 = 6 hr). CPUE, HPUE, and RPUE use ratio-of-means from all completed trips (`r n_comp` of `r n_int` contacts; `r fmt_pct(100 * n_comp / n_int)` completion rate). Total harvest and release use all `r n_int` contacts; total catch uses the `r n_comp` completed trips only. Walleye compliance rate is based on `r nrow(walleye_lengths)` length-measured harvested Walleye (not all harvested Walleye were measured). Confidence intervals are 95% normal-approximation intervals from the design-based variance estimator. Domain: Harlan Reservoir, daylight hours, access-point at primary boat ramp, April 2–October 29, 2022.
+:::
+
+## Harlan versus Cedar Lake: a design contrast
+
+The Cedar Lake case study (@sec-cedar-takeaway) analyzed that survey from the roving survey's perspective. From Harlan's access-point vantage point, the contrast in design choices and their downstream consequences is equally clear.
+
+```{r}
+#| label: harlan-cedar-compare
+compare_tbl <- tibble::tribble(
+  ~Feature,                   ~`Harlan Reservoir`,                    ~`Cedar Lake`,
+  "Survey period",            "April–October (7 months)",         "April–October (7 months)",
+  "Design type",              "Access-point (day-end)",                "Roving circuit (mid-trip)",
+  "Shift hours",              "8 hr / 6 hr (P1/P2)",                   "6 hr / 6 hr (equal)",
+  "CPUE estimator",           "Ratio-of-means (ROM)",                  "Mean-of-ratios (MOR)",
+  "Angler composition",
+    sprintf("%.0f%% boat (counts)", pct_boat_cnt),                     "~91% bank",
+  "Interview completion",
+    sprintf("%.0f%% complete", 100 * n_comp / n_int),                  "~29% complete",
+  "Primary species",          "White Bass, Walleye",                   "Bluegill, catfish, crappie",
+  "Season effort",
+    sprintf("~%s angler-hours", fmt_comma(eff_tot$estimates$estimate)), "~12,200 angler-hours",
+  "CPUE",
+    sprintf("%s fish/hr", fmt_rate(cpue_all$estimates$estimate)),       "~2.09 fish/hr",
+  "Effort CV",                fmt_pct(cv_eff),                         "~5.3%",
+  "Harvest CV",               fmt_pct(cv_harv),                        "~6.4%"
+)
+
+knitr::kable(compare_tbl, align = "lll",
+             caption = "Design and estimate comparison between Harlan Reservoir and Cedar Lake case studies.")
+```
+
+The estimator choice is the clearest difference. Harlan's access-point design produces `r fmt_pct(100 * n_comp / n_int)` completed trips; the ROM estimator is appropriate because every interview contributes a complete record. Cedar Lake's roving design produces ~29% complete trips; the MOR estimator is required because most contacts are mid-trip observations.
+
+Effort CV is actually higher at Harlan (`r fmt_pct(cv_eff)`) than at Cedar Lake (~5.3%) despite more sampled days. Harlan's boat-ramp count record has higher between-day variance: daily angler counts swing sharply with weather and season on a large reservoir, while Cedar Lake's shoreline walk-count is more stable on a smaller body of water. Survey design precision depends as much on the fishery's natural variability as on the number of sampled days.
+
+## Takeaway {#sec-harlan-takeaway}
+
+The Harlan Reservoir case study synthesizes the estimation chapters from Part IV into a single access-point pipeline. Three choices drive the analysis:
+
+**Access-point design → ratio-of-means.** Day-end interviews at the boat ramp capture departing parties with complete trip records. ROM divides total catch by total hours across the full interview set — the right estimator when trips are observed in their entirety. Choosing MOR instead would require treating each interview as an instantaneous rate observation, which is not appropriate when hours fished and total catch are both complete.
+
+**Period-asymmetric shifts → encode shift lengths before estimation.** A morning shift of eight hours and an afternoon shift of six hours require a named vector before counts are converted to angler-hours. Using a single constant would mismatch effort by up to 25% within each period and propagate that error into every downstream estimate scaled by effort.
+
+**Boat-dominant fishery → interpret angler-type CPUE with sample size.** Boat anglers account for `r fmt_pct(pct_boat_cnt)` of counted anglers but only `r fmt_pct(100 * mean(harlan_interviews$angler_type == "boat"))` of interviews. The design-based estimator handles this correctly — counts drive effort expansion, interviews drive rates — but the bank-angler CPUE sub-domain is based on only `r cpue_at$estimates$n[cpue_at$estimates$angler_type == "bank"]` completed trips. Always report the n alongside the estimate so readers can assess the stability of sub-domain contrasts.
+
+The season estimates — `r fmt_comma(eff_tot$estimates$estimate)` angler-hours, `r fmt_comma(harv_tot$estimates$estimate)` fish harvested, `r fmt_rate(cpue_all$estimates$estimate)` fish per angler-hour — all meet the 20% CV threshold. For a seven-month access-point survey with asymmetric period lengths and a multi-species catch record, that represents a cost-effective characterization of a diverse reservoir fishery.
+
+## Reproducibility note
+
+The Harlan Reservoir estimates in this chapter reproduce exactly given the same data files and package version:
+
+```{r}
+#| label: harlan-session
+cat("tidycreel:", as.character(packageVersion("tidycreel")), "\n")
+cat("R:         ", R.version$version.string, "\n")
+cat("Data seed: 2022 (set in data/harlan_*.rds generation)\n")
+```
+
+Save the design object alongside the source data to avoid rerunning the full pipeline for downstream reporting:
+
+```{r}
+#| label: harlan-save-design
+#| eval: false
+saveRDS(harlan_design, here("data/harlan_design_2022.rds"))
+```
+
+Loading the saved design restores the full stratum structure, counts, interview data, and catch table in a single call, ready for any subsequent `estimate_*()` call.
