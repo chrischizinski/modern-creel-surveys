@@ -419,7 +419,7 @@ Recording errors at the field level — wrong species codes, transposed digits i
 
 ### Species misidentification
 
-Angler-reported species identification is unreliable when species look alike, when anglers are targeting one species and incidentally catching another, or when field staff lack experience with local species assemblage. Page et al. (2012) estimated that species misidentification in an Ohio reservoir survey inflated catch estimates for some species by up to 386%. The effect on a total-catch estimate depends on whether misidentification is symmetric (random swaps between species) or directional (consistently misidentifying a less common species as a more common one).
+Angler-reported species identification is unreliable when species look alike, when anglers are targeting one species and incidentally catching another, or when field staff lack experience with local species assemblage. @page2012 estimated that species misidentification in an Ohio reservoir survey inflated catch estimates for some species by up to 386%. The effect on a total-catch estimate depends on whether misidentification is symmetric (random swaps between species) or directional (consistently misidentifying a less common species as a more common one).
 
 `standardize_species()` detects codes that do not match the AFS species list, which catches typographical errors and nonstandard abbreviations. It does not catch biologically plausible misidentifications — a Walleye recorded as a Sauger, or a White Bass recorded as a Striped Bass. Those require species-specific diagnostic plots and cross-checking with electrofishing or netting records if they are available.
 

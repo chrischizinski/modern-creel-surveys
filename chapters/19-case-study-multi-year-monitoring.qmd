@@ -250,8 +250,8 @@ population without immediately replacing it. By 2022, CPUE had recovered to
 `r round(harlan_annual$cpue_est[harlan_annual$year == 2022], 3)` fish/hr, and
 by 2023 to
 `r round(harlan_annual$cpue_est[harlan_annual$year == 2023], 3)` fish/hr.
-The 2022 estimate from Chapter 18 — produced by the full single-year pipeline —
-falls directly on this trajectory, confirming that the 2022 access-point survey
+The 2022 estimate from the access-point case study (@sec-harlan-takeaway) — produced
+by the full single-year pipeline — falls directly on this trajectory, confirming that the 2022 access-point survey
 results are consistent with the broader monitoring trend.
 
 ## Walleye harvest trends {#sec-monitoring-harvest}
@@ -303,7 +303,7 @@ Post-regulation harvests of
 `r round(harlan_annual$harvest_est[harlan_annual$year == 2022])` and
 `r round(harlan_annual$harvest_est[harlan_annual$year == 2023])` fish in 2022
 and 2023, respectively, represent a partial recovery from the 2021 low but remain
-`r round((1 - mean(after$harvest_est) / mean(before$harvest_est)) * 100)`% below
+`r round((1 - harv_con$after / harv_con$before) * 100)`% below
 the pre-regulation weighted mean. Fish that previously would have been retained at
 305–380 mm are now being released, keeping more individuals in the population to
 grow toward the 381 mm minimum and eventually beyond.
@@ -522,7 +522,7 @@ composition of the catch.
 
 **Harvest decreased substantially and has remained lower post-regulation.**
 Estimated harvest fell roughly
-`r round((1 - mean(after$harvest_est) / mean(before$harvest_est)) * 100)`%
+`r round((1 - harv_con$after / harv_con$before) * 100)`%
 from the pre-regulation weighted mean
 (`r round(harv_con$before, 1)` fish) to the post-regulation weighted mean
 (`r round(harv_con$after, 1)` fish). This reduction is statistically significant
@@ -569,8 +569,8 @@ confirming that the changes in CPUE and harvest reflect population dynamics rath
 than shifts in angler behavior.
 
 From a workflow standpoint, this chapter connects three elements: the single-year
-pipeline from Chapter 18 (the 2022 estimates sit on the same trajectory as the
-monitoring series), the method introductions from @sec-trend-why through
+pipeline from the access-point case study (@sec-harlan-takeaway; the 2022 estimates sit
+on the same trajectory as the monitoring series), the method introductions from @sec-trend-why through
 @sec-trend-design, and the management context that motivates the analysis. The
 distinction between a methods chapter and a case study chapter is emphasis: here
 the goal is to answer a specific management question — did the regulation work? —

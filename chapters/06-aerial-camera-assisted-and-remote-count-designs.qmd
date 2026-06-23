@@ -534,9 +534,9 @@ n = 1. That is a toy-data artifact: real pilot seasons with 20–30 operational
 days per stratum usually provide enough spread in ingress counts to make the
 calculation informative. Treat the output as a minimum sample-size target for
 each stratum, not as a precise optimum. `creel_n_camera()` also emits a warning
-when the pilot falls below the empirical minimum recommended by Feltz–
-Middaugh (2025); that warning is suppressed here because the example data
-intentionally fall below it.
+when the pilot falls below the empirical minimum recommended by @feltz2025;
+that warning is suppressed here because the example data intentionally fall
+below it.
 
 ## Proxy counts and validation {#sec-proxy}
 
