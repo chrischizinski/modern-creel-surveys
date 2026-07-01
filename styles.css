@@ -9,9 +9,6 @@
   --book-surface: rgba(255, 255, 255, 0.86);
 }
 
-body {
-  color: var(--book-ink);
-}
 
 a {
   color: var(--book-accent);
@@ -138,6 +135,53 @@ a:hover {
 .book-cta:hover {
   color: #fff;
   background: #304b45;
+}
+
+.book-cta-secondary {
+  margin-left: 0.75rem;
+  background: transparent;
+  color: var(--book-accent);
+  border: 1px solid var(--book-accent);
+}
+
+.book-cta-secondary:hover {
+  color: #fff;
+  background: var(--book-accent);
+}
+
+@media (max-width: 576px) {
+  .book-cta-secondary {
+    margin-left: 0;
+  }
+}
+
+[data-bs-theme="dark"] {
+  --book-ink: #dce6eb;
+  --book-muted: #9cadb8;
+  --book-accent: #7ab5a8;
+  --book-accent-soft: rgba(63, 95, 87, 0.22);
+  --book-surface: rgba(28, 38, 44, 0.88);
+  --book-border: rgba(120, 180, 170, 0.18);
+}
+
+[data-bs-theme="dark"] .book-hero {
+  background:
+    linear-gradient(180deg, rgba(32, 44, 52, 0.94), rgba(22, 32, 38, 0.97)),
+    linear-gradient(135deg, rgba(63, 95, 87, 0.14), transparent 60%);
+}
+
+[data-bs-theme="dark"] .book-pill {
+  background: rgba(63, 95, 87, 0.28);
+  border-color: rgba(120, 180, 170, 0.22);
+  color: #7ab5a8;
+}
+
+[data-bs-theme="dark"] .book-card {
+  background: var(--book-surface);
+}
+
+[data-bs-theme="dark"] .book-note {
+  background: rgba(63, 95, 87, 0.14);
 }
 
 .book-note {

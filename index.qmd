@@ -5,11 +5,20 @@ toc: false
 ---
 
 ::: {.book-hero}
-## A methods-first book for creel survey analysis
 
-This book guides readers through modern creel survey analysis in R. It is designed as a companion to `tidycreel`, but it is broader than a package manual.
+## Overview
 
-The emphasis is on design-based reasoning, clear estimands, data structure, uncertainty, and interpretation that stays within the covered domain.
+*Modern Creel Survey Analysis in R* guides readers through contemporary approaches to creel survey analysis using R. The book is designed as a companion to [`tidycreel`](https://chrischizinski.github.io/tidycreel/), but it is broader than a package manual. Rather than documenting functions one at a time, it focuses on the practical and statistical reasoning needed to move from creel survey data to defensible estimates.
+
+Creel surveys occupy a challenging space between field logistics, survey design, data management, statistical estimation, and management reporting. Analysts often work with data collected under real-world conditions: changing access patterns, incomplete interviews, variable trip lengths, stratified sampling designs, nonresponse, and reporting deadlines. This book treats those complications as part of the analysis, not as distractions from it.
+
+The emphasis is on design-based reasoning, clear estimands, reproducible data structures, transparent uncertainty estimation, and interpretation that stays within the domain actually covered by the survey design. Throughout the book, estimation is framed around a simple question: *what quantity are we trying to estimate, for what population, over what domain, and under what sampling design?*
+
+The book is intended for analysts, managers, students, and reviewers who need to understand how creel estimates are produced and how they should be interpreted. It is especially aimed at readers who need to connect field data to estimates of angler effort, catch, harvest, trip characteristics, catch rates, harvest rates, and related quantities.
+
+Because this is a methods-first book, examples emphasize workflow, assumptions, diagnostics, and interpretation. Code is included where it helps clarify an analysis, but the goal is not simply to show how to run a function. The goal is to make analytical decisions visible enough that they can be checked, reproduced, revised, and explained.
+
+[`tidycreel`](https://chrischizinski.github.io/tidycreel/) provides the computational framework for many of the workflows described here. Some tasks are currently supported directly by package functions; others require partial package support, manual analyst decisions, or future development. The book makes those distinctions explicit so readers can understand what is automated, what still requires judgment, and where the package is expected to grow.
 
 ::: {.book-pill-row}
 <span class="book-pill">Quarto book</span>
@@ -18,49 +27,14 @@ The emphasis is on design-based reasoning, clear estimands, data structure, unce
 <span class="book-pill">Companion to tidycreel</span>
 :::
 
-<a class="book-cta" href="preface.html">Start with the Preface</a>
 :::
 
-## What to expect
+## License
 
-::: {.book-grid}
-::: {.book-card}
-### Front matter
-Orientation pages that explain the book's scope and reading path.
-:::
+This book is licensed under the [Creative Commons Attribution 4.0 International License](http://creativecommons.org/licenses/by/4.0/).
 
-::: {.book-card}
-### Part-based structure
-Foundations, survey designs, data structures, estimation, and case studies.
-:::
+<a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener"><img src="https://i.creativecommons.org/l/by/4.0/88x31.png" alt="Creative Commons Attribution 4.0 International License" style="border:none;display:inline-block;"/></a>
 
-::: {.book-card}
-### Consistent chapter pattern
-Each chapter states its purpose, key ideas, support status, and example focus.
-:::
+You are free to share and adapt the material for any purpose, provided appropriate credit is given to the author. Please cite the book as:
 
-::: {.book-card}
-### Online-first layout
-The site is structured as a Quarto book, with the cover, parts, and chapter navigation visible in the rendered site.
-:::
-:::
-
-## Start here
-
-Begin with the Preface, then read the Foundations section in order.
-
-If you already know the background, you can move directly to the design chapters that match your survey type.
-
-::: {.book-note}
-The online layout is intentionally Quarto-native. It is designed to feel like a published book site with clear front matter, grouped parts, and a clean reading path.
-:::
-
-## Book layout
-
-This site is organized into these parts:
-
-- Foundations
-- Survey Designs
-- Data Structures and Validation
-- Estimation and Reporting
-- Case Studies
+Chizinski, C. 2026. *Modern Creel Survey Analysis in R: Design, Estimation, Diagnostics, and Reporting with tidycreel*.

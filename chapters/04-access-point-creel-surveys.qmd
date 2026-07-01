@@ -313,7 +313,7 @@ The *ratio-of-means* divides total catch across all parties by total effort acro
 
 $$\hat{R}_{ROM} = \frac{\sum_{k=1}^{m} c_k}{\sum_{k=1}^{m} e_k} = \frac{\bar{c}}{\bar{e}}$$
 
-The mean-of-ratios has two practical deficiencies. First, parties with very short trips ($e_k \approx 0$) produce extreme or undefined ratios that dominate the mean. Second, it weights each party equally regardless of how long they fished — a party that fished 30 minutes counts the same as a party that fished 8 hours. This makes the mean-of-ratios sensitive to the composition of trip lengths in the sample in a way that does not reflect the underlying angler population.
+The mean-of-ratios approach has two practical deficiencies. First, parties with very short trips, where ($e_k \approx 0$), can produce extreme or undefined ratios that dominate the average. Second, because each party receives equal weight, a 30-minute trip contributes as much to the estimate as an 8-hour trip. This makes the estimator sensitive to the distribution of trip lengths in the sample, whereas a ratio-of-means estimator weights observations implicitly by fishing effort and is therefore less affected by short, low-effort trips.
 
 The ratio-of-means avoids both problems. Short trips contribute proportionally small weight to the denominator. Parties with zero catch but nonzero effort do not cause computational problems. And the estimator is equivalent to a weighted average of individual catch rates, with each party weighted by its contribution to total effort — which is the natural weighting for a rate defined per unit of effort [@hoenig1997].
 

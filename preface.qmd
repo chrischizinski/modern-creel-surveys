@@ -2,20 +2,30 @@
 title: "Preface"
 ---
 
-## Why this book exists
+# 2 Preface
 
-Creel analysis often sits between field operations, messy data, and annual reporting deadlines. This book is intended to make that work more explicit, more reproducible, and easier to review.
+## 2.1 Why this book exists
 
-## What this book is not
+Creel analysis often sits between field operations, messy data, and annual reporting deadlines. Field crews collect data under real-world constraints. Analysts inherit incomplete records, irregular sampling designs, inconsistent coding decisions, and pressure to produce defensible estimates. Managers then need results that are transparent enough to explain, review, and use in decision-making.
 
-It is not a package reference manual, a survey sampling textbook, or a broad fisheries methods handbook. It is a methods-first guide to the creel problems that `tidycreel` is meant to support.
+This book is intended to make that work more explicit, more reproducible, and easier to review. It focuses on the practical decisions that arise when turning creel survey data into estimates of effort, catch, harvest, trip characteristics, and uncertainty. The goal is not only to show how analyses can be conducted, but also to clarify the assumptions, data structures, and workflow choices that make those analyses defensible.
 
-## Working convention
+## 2.2 What this book is not
 
-Throughout the book, each chapter distinguishes among:
+This book is not a package reference manual. Function documentation belongs in the package help files, examples, and vignettes.
 
-- conceptual guidance
-- current `tidycreel` support
-- partial support
-- manual workflow steps
-- future development opportunities
+It is also not a survey sampling textbook. Many of the methods discussed here draw on survey sampling principles, but the focus is on applying those principles to common creel survey problems rather than developing the full statistical theory behind them.
+
+Finally, this book is not a broad fisheries methods handbook. It does not attempt to cover all aspects of fisheries assessment, monitoring, or management. Instead, it is a methods-first guide to the creel problems that `tidycreel` is meant to support.
+
+## 2.3 Working convention
+
+Throughout the book, each chapter distinguishes among four kinds of material:
+
+- **Conceptual guidance** explains the creel problem, the relevant assumptions, and the logic behind the recommended workflow.
+- **Current `tidycreel` support** identifies tasks that can already be handled directly with package functions.
+- **Partial support** describes tasks where `tidycreel` provides some structure, helper functions, or intermediate outputs, but where additional analyst judgment is still required.
+- **Manual workflow steps** identify tasks that currently require custom code, external tools, or documented analyst decisions.
+- **Future development opportunities** highlight places where additional package functionality, clearer data standards, or expanded examples would improve the workflow.
+
+This distinction is intentional. Creel analysis often combines formal estimation, data cleaning, field-specific judgment, and reporting conventions. Separating these pieces makes it easier to understand what the package currently does, what the analyst must still decide, and where future development could make the workflow more complete.

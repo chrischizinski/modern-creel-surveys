@@ -4,15 +4,24 @@ project:
 book:
   title: "Modern Creel Survey Analysis in R"
   subtitle: "Design, estimation, diagnostics, and reporting with tidycreel"
-  author: "TBD"
+  author:
+    - name: "Christopher Chizinski"
+      affiliation: "University of Nebraska–Lincoln"
+      url: "https://humandimensions.unl.edu/"
   cover-image: images/tidy_creel_cover.png
   cover-image-alt: "Cover image for Modern Creel Survey Analysis in R, showing a stylized glowing fish on a dark background."
   favicon: images/tidycreel-favicon.svg
+  site-url: "https://chrischizinski.github.io/modern-creel-survey-analysis/"
+  repo-url: "https://github.com/chrischizinski/modern-creel-survey-analysis"
+  repo-actions: [edit, issue]
+  sharing: [twitter, facebook, linkedin]
+  downloads: [pdf]
   chapters:
     - index.qmd
     - preface.qmd
     - acknowledgments.qmd
     - using-code-examples.qmd
+
     - part: Foundations
       chapters:
         - chapters/01-why-creel-surveys-matter.qmd
@@ -60,6 +69,18 @@ book:
 bibliography: references.bib
 csl: transactions-of-the-american-fisheries-society.csl
 
+license: "CC BY 4.0"
+copyright: "Copyright 2026 Christopher Chizinski"
+
+citation:
+  type: book
+  title: "Modern Creel Survey Analysis in R"
+  author:
+    - family: Chizinski
+      given: Christopher
+  issued: 2026
+  url: "https://chrischizinski.github.io/modern-creel-survey-analysis/"
+
 format:
   html:
     theme:
@@ -68,6 +89,15 @@ format:
     css: styles.css
     metadata:
       image: images/tidy_creel_cover.png
+      description: "A methods-first Quarto book on design-based creel survey analysis with tidycreel."
+      author: "Christopher Chizinski"
+      keywords:
+        - creel survey
+        - fisheries
+        - design-based inference
+        - R
+        - tidycreel
+        - Quarto
     toc: true
     toc-title: "On this page"
     toc-depth: 3
@@ -87,7 +117,11 @@ format:
     highlight-style: arrow
 
 website:
-  open-graph: true
+  open-graph:
+    title: "Modern Creel Survey Analysis in R"
+    description: "A methods-first Quarto book on design-based creel survey analysis with tidycreel."
+    image: images/tidy_creel_cover.png
+    site-name: "Modern Creel Survey Analysis in R"
   twitter-card:
     image: images/tidy_creel_cover.png
     title: "Modern Creel Survey Analysis in R"
