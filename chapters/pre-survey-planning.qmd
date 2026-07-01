@@ -770,11 +770,15 @@ season begins, rather than a post-hoc reckoning with an inadequate estimate.
 | `reallocate_strata()` | Neyman-optimal allocation across strata given a fixed day budget |
 | `creel_power()` | Power to detect a fractional CPUE change |
 | `generate_schedule()` | Stratified random sampling calendar |
+| `generate_progressive_start()` | Randomised circuit start times for progressive count surveys (discrete or wraparound strategy); avoids the U[0, T − τ] mid-day bias error per Hoenig et al. [-@hoenig1993] |
 
 All functions that take stratum-level arguments expect named vectors. Names must
 match across `N_h`, `ybar_h`, and `s2_h`; mismatched names will produce an error.
 The output of `generate_schedule()` is a `creel_schedule` object that passes
-directly to `creel_design()` without further transformation.
+directly to `creel_design()` without further transformation. For roving surveys
+using progressive counts, `generate_progressive_start()` produces a companion
+table of circuit start times and travel directions to be recorded in the field
+protocol alongside the schedule.
 
 ## Takeaway {#sec-ps-takeaway}
 
@@ -783,7 +787,9 @@ Pre-survey planning converts management objectives into field commitments.
 question; `reallocate_strata()` distributes days optimally across strata;
 `creel_power()` tests whether the planned effort is sufficient to detect
 biologically important changes; and `generate_schedule()` turns the numerical
-targets into a concrete field calendar.
+targets into a concrete field calendar. For roving surveys that use progressive
+counts, `generate_progressive_start()` schedules unbiased circuit start times
+from the randomised pool defined by the survey period and circuit time.
 
 The Harlan example illustrates a realistic planning sequence: 45 sampling days
 under Neyman allocation (37 weekday, 9 weekend) will achieve approximately 15% CV

@@ -212,7 +212,7 @@ interviews <- fetch_interviews(conn)
 interviews
 ```
 
-The returned data frame has canonical column names (`interview_uid`, `date`, `catch_count`, `effort`, `trip_status`) regardless of what the agency CSV called them.
+The returned data frame has canonical column names (`interview_uid`, `date`, `effort`, `trip_status`) regardless of what the agency CSV called them. If the agency schema includes a `catch_count_col` mapping, a `catch_count` column is also returned; otherwise catch totals come from `fetch_catch()` (see below). For the NGPC REST API backend, catch is in a separate endpoint (`GetCatchData`) and is never present in the interviews table — use `fetch_catch()` to retrieve it.
 
 ### fetch_counts()
 

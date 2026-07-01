@@ -431,7 +431,7 @@ This calculation uses the bin midpoint as a representative length for all fish i
 
 ## `tidycreel` support {#sec-bio-support}
 
-`tidycreel` supports the full biological estimation workflow through eight functions:
+`tidycreel` supports the full biological estimation workflow through ten functions:
 
 | Function | Purpose |
 |---|---|
@@ -443,8 +443,40 @@ This calculation uses the bin midpoint as a representative length for all fish i
 | `est_mean_length()` | Design-weighted mean length from a `creel_length_distribution` object; ratio estimator with delta-method SE |
 | `est_compliance()` | Design-weighted size-limit compliance proportion; bins at or above `min_length` classified as legal |
 | `est_biomass()` | Total biomass from a `creel_length_distribution` object via $W = aL^b$; delta-method CI |
+| `est_age_distribution()` | Design-weighted age-frequency with SE and 95% CI from an `add_ages()` object; produces `creel_age_distribution` |
+| `est_mean_age()` | Design-weighted mean age from a `creel_age_distribution` object; ratio estimator with delta-method SE |
 
-The workflow for length data is: `add_lengths()` → `est_length_distribution()` → `est_mean_length()` / `est_compliance()` / `est_biomass()`. For age data, `add_ages()` follows the same pattern as `add_lengths()`, storing the age records in `design$ages` for downstream analysis.
+The workflow for length data is: `add_lengths()` → `est_length_distribution()` → `est_mean_length()` / `est_compliance()` / `est_biomass()`. The workflow for age data mirrors it exactly: `add_ages()` → `est_age_distribution()` → `est_mean_age()`. The following example uses the `tidycreel` package's built-in `example_ages` dataset; field programs that collect otolith or scale ages follow the same pipeline with their own age tables.
+
+```{r}
+#| label: bio-age-distribution
+data(example_calendar)
+data(example_interviews)
+data(example_ages)
+
+design_age <- creel_design(example_calendar, date = date, strata = day_type) |>
+  add_interviews(example_interviews,
+    catch = catch_total, effort = hours_fished, harvest = catch_kept,
+    trip_status = trip_status
+  ) |>
+  add_ages(example_ages,
+    age_uid      = interview_id,
+    interview_uid = interview_id,
+    species      = species,
+    age          = age,
+    age_type     = age_type
+  )
+
+ad <- est_age_distribution(design_age, by = species, type = "harvest")
+ad
+```
+
+```{r}
+#| label: bio-mean-age
+est_mean_age(ad)
+```
+
+The `creel_age_distribution` object returned by `est_age_distribution()` has the same structure as `creel_length_distribution`: one row per age class (with grouping columns when `by` is supplied), plus `estimate`, `se`, `ci_lower`, `ci_upper`, `percent`, and `cumulative_percent`. `est_mean_age()` returns the ratio-estimated mean age and its delta-method standard error.
 
 One gap remains without automated support: **exploitation rate by size class**, which requires combining creel harvest estimates with population abundance from an independent survey (electrofishing or gill-netting). That calculation is not automated because the abundance denominator comes from outside `tidycreel`'s scope. The key principle for analysts who need it is the same as for the functions above: express the biological quantity as an interview-level observation, attach it to the design, and let the stratified estimator propagate uncertainty.
 
@@ -471,4 +503,4 @@ At Harlan Reservoir, the design-weighted Walleye harvest compliance estimate was
 
 @sec-uncertainty-anatomy covers precision diagnostics for effort and catch-rate estimates; the same CV-based framework applies to length distribution estimates, where the coefficient of variation on key bins (the sublegal fraction, the modal bin) is the natural precision target for planning biological subsampling intensity in future seasons.
 
-The biological estimation workflow adds one step to the standard pipeline — `add_lengths()` after `add_interviews()` — and unlocks the full suite of biological summary functions. The complete sequence from linked tables to design-weighted compliance, mean length, and biomass requires no additional packages beyond `tidycreel` and `tidyverse`.
+The biological estimation workflow adds one or two steps to the standard pipeline — `add_lengths()` for size data, `add_ages()` for age data, each placed after `add_interviews()` — and unlocks the full suite of biological summary functions. The complete sequence from linked tables to design-weighted compliance, mean length, biomass, age distribution, and mean age requires no additional packages beyond `tidycreel` and `tidyverse`.

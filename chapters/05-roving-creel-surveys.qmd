@@ -593,13 +593,14 @@ Understanding these constraints is not an argument against roving surveys. It is
 - `estimate_catch_rate(estimator = "mean-of-ratios", truncate_at = 0.5)` — MOR with Hoenig truncation for incomplete trips
 - `validate_incomplete_trips()` — diagnostic checks on roving interview sample quality
 - `summarize_trips()` — tabulation of interview sample by trip status and stratum
-- `compute_effort()` — effort from instantaneous or progressive counts
+- `compute_effort()` — effort from interview timestamps (trip start to interview time); used inside `prep_interviews_trips()`
 - `audit_strata()` — checks that count and interview strata are compatible before estimation
+- Progressive count effort estimation — fully supported via `add_counts(count_type = "progressive", circuit_time = 2, period_length_col = shift_hours)`, where `circuit_time` is the route traversal time τ in hours and `period_length_col` names the column holding shift duration T_d; κ = T_d / τ is computed internally following the Hoenig et al. [-@hoenig1993] estimator
+- `generate_progressive_start()` — schedules randomised circuit start times (discrete or wraparound strategy) per Hoenig et al. [-@hoenig1993]; avoids the U[0, T − τ] mid-day bias error common in manual scheduling
 
 **Partially supported:**
 
 - Combined access-point and roving designs — `prep_interviews_trips()` handles both in a single call; stratum-specific estimator selection is manual in the current version
-- Progressive count effort estimation — the data structure is supported; the formula for progressive-count effort requires specifying route traversal time, handled via `compute_effort()` with explicit `method = "progressive"` argument
 
 **Manual or conceptual:**
 
