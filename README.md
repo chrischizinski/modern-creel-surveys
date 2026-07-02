@@ -1,9 +1,9 @@
 # Modern Creel Survey Analysis in R
 
 <p align="center">
-  <img src="images/tidy_creel_cover.png" width="220" alt="Modern Creel Survey Analysis in R cover"/>
+  <img src="images/tidy_creel_cover.png" width="242" alt="Modern Creel Survey Analysis in R cover"/>
   &nbsp;&nbsp;&nbsp;
-  <img src="images/tidycreel-hex.png" width="220" alt="tidycreel hex sticker"/>
+  <img src="images/tidycreel-hex.png" width="160" alt="tidycreel hex sticker"/>
 </p>
 
 **Design, estimation, diagnostics, and reporting with `tidycreel`**
