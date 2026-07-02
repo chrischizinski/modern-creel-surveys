@@ -1,92 +1,42 @@
-# modern-creel-surveys
+# Modern Creel Survey Analysis in R
 
-Planning and documentation workspace for a methods-first book companion to the `tidycreel` R package.
+<img src="images/tidy_creel_cover.png" align="right" width="200" alt="Modern Creel Survey Analysis in R cover"/>
+<img src="images/tidycreel-favicon.svg" width="80" alt="tidycreel logo"/>
 
-## What this repo is for
+**Design, estimation, diagnostics, and reporting with `tidycreel`**
 
-This repository is the architectural and planning home for a book titled:
+*Modern Creel Survey Analysis in R* guides readers through contemporary approaches to creel survey analysis using R. The book is a companion to [`tidycreel`](https://chrischizinski.github.io/tidycreel/), but it is broader than a package manual. Rather than documenting functions one at a time, it focuses on the practical and statistical reasoning needed to move from creel survey data to defensible estimates.
 
-**Modern Creel Survey Analysis in R**  
-*Design, estimation, diagnostics, and reporting with `tidycreel`*
+## What this book covers
 
-The goal is to teach the methods and workflow behind creel survey analysis, not to serve as a package manual.
+Creel surveys occupy a challenging space between field logistics, survey design, data management, statistical estimation, and management reporting. This book treats real-world complications — changing access patterns, incomplete interviews, variable trip lengths, stratified sampling designs, nonresponse — as part of the analysis, not as distractions from it.
 
-## Repository layout
+Estimation is framed around a simple question: *what quantity are we trying to estimate, for what population, over what domain, and under what sampling design?*
 
-- `.ai/`: stable architecture notes and handoffs
-- `.planning/`: active roadmap, chapter outline, and current state
-- `chapters/`: Quarto chapter stubs for the book source
-- `index.qmd`: book landing page
-- `preface.qmd`: introductory front matter
-- `_quarto.yml`: Quarto book configuration
+Topics include:
 
-## Working principles
+- Survey design: access-point, roving, aerial, and camera-assisted surveys
+- Stratification and allocation strategies
+- Bias, failure modes, and diagnostics
+- Data structure: creel data as linked relational tables
+- Effort, catch, harvest, CPUE, and release estimation
+- Uncertainty quantification and precision reporting
+- Interpretation and management reporting
+- Multi-year monitoring and trend detection
+- Case studies using Harlan Reservoir data
 
-- Methods first, software second
-- Explicit assumptions over hidden defaults
-- Relational data model over one-flat-spreadsheet thinking
-- Honest support status for package features
-- Reproducible, reviewable examples
+## Who this is for
 
-## Current status
+Analysts, managers, students, and reviewers who need to understand how creel estimates are produced and how they should be interpreted. Especially aimed at readers connecting field data to defensible estimates of angler effort, catch, harvest, trip characteristics, and catch rates.
 
-The repo now has:
+## Built with
 
-- a stable architecture brief
-- a chapter-level roadmap
-- a Quarto book scaffold
-- a README describing how the pieces fit together
+- [Quarto](https://quarto.org/) book format
+- [`tidycreel`](https://chrischizinski.github.io/tidycreel/) R package
+- `tidyverse` (dplyr, tidyr, ggplot2, purrr)
 
-## Next steps
+## License
 
-1. Add chapter content incrementally, starting with the foundations.
-2. Decide which examples should be synthetic versus real data.
-3. Fill in the `tidycreel` support-status notes as the package shape becomes clearer.
+[Creative Commons Attribution 4.0 International](http://creativecommons.org/licenses/by/4.0/)
 
-## Book rewrite adapter
-
-This repo now includes a small book-local adapter prototype for handing `.qmd`
-chapters off to `co-researcher-service` while preserving Quarto structure.
-
-Example dry run:
-
-```bash
-python3 scripts/book_rewrite_adapter.py chapters/01-why-creel-surveys-matter.qmd \
-  --dry-run \
-  --output /tmp/why-creel-surveys.rewritten.qmd
-```
-
-If the sibling `research-bench/co-researcher-service` checkout is present, the
-adapter will try to use it automatically for rewrite runs unless you provide a
-custom `--rewrite-command`.
-
-Convenience `just` commands:
-
-```bash
-just rewrite-chapter-dry-run chapters/01-why-creel-surveys-matter.qmd
-just rewrite-chapter-openrouter chapters/02-estimands-units-and-domains.qmd --output /tmp/estimands.qmd
-just rewrite-chapters-dry-run chapters/01-why-creel-surveys-matter.qmd chapters/02-estimands-units-and-domains.qmd --output-dir /tmp/creel-drafts
-just rewrite-chapters-openrouter chapters/01-why-creel-surveys-matter.qmd chapters/02-estimands-units-and-domains.qmd --output-dir /tmp/creel-drafts
-just rewrite-foundations-dry-run --output-dir /tmp/creel-foundations
-just rewrite-foundations-openrouter --output-dir /tmp/creel-foundations
-just expand-chapter-gemini chapters/01-why-creel-surveys-matter.qmd --output /tmp/why-creel-expand.qmd
-just expand-chapters-gemini chapters/01-why-creel-surveys-matter.qmd chapters/02-estimands-units-and-domains.qmd --output-dir /tmp/creel-expand
-just expand-foundations-gemini --output-dir /tmp/creel-foundations-expand
-```
-
-For freeform expansion, the adapter uses the local `.ai/expansion-contract.md`
-prompt contract and runs a draft pass followed by a polish pass by default.
-These expansion recipes now prefer the installed `gemini` CLI and fall back to
-`agy` if needed, so they use your CLI login/session instead of the OpenRouter
-API path. They use the CLI's configured default model unless you pass an
-explicit `--writer-model` override. You can pass `--brief path/to/brief.md` to
-expand from a chapter brief or outline file instead of only the Quarto chapter
-text, and `--no-polish` if you want to keep only the draft pass.
-
-The expansion path now applies a conservative Quarto formatting cleanup before
-writing the final draft. If you want to run that step separately, use
-`python3 scripts/quarto_cleanup.py path/to/file.qmd --validate-render` to write
-a cleaned sibling file and verify it with Quarto render. When the cleaned draft
-contains `[AUTHOR YEAR]` placeholders, the cleanup step also writes a paired
-`*_citation_suggestions.md` sidecar by calling the sibling
-`co-researcher-service` workflow.
+Chizinski, C. 2026. *Modern Creel Survey Analysis in R: Design, Estimation, Diagnostics, and Reporting with tidycreel*.
