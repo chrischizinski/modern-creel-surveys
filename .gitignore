@@ -24,3 +24,10 @@ chapters/*.expanded*
 chapters/*.expanded.cleaned*
 chapters/*.html
 chapters/*_files/
+
+# Dev tooling — not needed for book on GitHub
+scripts/
+tests/
+justfile
+.Rhistory
+**/.Rhistory
