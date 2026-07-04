@@ -4,8 +4,16 @@ title: "Acknowledgments"
 
 ## Acknowledgments
 
-This page will acknowledge collaborators, reviewers, and the people whose field and analysis work shaped the book.
+# Acknowledgments
 
-## Site role
+This book, and the [`tidycreel`](https://github.com/chrischizinski/tidycreel) package that supports it, have been a long time in the making. Creel surveys have been part of our work since 2009, when the [Nebraska Angler Survey Project](https://humandimensions.unl.edu/nebraska-creel-project/) officially began at the University of Nebraska–Lincoln in collaboration with Dr. Kevin Pope and the Nebraska Game and Parks Commission. Chris joined the project in 2010, and much of what became this book grew out of that long-running effort to turn field-collected creel data into estimates that agencies could use and trust.
 
-In a polished online book, this kind of page helps create the same front-matter rhythm you see in books like `tmwr`, `Advanced R`, and `R for Data Science`.
+Much of the code behind `tidycreel` began with a very practical need: translating a large and highly customized body of SAS code into a more flexible R workflow. The original SAS code, written by Brad Newcomb, carried with it an enormous amount of accumulated knowledge about Nebraska’s creel survey program. The goal was not simply to move the code from SAS to R, but to preserve the logic, assumptions, and practical experience embedded in that work while making the workflow easier to adapt, inspect, and extend.
+
+For many years, we had talked about generalizing that work so it could be useful beyond Nebraska and not tied too closely to one agency’s specific way of doing things. The growth of the [tidyverse](https://www.tidyverse.org/), [tidymodels](https://www.tidymodels.org/), and the [`survey` package](https://cran.r-project.org/package=survey) helped make that possible. Those tools gave us a foundation for moving from a project-specific workflow toward a more general framework for creel survey design, estimation, diagnostics, and reporting.
+
+We are grateful to Kevin Pope, Brad Newcomb, Keith Hurley, and everyone associated with the Nebraska Angler Survey Project, including Nebraska Game and Parks Commission biologists, creel coordinators, creel clerks, graduate students, postdocs, research assistant professors, staff, and collaborators. Their work shaped the foundation of this project. Their efforts also reflect the kind of sustained, applied monitoring work that makes fisheries management possible.
+
+We also thank the students, colleagues, agency partners, and fisheries professionals who asked questions, tested code, found errors, suggested improvements, and pushed us to explain things more clearly. Many parts of this book were sharpened through classroom discussions, lab meetings, workshops, manuscript reviews, and practical conversations about what analysts and managers actually need from creel survey data.
+
+Any errors, omissions, awkward explanations, or stubbornly confusing sections that remain are our own.
