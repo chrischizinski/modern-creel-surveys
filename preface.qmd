@@ -2,15 +2,13 @@
 title: "Preface"
 ---
 
-# 2 Preface
-
-## 2.1 Why this book exists
+## Why this book exists
 
 Creel analysis often sits between field operations, messy data, and annual reporting deadlines. Field crews collect data under real-world constraints. Analysts inherit incomplete records, irregular sampling designs, inconsistent coding decisions, and pressure to produce defensible estimates. Managers then need results that are transparent enough to explain, review, and use in decision-making.
 
 This book is intended to make that work more explicit, more reproducible, and easier to review. It focuses on the practical decisions that arise when turning creel survey data into estimates of effort, catch, harvest, trip characteristics, and uncertainty. The goal is not only to show how analyses can be conducted, but also to clarify the assumptions, data structures, and workflow choices that make those analyses defensible.
 
-## 2.2 What this book is not
+## What this book is not
 
 This book is not a package reference manual. Function documentation belongs in the package help files, examples, and vignettes.
 
@@ -18,7 +16,7 @@ It is also not a survey sampling textbook. Many of the methods discussed here dr
 
 Finally, this book is not a broad fisheries methods handbook. It does not attempt to cover all aspects of fisheries assessment, monitoring, or management. Instead, it is a methods-first guide to the creel problems that `tidycreel` is meant to support.
 
-## 2.3 Working convention
+## Working convention
 
 Throughout the book, each chapter distinguishes among four kinds of material:
 

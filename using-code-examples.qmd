@@ -2,10 +2,50 @@
 title: "Using Code Examples"
 ---
 
-## Draft placeholder
+## How to read the examples
 
-This page describes how to run the examples, what packages are required, and how to read the code blocks in the rendered book.
+Most chapters include runnable R code interleaved with the explanation. Code
+blocks show the call, and the output shown below each block is the actual result
+of running it against the book's example data. Where a block builds on an
+earlier one, the objects it depends on were created earlier in the same chapter.
 
-## Site role
+The book favors clarity over brevity: intermediate objects are usually named and
+inspected rather than chained into a single unbroken pipeline, so that each step
+in an analysis is visible and can be checked.
 
-This page shows readers how to use the examples, what the code blocks assume, and where the examples fit in the workflow.
+## What the examples assume
+
+The examples use only two families of packages:
+
+- [`tidycreel`](https://chrischizinski.github.io/tidycreel/) — the companion
+  package that provides the creel-specific design objects, estimators,
+  diagnostics, and plotting helpers.
+- The [tidyverse](https://www.tidyverse.org/) — `dplyr`, `tidyr`, `ggplot2`,
+  `purrr`, `stringr`, `forcats`, `lubridate`, and `here` for general data
+  manipulation and graphics.
+
+A typical chapter begins by loading these:
+
+```{r}
+#| eval: false
+library(tidycreel)
+library(tidyverse)
+```
+
+No other packages are required to reproduce the analyses.
+
+## Where the data comes from
+
+The running examples use a small set of example datasets — most prominently the
+Harlan Reservoir survey — distributed with the book in `data/` or bundled with
+`tidycreel`. The datasets, their structure, and the assumptions behind them are
+described in the [Data Notes](appendices/02-data-notes.qmd) appendix. Notation
+used across chapters is collected in [Notation and Symbols](appendices/01-notation.qmd).
+
+## Running the code yourself
+
+To run the examples locally, install `tidycreel` and the tidyverse, then work
+through a chapter top to bottom. Because later blocks depend on earlier ones,
+run a chapter's code in order rather than in isolation. Details on how the book
+stays reproducible are in the [Reproducibility](appendices/03-reproducibility.qmd)
+appendix.

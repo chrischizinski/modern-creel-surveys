@@ -2,10 +2,6 @@
 title: "Acknowledgments"
 ---
 
-## Acknowledgments
-
-# Acknowledgments
-
 This book, and the [`tidycreel`](https://github.com/chrischizinski/tidycreel) package that supports it, have been a long time in the making. Creel surveys have been part of our work since 2009, when the [Nebraska Angler Survey Project](https://humandimensions.unl.edu/nebraska-creel-project/) officially began at the University of Nebraska–Lincoln in collaboration with Dr. Kevin Pope and the Nebraska Game and Parks Commission. Chris joined the project in 2010, and much of what became this book grew out of that long-running effort to turn field-collected creel data into estimates that agencies could use and trust.
 
 Much of the code behind `tidycreel` began with a very practical need: translating a large and highly customized body of SAS code into a more flexible R workflow. The original SAS code, written by Brad Newcomb, carried with it an enormous amount of accumulated knowledge about Nebraska’s creel survey program. The goal was not simply to move the code from SAS to R, but to preserve the logic, assumptions, and practical experience embedded in that work while making the workflow easier to adapt, inspect, and extend.

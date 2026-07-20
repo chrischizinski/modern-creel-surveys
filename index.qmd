@@ -4,6 +4,14 @@ subtitle: "Design, estimation, diagnostics, and reporting with tidycreel"
 toc: false
 ---
 
+::: {.callout-note appearance="simple" title="Work in progress"}
+This book is substantially complete — all chapters are drafted and the full
+pipeline renders — but it remains a **work in progress**. Content, code
+examples, and `tidycreel` function coverage are still being refined, and some
+sections may change as the companion package evolves. Feedback and corrections
+are welcome via the [issue tracker](https://github.com/chrischizinski/modern-creel-surveys/issues).
+:::
+
 ::: {.book-hero}
 
 ## Overview
