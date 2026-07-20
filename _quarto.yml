@@ -11,7 +11,7 @@ book:
   cover-image: images/tidy_creel_cover.png
   cover-image-alt: "Cover image for Modern Creel Survey Analysis in R, showing a stylized glowing fish on a dark background."
   favicon: images/tidycreel-favicon.svg
-  site-url: "https://chrischizinski.github.io/modern-creel-surveys/"
+  site-url: "https://modern-creel-surveys.netlify.app/"
   repo-url: "https://github.com/chrischizinski/modern-creel-surveys"
   repo-actions: [edit, issue]
   sharing: [twitter, facebook, linkedin]
@@ -79,7 +79,7 @@ citation:
     - family: Chizinski
       given: Christopher
   issued: 2026
-  url: "https://chrischizinski.github.io/modern-creel-surveys/"
+  url: "https://modern-creel-surveys.netlify.app/"
 
 format:
   html:
