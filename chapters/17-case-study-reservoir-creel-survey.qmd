@@ -35,9 +35,15 @@ shift_hrs <- c("1" = 6L, "2" = 6L)
 cedar_counts_effort <- cedar_counts |>
   mutate(
     period       = as.character(period),
-    angler_hours = angler_count * shift_hrs[period]
+    angler_hours = angler_count * shift_hrs[period],
+    # expansion_basis is d(angler_count)/d(party_size), so it takes the
+    # same shift length as the count it is the derivative of.
+    expansion_basis = expansion_basis * shift_hrs[period]
   ) |>
-  select(reservoir, date, day_type, period, section, count_time, angler_hours)
+  select(
+    reservoir, date, day_type, period, section, count_time, angler_hours,
+    expansion_basis, expansion_se, expansion_group
+  )
 
 # Catch wide: harvested + released columns required by add_interviews()
 catch_wide <- cedar_catch |>
