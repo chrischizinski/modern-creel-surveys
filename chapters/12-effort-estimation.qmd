@@ -300,7 +300,7 @@ $$\hat{V}(\hat{E}) = \hat{V}_{\text{between}} + \hat{V}_{\text{within}}$$
 `estimate_effort()` reports both components as `se_between` and `se_within`,
 making it straightforward to determine which source of uncertainty is more
 important. When `se_between` dominates, increasing the number of sampled days
-reduces uncertainty more efficiently than adding more count rounds per day. When
+reduces uncertainty more than adding count rounds within already sampled days. When
 `se_within` dominates — rare in practice but possible in highly variable systems
 — adding within-day count rounds is the more efficient path [@mccormick2013].
 

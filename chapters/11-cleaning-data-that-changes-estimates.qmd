@@ -125,9 +125,8 @@ choices.
 
 This chapter works through the most consequential cleaning steps for a creel
 dataset: species standardization, trip duration plausibility, catch quantity
-review, and trip status verification. For each step, the focus is not just on
-how to perform the check but on how the choice propagates through to the final
-estimate.
+review, and trip status verification. For each step, the focus is on both the
+check itself and the way its result propagates to the final estimate.
 
 The Harlan Reservoir 2022 dataset is clean by real-world standards. It was
 collected under a quality-controlled protocol and reviewed before archiving. That

@@ -45,7 +45,7 @@ estimate pipeline applies to both, with a few additional required arguments
 that capture the characteristics of the observation system.
 
 The common thread is simple: the remote sensor changes how the count is
-observed, but not what the analyst ultimately needs. The target is still
+observed, but not what the analyst needs for inference. The target is still
 angler-hours, so each design has to translate the sensor output back into
 that unit.
 

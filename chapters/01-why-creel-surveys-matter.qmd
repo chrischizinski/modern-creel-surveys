@@ -249,7 +249,7 @@ Reproducibility in the creel context means three things specifically:
 
 **The analytical decisions are explicit.** Every filtering rule, every stratum definition, every missing-data treatment is written down in code that runs and produces the same output each time. The rule "if trip duration was not recorded, impute from the mean" must be a line of code, not an informal judgment applied differently in different years.
 
-**The estimate can be rerun.** When source records are corrected after a preliminary report — a transcription error fixed, a late interview added — the entire analysis should be re-executable from the corrected data without manual adjustment. This is essential for agencies that issue preliminary season summaries and then revise them with finalized data.
+**The estimate can be rerun.** When source records are corrected after a preliminary report — a transcription error fixed, a late interview added — the entire analysis should be re-executable from the corrected data without manual adjustment. That matters for agencies that issue preliminary season summaries and later revise them with finalized data.
 
 These three properties are also what make creel estimates auditable in regulatory and legal contexts. When a proposed regulation change is based on creel data, the agency may need to defend the estimate to the public, to a legislative body, or to a peer reviewer. An estimate produced by a reproducible workflow can be defended step by step. An estimate produced by an undocumented chain of spreadsheet operations cannot.
 

@@ -35,7 +35,7 @@ estimators divide total catch by total angler-hours, where angler-hours come fro
 individual trip records. When the data are stored in a single flat spreadsheet, a
 join that combines catch with trip records creates duplicate rows — and the
 denominator for the trip-hours calculation expands with them. The estimate changes
-not because the underlying data changed but because the data structure changed.
+even though the underlying data did not change; the data structure did.
 
 Keeping records in separate tables and joining them only when an analysis
 requires it is the safest guard against this class of error. This chapter

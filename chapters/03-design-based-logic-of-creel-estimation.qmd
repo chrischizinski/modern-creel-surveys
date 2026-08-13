@@ -19,7 +19,7 @@ harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
 
 A fishery never reveals itself all at once. On any given day, anglers are spread across shorelines and boat ramps, fishing at different times, targeting different species, departing before a technician arrives. No agency has the resources to watch every angler on every day of a season. What an agency can do is watch *some* anglers on *some* days, and then reason carefully about what those observations mean for the season as a whole.
 
-That reasoning — from a partial view to a complete picture — is the subject of this chapter. It is not just a statistical matter; it is a question of logic and authorization. On what grounds can we claim that what we saw during our sampled days tells us something defensible about the days we did not sample?
+That reasoning — from a partial view to a complete picture — is the subject of this chapter. It concerns statistical logic and the grounds for inference. On what basis can we claim that what we saw during our sampled days tells us something defensible about the days we did not sample?
 
 The answer, when it exists, comes from the survey design. A design that selects sampling units with known probability creates a traceable connection between the observed records and the unobserved population. That connection is what transforms a collection of field notes into a scientifically defensible estimate.
 
@@ -37,7 +37,7 @@ In practice, a census would require a creel agent to be present everywhere simul
 
 The impossibility of a census creates a choice. One option is to observe whatever is convenient — survey days when the technician is available, access points that are easy to reach, anglers who happen to be leaving when the agent arrives. The other option is to select a sample deliberately, using a randomized procedure that connects the selected units back to the full population. The first option produces data. The second produces *estimates*.
 
-This distinction matters because convenience data cannot support statistical inference without additional model-based assumptions. An estimate requires not just observations but a traceable relationship between what was observed and what was not. That relationship is provided by the survey design.
+This distinction matters because convenience data cannot support statistical inference without additional model-based assumptions. An estimate needs observations linked traceably to what was not observed. The survey design provides that link.
 
 ## What makes sampling inferential
 

@@ -254,7 +254,7 @@ a pure productivity effect.
 
 ## Validating the estimator: the complete vs incomplete diagnostic {#sec-cpue-diagnostic}
 
-The choice between ROM and MOR matters most when incomplete trips are numerous
+The choice between ROM and MOR matters most when the dataset contains many incomplete trips
 and when the analyst suspects non-stationary catch processes. `tidycreel` provides
 a diagnostic mode that applies both estimators and compares the results.
 

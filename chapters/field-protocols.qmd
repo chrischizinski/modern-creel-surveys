@@ -348,7 +348,7 @@ refusal_design <- add_interviews(
 summarize_refusals(refusal_design)
 ```
 
-The returned data frame has one row per month per participation category (`accepted` / `refused`). All contacts in the example dataset were accepted; @fig-refusals shows the resulting bar chart, which serves as a template for what a survey with actual refusals would produce.
+The returned data frame has one row per month per participation category (`accepted` / `refused`). All contacts in the example dataset were accepted; @fig-refusals shows the resulting bar chart and illustrates what a survey with actual refusals would produce.
 
 ```{r}
 #| label: fig-refusals

@@ -77,7 +77,7 @@ sampling is needed to hit a precision target.
 
 ## The anatomy of an estimate {#sec-uncertainty-anatomy}
 
-When `estimate_effort()` runs, it returns not just the effort total but a full
+When `estimate_effort()` runs, it returns the effort total together with a full
 uncertainty wrapper: a standard error, a confidence interval, and a decomposition
 of variance into between-day and within-day components. Each of those pieces
 carries distinct diagnostic value.

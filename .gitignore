@@ -31,3 +31,6 @@ tests/
 justfile
 .Rhistory
 **/.Rhistory
+
+# Local Netlify folder
+.netlify

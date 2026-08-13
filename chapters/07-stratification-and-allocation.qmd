@@ -445,7 +445,7 @@ In practical terms:
 
 - Define strata that reflect how anglers actually use the water — not how the calendar makes scheduling convenient.
 - Write the reporting tables before choosing allocation strategy; the strata exist to produce the estimands the report requires.
-- Ensure every stratum receives at least two sampled days; a stratum with one observation has no variance estimate and cannot support a confidence interval.
+- Give every stratum at least two sampled days; a stratum with one observation has no variance estimate and cannot support a confidence interval.
 - Account for angler-type segmentation (boat vs. bank) when detection probabilities or catch rates differ between groups — otherwise effort and catch estimates can be biased in unknown direction.
 - Remember that proportional allocation under-samples low-use strata, risking missing catch-rate data that produces undefined rather than zero estimates.
 - Use `generate_schedule()` with `special_periods` to handle holiday days that belong in their own stratum.

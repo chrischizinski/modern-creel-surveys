@@ -81,7 +81,7 @@ sim_2023$interviews$date <- sim_2023$interviews$date + offset_2023
 glimpse(sim_2023$schedule)
 ```
 
-Three parameters vary across years to represent the fishery trajectory: `catch_per_trip$mean` (declining pre-regulation as abundance fell, then recovering post-regulation), `harvest$mean_pct` (falling sharply in 2021 as the new size limit excluded smaller fish that were previously harvestable), and `mean_total_anglers` (effort counts, held roughly stable reflecting stable fishing pressure). All other parameters — season length, sampled days, strata, count frequency — remain constant to ensure the estimates are comparable across years. The estimation pipeline for each year follows the same pattern established in Chapters 12–14:
+Three parameters vary across years to represent the fishery trajectory: `catch_per_trip$mean` (declining pre-regulation as abundance fell, then recovering post-regulation), `harvest$mean_pct` (falling sharply in 2021 as the new size limit excluded smaller fish that were previously harvestable), and `mean_total_anglers` (effort counts, held roughly stable reflecting stable fishing pressure). All other parameters — season length, sampled days, strata, count frequency — remain constant so the estimates are comparable across years. The estimation pipeline for each year follows the same pattern established in Chapters 12–14:
 
 ```{r}
 #| label: pipeline-2023
