@@ -14,6 +14,15 @@ harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
 harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
 harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
 harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
+
+# Bank anglers are counted directly; boats are counted and expanded by the
+# mean anglers per boat party measured in the interviews.
+harlan_counts <- derive_angler_count(
+  harlan_counts,
+  bank       = bank_anglers,
+  boat_count = angler_boats,
+  party_size = mean_party_size(harlan_interviews, n_anglers, angler_type = angler_type)
+)
 ```
 
 ## Purpose {#sec-ch2-purpose}
@@ -302,7 +311,7 @@ interview_effort_by_day <- harlan_interviews |>
 count_activity_by_day <- harlan_counts |>
   group_by(date) |>
   summarise(
-    total_counted = sum(boat_anglers + bank_anglers),
+    total_counted = sum(angler_count),
     .groups       = "drop"
   )
 
@@ -375,6 +384,15 @@ harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
 harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
 harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
 harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
+
+# Bank anglers are counted directly; boats are counted and expanded by the
+# mean anglers per boat party measured in the interviews.
+harlan_counts <- derive_angler_count(
+  harlan_counts,
+  bank       = bank_anglers,
+  boat_count = angler_boats,
+  party_size = mean_party_size(harlan_interviews, n_anglers, angler_type = angler_type)
+)
 ```
 
 The `harlan_interviews` table carries all temporal, spatial, and access-type domain fields alongside the effort recorded for each party:
@@ -531,7 +549,7 @@ boat_complete <- harlan_interviews |>
 
 **Consistency check before estimation:**
 
-The effort denominator must be boat-angler hours, not total hours. If the analyst uses total angler-hours (from `boat_anglers + bank_anglers` in `harlan_counts`) as the multiplier for a boat-only harvest rate, the estimate will be inflated by the ratio of total to boat-only effort — a bias with no error message, no warning, and no obvious sign in the output.
+The effort denominator must be boat-angler hours, not total hours. If the analyst uses total angler-hours (from `angler_count` in `harlan_counts`) as the multiplier for a boat-only harvest rate, the estimate will be inflated by the ratio of total to boat-only effort — a bias with no error message, no warning, and no obvious sign in the output.
 
 **Estimate computation (preview — full implementation in Chapter 4):**
 

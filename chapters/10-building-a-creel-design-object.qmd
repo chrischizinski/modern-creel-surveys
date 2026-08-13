@@ -12,6 +12,15 @@ harlan_schedule   <- readRDS(here::here("data/harlan_schedule.rds"))
 harlan_counts     <- readRDS(here::here("data/harlan_counts.rds"))
 harlan_interviews <- readRDS(here::here("data/harlan_interviews.rds"))
 harlan_catch      <- readRDS(here::here("data/harlan_catch.rds"))
+
+# Bank anglers are counted directly; boats are counted and expanded by the
+# mean anglers per boat party measured in the interviews.
+harlan_counts <- derive_angler_count(
+  harlan_counts,
+  bank       = bank_anglers,
+  boat_count = angler_boats,
+  party_size = mean_party_size(harlan_interviews, n_anglers, angler_type = angler_type)
+)
 ```
 
 ## What the design object is for {#sec-design-purpose}
@@ -101,6 +110,7 @@ one taken at 14:30 if counts are not uniformly spaced.
 harlan_design <- add_counts(
   design         = harlan_design,
   counts         = harlan_counts,
+  count_col      = angler_count,
   count_time_col = "count_time"
 )
 
@@ -370,7 +380,7 @@ design_counts_only <- creel_design(
   date     = "date",
   strata   = "day_type"
 ) |>
-  add_counts(counts = harlan_counts, count_time_col = "count_time")
+  add_counts(counts = harlan_counts, count_col = angler_count, count_time_col = "count_time")
 
 # Build a full design branching from the same intermediate object
 design_full <- add_interviews(
@@ -428,6 +438,7 @@ harlan_design_final <- creel_design(
 ) |>
   add_counts(
     counts         = harlan_counts,
+    count_col      = angler_count,
     count_time_col = "count_time"
   ) |>
   add_interviews(

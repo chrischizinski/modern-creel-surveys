@@ -15,12 +15,21 @@ harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
 harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
 harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 
+# Bank anglers are counted directly; boats are counted and expanded by the
+# mean anglers per boat party measured in the interviews.
+harlan_counts <- derive_angler_count(
+  harlan_counts,
+  bank       = bank_anglers,
+  boat_count = angler_boats,
+  party_size = mean_party_size(harlan_interviews, n_anglers, angler_type = angler_type)
+)
+
 shift_hours <- c("1" = 8L, "2" = 6L)
 
 harlan_counts_effort <- harlan_counts |>
   mutate(
     period        = as.character(period),
-    total_anglers = boat_anglers + bank_anglers,
+    total_anglers = angler_count,
     angler_hours  = total_anglers * shift_hours[period]
   ) |>
   select(reservoir, date, day_type, period, section, count_time, angler_hours)

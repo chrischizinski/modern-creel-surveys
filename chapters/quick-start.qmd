@@ -44,9 +44,18 @@ interviews <- interviews |>
   ) |>
   mutate(across(c(total_catch, harvested), \(x) if_else(is.na(x), 0L, as.integer(x))))
 
+# Bank anglers are counted directly; boats are counted and expanded by the
+# mean anglers per boat party taken from the interviews.
+counts <- counts |>
+  derive_angler_count(
+    bank       = bank_anglers,
+    boat_count = angler_boats,
+    party_size = mean_party_size(interviews, n_anglers, angler_type = angler_type)
+  )
+
 # ── 3. Build design object ───────────────────────────────────────────────────
 design <- creel_design(schedule, date = "date", strata = "day_type") |>
-  add_counts(counts, count_time_col = "count_time") |>
+  add_counts(counts, count_col = angler_count, count_time_col = "count_time") |>
   add_interviews(interviews,
     catch = "total_catch", harvest = "harvested", effort = "hours_fished",
     trip_duration = "hours_fished", trip_status = "trip_status",
@@ -126,7 +135,34 @@ At this stage the design knows the stratum structure and how many days were samp
 
 ### Step 2: counts {#sec-qs-counts}
 
-`add_counts()` attaches the count observations and identifies the column recording the time of each count. The count time matters because the instantaneous-count estimator weights each observation by its position in the sampling shift; a count at 8:00 AM represents a different portion of the day than one at 14:30.
+The counts table does not carry a column of anglers. It carries the three things a clerk can record from shore: `bank_anglers`, the people fishing from the bank; `angler_boats`, the number of boats; and `boat_anglers`, an attempt at the people aboard them. The estimator needs one number per count, so those components have to be combined first.
+
+Which combination is the right one depends on how the count was taken. Bank anglers can be counted directly — they stay put. Boats move, and counting the people aboard a moving boat at distance is unreliable, so the more defensible route is to count hulls, which are easy to see, and expand them by the mean party size measured in the interviews. That is the method used here.
+
+`mean_party_size()` reads that multiplier off the interviews, and `derive_angler_count()` applies it:
+
+```{r}
+#| label: qs-angler-count
+#| message: false
+boat_party_size <- mean_party_size(
+  harlan_interviews,
+  n_anglers,
+  angler_type = angler_type
+)
+
+boat_party_size
+
+harlan_counts <- derive_angler_count(
+  harlan_counts,
+  bank       = bank_anglers,
+  boat_count = angler_boats,
+  party_size = boat_party_size
+)
+```
+
+`boat_count` and `boat_anglers` are separate arguments in that call, and the distinction is not cosmetic. `angler_boats` counts *boats*. Adding it to a total of people would produce a number that looks entirely plausible and is wrong by however many anglers were aboard. Requiring a `party_size` alongside it makes that mistake impossible to make by accident. Where a survey genuinely counted the people aboard, `boat_anglers = boat_anglers` uses that count directly and no expansion happens.
+
+`add_counts()` then attaches the observations and identifies the column recording the time of each count. The count time matters because the instantaneous-count estimator weights each observation by its position in the sampling shift; a count at 8:00 AM represents a different portion of the day than one at 14:30.
 
 ```{r}
 #| label: qs-design-counts
@@ -134,11 +170,14 @@ At this stage the design knows the stratum structure and how many days were samp
 harlan_design <- add_counts(
   design         = harlan_design,
   counts         = harlan_counts,
+  count_col      = angler_count,
   count_time_col = "count_time"
 )
 
 harlan_design
 ```
+
+Naming `count_col` is not optional here. With four numeric columns in the table, `add_counts()` refuses to guess which one holds the anglers rather than picking by position — a silent choice would expand whatever happened to sit leftmost into a number reported as total effort.
 
 The design now holds `r nrow(harlan_counts)` count observations linked to `r n_distinct(harlan_counts$date)` sampled days. A `survey.design2` object is constructed internally — this is the weighted survey object that estimation functions operate on.
 
@@ -225,6 +264,7 @@ harlan_design <- creel_design(
 ) |>
   add_counts(
     counts         = harlan_counts,
+    count_col      = angler_count,
     count_time_col = "count_time"
   ) |>
   add_interviews(

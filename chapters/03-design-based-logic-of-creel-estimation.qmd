@@ -13,6 +13,15 @@ library(here)
 harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
 harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
 harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
+
+# Bank anglers are counted directly; boats are counted and expanded by the
+# mean anglers per boat party measured in the interviews.
+harlan_counts <- derive_angler_count(
+  harlan_counts,
+  bank       = bank_anglers,
+  boat_count = angler_boats,
+  party_size = mean_party_size(harlan_interviews, n_anglers, angler_type = angler_type)
+)
 ```
 
 ## The partial-observation problem
@@ -181,6 +190,15 @@ To make the HT estimator concrete, apply it to the Harlan Reservoir dataset. The
 harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
 harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
 
+# Bank anglers are counted directly; boats are counted and expanded by the
+# mean anglers per boat party measured in the interviews.
+harlan_counts <- derive_angler_count(
+  harlan_counts,
+  bank       = bank_anglers,
+  boat_count = angler_boats,
+  party_size = mean_party_size(harlan_interviews, n_anglers, angler_type = angler_type)
+)
+
 # Stratum frame sizes and sample sizes from the schedule
 strata <- harlan_schedule |>
   group_by(day_type) |>
@@ -226,7 +244,7 @@ The daily $y_i$ values — the quantity we want to total over all days — are t
 # Daily total observed anglers on each sampled day
 daily_y <- harlan_counts |>
   group_by(date) |>
-  summarise(y = sum(boat_anglers + bank_anglers), .groups = "drop") |>
+  summarise(y = sum(angler_count), .groups = "drop") |>
   inner_join(
     harlan_schedule |> filter(sampled) |> select(date, day_type),
     by = "date"
@@ -368,7 +386,7 @@ within_var_per_day <- harlan_counts |>
     by = "date"
   ) |>
   group_by(date) |>
-  summarise(v = var(boat_anglers + bank_anglers), .groups = "drop") |>
+  summarise(v = var(angler_count), .groups = "drop") |>
   mutate(v = replace(v, is.na(v), 0)) |>   # single-count days: variance = 0
   pull(v)
 
@@ -433,7 +451,7 @@ var_decomp <- lapply(c("weekday", "weekend"), function(st) {
       by = "date"
     ) |>
     group_by(date) |>
-    summarise(v = var(boat_anglers + bank_anglers), .groups = "drop") |>
+    summarise(v = var(angler_count), .groups = "drop") |>
     pull(v)
   wv <- D / d * sum(replace(wvs, is.na(wvs), 0))
   data.frame(

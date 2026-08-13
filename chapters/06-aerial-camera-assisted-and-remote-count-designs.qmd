@@ -130,7 +130,7 @@ design_aerial <- creel_design(
   design_type = "aerial",
   h_open      = 14
 ) |>
-  add_counts(example_aerial_glmm_counts) |>
+  add_counts(example_aerial_glmm_counts, count_col = n_anglers) |>
   add_interviews(
     interviews    = example_aerial_interviews,
     catch         = "walleye_catch",

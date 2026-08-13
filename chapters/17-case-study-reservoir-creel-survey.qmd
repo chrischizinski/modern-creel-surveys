@@ -19,6 +19,15 @@ cedar_counts     <- readRDS(here("data/cedar_counts.rds"))
 cedar_interviews <- readRDS(here("data/cedar_interviews.rds"))
 cedar_catch      <- readRDS(here("data/cedar_catch.rds"))
 
+# Bank anglers are counted directly; boats are counted and expanded by the
+# mean anglers per boat party measured in the interviews.
+cedar_counts <- derive_angler_count(
+  cedar_counts,
+  bank       = bank_anglers,
+  boat_count = angler_boats,
+  party_size = mean_party_size(cedar_interviews, n_anglers, angler_type = angler_type)
+)
+
 # Shift hours: both periods 6 hours (6 am–noon and noon–6 pm)
 shift_hrs <- c("1" = 6L, "2" = 6L)
 
@@ -26,7 +35,7 @@ shift_hrs <- c("1" = 6L, "2" = 6L)
 cedar_counts_effort <- cedar_counts |>
   mutate(
     period       = as.character(period),
-    angler_hours = (bank_anglers + boat_anglers) * shift_hrs[period]
+    angler_hours = angler_count * shift_hrs[period]
   ) |>
   select(reservoir, date, day_type, period, section, count_time, angler_hours)
 
@@ -146,7 +155,7 @@ monthly_days <- cedar_schedule |>
 monthly_counts <- cedar_counts |>
   mutate(
     month = factor(format(date, "%b"), levels = month.abb),
-    total = bank_anglers + boat_anglers
+    total = angler_count
   ) |>
   group_by(month) |>
   summarise(mean_count = mean(total), .groups = "drop")
@@ -201,7 +210,7 @@ cedar_counts |>
   theme(legend.position = "bottom")
 ```
 
-Bank anglers account for `r fmt_pct(100 * sum(cedar_counts$bank_anglers) / sum(cedar_counts$bank_anglers + cedar_counts$boat_anglers))` of all counted anglers across the season, so angler-type CPUE is not driven by a large seasonal shift in who is on the water.
+Bank anglers account for `r fmt_pct(100 * sum(cedar_counts$bank_anglers) / sum(cedar_counts$angler_count))` of all anglers across the season, so angler-type CPUE is not driven by a large seasonal shift in who is on the water.
 
 ### Incomplete trips in a roving design
 

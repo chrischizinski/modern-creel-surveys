@@ -20,6 +20,15 @@ harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
 harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 harlan_lengths    <- readRDS(here("data/harlan_lengths.rds"))
 
+# Bank anglers are counted directly; boats are counted and expanded by the
+# mean anglers per boat party measured in the interviews.
+harlan_counts <- derive_angler_count(
+  harlan_counts,
+  bank       = bank_anglers,
+  boat_count = angler_boats,
+  party_size = mean_party_size(harlan_interviews, n_anglers, angler_type = angler_type)
+)
+
 # Period shift lengths: morning (P1) = 8 hr, afternoon (P2) = 6 hr
 shift_hours <- c("1" = 8L, "2" = 6L)
 
@@ -27,7 +36,7 @@ shift_hours <- c("1" = 8L, "2" = 6L)
 harlan_counts_effort <- harlan_counts |>
   mutate(
     period        = as.character(period),
-    total_anglers = boat_anglers + bank_anglers,
+    total_anglers = angler_count,
     angler_hours  = total_anglers * shift_hours[period]
   ) |>
   select(reservoir, date, day_type, period, section, count_time, angler_hours)
@@ -103,8 +112,8 @@ n_samp      <- sum(harlan_schedule$sampled)
 n_int       <- nrow(harlan_interviews)
 n_comp      <- sum(harlan_interviews$trip_status == "complete")
 n_incomp    <- sum(harlan_interviews$trip_status == "incomplete")
-pct_boat_cnt <- 100 * sum(harlan_counts$boat_anglers) /
-  (sum(harlan_counts$bank_anglers) + sum(harlan_counts$boat_anglers))
+pct_boat_cnt <- 100 * (sum(harlan_counts$angler_count) - sum(harlan_counts$bank_anglers)) /
+  sum(harlan_counts$angler_count)
 
 # Walleye compliance stats (used in narrative and callout)
 walleye_lengths <- harlan_lengths |>
@@ -196,7 +205,7 @@ monthly_days <- harlan_schedule |>
 monthly_counts <- harlan_counts |>
   mutate(
     month = factor(format(date, "%b"), levels = month.abb),
-    total = boat_anglers + bank_anglers
+    total = angler_count
   ) |>
   group_by(month) |>
   summarise(mean_count = mean(total), .groups = "drop")

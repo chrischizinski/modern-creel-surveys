@@ -17,6 +17,15 @@ harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
 harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
 harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 
+# Bank anglers are counted directly; boats are counted and expanded by the
+# mean anglers per boat party measured in the interviews.
+harlan_counts <- derive_angler_count(
+  harlan_counts,
+  bank       = bank_anglers,
+  boat_count = angler_boats,
+  party_size = mean_party_size(harlan_interviews, n_anglers, angler_type = angler_type)
+)
+
 shift_hours <- c("1" = 8, "2" = 6)
 
 # Derive total_harvest per interview for design pipeline (Chapter 10)
@@ -35,7 +44,7 @@ suppressMessages({
     date     = "date",
     strata   = "day_type"
   ) |>
-    add_counts(counts = harlan_counts, count_time_col = "count_time") |>
+    add_counts(counts = harlan_counts, count_col = angler_count, count_time_col = "count_time") |>
     add_interviews(
       interviews     = harlan_interviews_with_catch,
       catch          = "total_harvest",
@@ -125,10 +134,10 @@ The following code computes effort from the two instantaneous counts taken durin
 
 sample_day <- harlan_counts |>
   filter(date == as.Date("2022-09-02"), period == 1) |>
-  mutate(total_anglers = boat_anglers + bank_anglers)
+  mutate(total_anglers = angler_count)
 
 sample_day |>
-  select(count_time, bank_anglers, boat_anglers, total_anglers)
+  select(count_time, bank_anglers, angler_boats, total_anglers)
 ```
 
 The two counts recorded 38 and 45 boat anglers (no bank anglers active on this morning), giving a mean of 41.5 anglers. Multiplied by the 8-hour morning shift, this yields:
@@ -157,7 +166,7 @@ The per-period effort estimates across the Harlan season reveal the difference b
 #| echo: true
 
 season_effort <- harlan_counts |>
-  mutate(total_anglers = boat_anglers + bank_anglers) |>
+  mutate(total_anglers = angler_count) |>
   group_by(date, period, day_type) |>
   summarise(
     n_counts    = n(),
@@ -502,7 +511,7 @@ For a single sampled period, the calculation is direct:
 effort_sep2_period1 <- mean(
   harlan_counts |>
     filter(date == as.Date("2022-09-02"), period == 1) |>
-    mutate(total = boat_anglers + bank_anglers) |>
+    mutate(total = angler_count) |>
     pull(total)
 ) * shift_hours["1"]
 

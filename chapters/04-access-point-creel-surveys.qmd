@@ -16,6 +16,15 @@ harlan_schedule   <- readRDS(here("data/harlan_schedule.rds"))
 harlan_counts     <- readRDS(here("data/harlan_counts.rds"))
 harlan_interviews <- readRDS(here("data/harlan_interviews.rds"))
 harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
+
+# Bank anglers are counted directly; boats are counted and expanded by the
+# mean anglers per boat party measured in the interviews.
+harlan_counts <- derive_angler_count(
+  harlan_counts,
+  bank       = bank_anglers,
+  boat_count = angler_boats,
+  party_size = mean_party_size(harlan_interviews, n_anglers, angler_type = angler_type)
+)
 ```
 
 ## Why access-point surveys work {#sec-access-point}
@@ -117,7 +126,7 @@ harlan_counts |>
   group_by(date, period) |>
   summarise(
     n_counts      = n(),
-    total_anglers = sum(bank_anglers + boat_anglers),
+    total_anglers = sum(angler_count),
     .groups       = "drop"
   ) |>
   group_by(period) |>
@@ -195,7 +204,7 @@ daily_effort <- harlan_counts |>
     n_counts          = n(),
     mean_boat_anglers = mean(boat_anglers),
     mean_bank_anglers = mean(bank_anglers),
-    mean_total        = mean(boat_anglers + bank_anglers),
+    mean_total        = mean(angler_count),
     .groups           = "drop"
   ) |>
   mutate(
@@ -570,8 +579,8 @@ within_period <- harlan_counts |>
   group_by(date, day_type, period) |>
   summarise(
     r_i   = n(),
-    x_bar = mean(boat_anglers + bank_anglers),
-    s2_x  = var(boat_anglers  + bank_anglers),
+    x_bar = mean(angler_count),
+    s2_x  = var(angler_count),
     .groups = "drop"
   ) |>
   mutate(
@@ -709,7 +718,7 @@ design <- creel_design(
 )
 
 design <- design |>
-  add_counts(counts = harlan_counts) |>
+  add_counts(counts = harlan_counts, count_col = angler_count) |>
   add_interviews(
     interviews  = prep_interviews_trips(
       harlan_interviews,
