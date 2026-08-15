@@ -42,6 +42,47 @@ Harlan Reservoir survey — distributed with the book in `data/` or bundled with
 described in the [Data Notes](appendices/02-data-notes.qmd) appendix. Notation
 used across chapters is collected in [Notation and Symbols](appendices/01-notation.qmd).
 
+## Which versions produced these numbers
+
+Every estimate printed in this book was produced by the versions below, at the
+time the book was last rendered:
+
+```{r}
+#| label: book-versions
+#| echo: false
+cat("tidycreel:", as.character(packageVersion("tidycreel")), "\n")
+cat("R:        ", R.version$version.string, "\n")
+```
+
+These are read from the rendering session rather than written down, so they
+cannot fall out of step with the numbers on the page.
+
+::: {.callout-important appearance="simple" title="Estimates are version-sensitive"}
+Reproducing a chapter under a different version of `tidycreel` may give
+different **standard errors** for the same data and the same point estimates.
+This is expected, and it is not a sign that something has gone wrong.
+
+The package is under active development in exactly the area the book reports:
+how uncertainty is propagated from the quantities a survey measures into the
+quantities it reports. Two recent examples, both of which moved published
+numbers in this book:
+
+- **3.2.0** began carrying the party-size estimate's own standard error into
+  the effort standard error. Harlan's effort SE moved from 3,057 to 3,182
+  angler-hours. The effort estimate itself did not change.
+- **3.3.0** stopped combining a party-size estimate *shared across strata* as
+  though the strata were independent, which raised the standard errors on
+  total catch, harvest, and release. The totals themselves did not change.
+
+In both cases the newer number is the correct one and the older number was
+understated. If your standard errors differ from the book's, check your package
+version before looking for an error in your data.
+
+Point estimates are far more stable than standard errors across versions. When
+a release does change a point estimate, it is called out as a breaking change
+in [the package's NEWS file](https://github.com/chrischizinski/tidycreel/blob/main/NEWS.md).
+:::
+
 ## Running the code yourself
 
 To run the examples locally, install `tidycreel` and the tidyverse, then work
@@ -49,3 +90,11 @@ through a chapter top to bottom. Because later blocks depend on earlier ones,
 run a chapter's code in order rather than in isolation. Details on how the book
 stays reproducible are in the [Reproducibility](appendices/03-reproducibility.qmd)
 appendix.
+
+To install the exact version this book was rendered against rather than the
+current development state:
+
+```{r}
+#| eval: false
+remotes::install_github("chrischizinski/tidycreel@v3.3.0")
+```
