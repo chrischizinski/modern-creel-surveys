@@ -31,18 +31,18 @@ cedar_counts <- derive_angler_count(
 # Shift hours: both periods 6 hours (6 am–noon and noon–6 pm)
 shift_hrs <- c("1" = 6L, "2" = 6L)
 
-# Counts: pre-compute angler_hours, retain only count variable (Ch12 pattern)
+# Counts: carry the count and its shift length (Ch12 pattern)
 cedar_counts_effort <- cedar_counts |>
   mutate(
     period       = as.character(period),
-    angler_hours = angler_count * shift_hrs[period],
-    # expansion_basis is d(angler_count)/d(party_size), so it takes the
-    # same shift length as the count it is the derivative of.
-    expansion_basis = expansion_basis * shift_hrs[period]
+    # add_counts() scales the count and the party-size basis together via
+    # period_length_col. Multiplying the count here instead would leave
+    # expansion_basis in the old units and understate the party-size term.
+    shift_length = shift_hrs[period]
   ) |>
   select(
-    reservoir, date, day_type, period, section, count_time, angler_hours,
-    expansion_basis, expansion_se, expansion_group
+    reservoir, date, day_type, period, section, count_time, angler_count,
+    shift_length, expansion_basis, expansion_se, expansion_group, expansion_of
   )
 
 # Catch wide: harvested + released columns required by add_interviews()
@@ -65,7 +65,11 @@ suppressMessages({
     date     = "date",
     strata   = "day_type"
   ) |>
-    add_counts(cedar_counts_effort, count_time_col = "count_time") |>
+    add_counts(
+      cedar_counts_effort,
+      count_time_col    = "count_time",
+      period_length_col = "shift_length"
+    ) |>
     add_interviews(
       interviews     = cedar_int2,
       catch          = "total_catch",
@@ -244,15 +248,15 @@ validate_incomplete_trips(
 The Cedar Lake pipeline follows the same four-step assembly used throughout Part III and Part IV. Three details differ from the Harlan build:
 
 1. **Both periods have equal shift length.** Harlan's morning shift runs 8 hours; Cedar Lake uses 6 hours for each period (6 am–noon, noon–6 pm). The shift-hours vector reflects that equality.
-2. **Counts carry only `angler_hours`.** Bank and boat counts are summed and multiplied by shift length before calling `add_counts()`. The component columns are dropped so `tidycreel` selects only the target variable.
+2. **Counts carry the angler count and its shift length.** Bank and boat counts are summed into `angler_count`, and the shift length rides alongside as a column named to `add_counts()` through `period_length_col`, which scales the count and the party-size basis together.
 3. **Two catch columns required.** `estimate_total_harvest()` requires a dedicated harvest column passed via the `harvest` argument. Total catch (harvested + released) is a separate column passed via `catch`.
 
 ```{r}
 #| label: cedar-counts-prep
-# Pre-compute angler_hours; drop component columns
+# The count stays untransformed; shift_length rides alongside it
 cedar_counts_effort |>
   filter(date == as.Date("2023-07-08")) |>
-  select(date, day_type, period, count_time, angler_hours)
+  select(date, day_type, period, count_time, angler_count, shift_length)
 ```
 
 ```{r}
@@ -274,7 +278,11 @@ cedar_design <- creel_design(
   date     = "date",
   strata   = "day_type"
 ) |>
-  add_counts(cedar_counts_effort, count_time_col = "count_time") |>
+  add_counts(
+      cedar_counts_effort,
+      count_time_col    = "count_time",
+      period_length_col = "shift_length"
+    ) |>
   add_interviews(
     interviews     = cedar_int2,
     catch          = "total_catch",

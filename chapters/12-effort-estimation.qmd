@@ -27,20 +27,19 @@ harlan_counts <- derive_angler_count(
 # Shift lengths (hours) for each period at Harlan
 shift_hours <- c("1" = 8L, "2" = 6L)
 
-# Pre-compute angler_hours = total_anglers * shift_length
+# Carry the shift length alongside the count; add_counts() applies it
 # and convert period to character so it is not mistaken for a count variable
 harlan_counts_effort <- harlan_counts |>
   mutate(
     period        = as.character(period),
-    total_anglers = angler_count,
-    angler_hours  = total_anglers * shift_hours[period],
-    # expansion_basis is d(angler_count)/d(party_size), so it takes the
-    # same shift length as the count it is the derivative of.
-    expansion_basis = expansion_basis * shift_hours[period]
+    # add_counts() scales the count and the party-size basis together via
+    # period_length_col. Multiplying the count here instead would leave
+    # expansion_basis in the old units and understate the party-size term.
+    shift_length = shift_hours[period]
   ) |>
   select(
-    reservoir, date, day_type, period, section, count_time, angler_hours,
-    expansion_basis, expansion_se, expansion_group
+    reservoir, date, day_type, period, section, count_time, angler_count,
+    shift_length, expansion_basis, expansion_se, expansion_group, expansion_of
   )
 
 # Derive total_harvest per interview for design pipeline
@@ -60,7 +59,11 @@ suppressMessages({
     date     = "date",
     strata   = "day_type"
   ) |>
-    add_counts(harlan_counts_effort, count_time_col = "count_time") |>
+    add_counts(
+      harlan_counts_effort,
+      count_time_col    = "count_time",
+      period_length_col = "shift_length"
+    ) |>
     add_interviews(
       interviews     = harlan_interviews_with_catch,
       catch          = "total_harvest",
@@ -328,7 +331,7 @@ identifier. For Harlan, the raw count table records `bank_anglers`,
 would cause `estimate_effort()` to estimate effort in units of bank anglers alone
 — the first numeric column — rather than in total angler-hours.
 
-The correct workflow is to pre-compute `angler_hours` before building the design:
+The correct workflow is to hand `add_counts()` the untransformed count together with the shift length, and let it do the conversion:
 
 ```{r}
 #| label: prep-counts
@@ -340,27 +343,30 @@ shift_hours <- c("1" = 8L, "2" = 6L)
 harlan_counts_effort <- harlan_counts |>
   mutate(
     period        = as.character(period),        # prevent period from being treated as a count
-    total_anglers = angler_count,
-    angler_hours  = total_anglers * shift_hours[period],
-    # expansion_basis is d(angler_count)/d(party_size), so it takes the
-    # same shift length as the count it is the derivative of.
-    expansion_basis = expansion_basis * shift_hours[period]
+    # add_counts() scales the count and the party-size basis together via
+    # period_length_col. Multiplying the count here instead would leave
+    # expansion_basis in the old units and understate the party-size term.
+    shift_length = shift_hours[period]
   ) |>
   select(
-    reservoir, date, day_type, period, section, count_time, angler_hours,
-    expansion_basis, expansion_se, expansion_group
+    reservoir, date, day_type, period, section, count_time, angler_count,
+    shift_length, expansion_basis, expansion_se, expansion_group, expansion_of
   )
 
 harlan_counts_effort |>
   filter(date == as.Date("2022-09-02")) |>
-  select(date, day_type, period, count_time, angler_hours)
+  select(date, day_type, period, count_time, angler_count, shift_length)
 ```
 
 Two things happen here. First, `period` is converted from numeric to character
 so that `estimate_effort()` does not interpret it as a count variable (period
-values of 1 and 2 are identifiers, not observations). Second, `angler_hours`
-is computed as `total_anglers × shift_hours[period]`, encoding the shift-length
-multiplication directly in the data. `add_counts()` then averages the two
+values of 1 and 2 are identifiers, not observations). Second, the shift length
+is attached as a column rather than multiplied into the count, and
+`period_length_col` tells `add_counts()` to apply it. The multiplication has to
+happen inside `add_counts()` because `expansion_basis` is the derivative of the
+count with respect to party size: scaling the count outside the function leaves
+the basis in the old units and silently understates the party-size variance
+component. `add_counts()` then averages the two
 within-period records to a single period-day mean — matching the formula
 $\bar{I}_{d,p} \times T_p$ at the data preparation stage rather than in the
 estimator.
@@ -376,7 +382,11 @@ harlan_design_effort <- creel_design(
   date     = "date",
   strata   = "day_type"
 ) |>
-  add_counts(harlan_counts_effort, count_time_col = "count_time") |>
+  add_counts(
+      harlan_counts_effort,
+      count_time_col    = "count_time",
+      period_length_col = "shift_length"
+    ) |>
   add_interviews(
     interviews     = harlan_interviews_with_catch,
     catch          = "total_harvest",
@@ -399,8 +409,9 @@ harlan_design_effort <- creel_design(
 ```
 
 The design holds the same survey structure built in @sec-design-purpose — calendar,
-strata, interviews, catch — but the `counts` slot now carries `angler_hours`
-as its single numeric count variable. This ensures all downstream effort
+strata, interviews, catch — but the `counts` slot now carries `angler_count`
+scaled to angler-hours as its single numeric count variable, with the design's
+`effort_unit` recording that unit. This ensures all downstream effort
 estimates are in angler-hours rather than raw angler counts.
 
 ## Effort on sampled days {#sec-effort-sampled}
@@ -545,8 +556,8 @@ monthly_effort <- harlan_design_effort$counts |>
   group_by(month, day_type) |>
   summarise(
     n       = n(),
-    mean_ah = mean(angler_hours, na.rm = TRUE),
-    se_ah   = sd(angler_hours, na.rm = TRUE) / sqrt(n()),
+    mean_ah = mean(angler_count, na.rm = TRUE),
+    se_ah   = sd(angler_count, na.rm = TRUE) / sqrt(n()),
     .groups = "drop"
   )
 
@@ -690,8 +701,10 @@ follows directly from the standard stratified sampling formula [@mccormick2013].
 
 - The count variable used by `estimate_effort()` is always the first numeric
   column in the design's count data that is not a date, strata, or PSU column.
-  Pre-compute the target unit (here, `angler_hours`) and drop component columns
-  before calling `add_counts()` to ensure the correct variable is selected.
+  Pass the count in its original units and name the shift-length column with
+  `period_length_col`; `add_counts()` scales the count and the party-size basis
+  together. Multiplying the count beforehand is refused, because the basis would
+  be left in the old units.
 - Convert `period` (and any similar integer identifiers) to character before
   calling `add_counts()` to prevent them from being selected as count variables.
 - The `stratum_total` target requires that the design have a strata column and

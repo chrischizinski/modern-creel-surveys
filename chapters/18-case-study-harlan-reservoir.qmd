@@ -32,19 +32,18 @@ harlan_counts <- derive_angler_count(
 # Period shift lengths: morning (P1) = 8 hr, afternoon (P2) = 6 hr
 shift_hours <- c("1" = 8L, "2" = 6L)
 
-# Pre-compute angler_hours; retain only the count variable
+# Carry the count and its shift length; add_counts() applies the scaling
 harlan_counts_effort <- harlan_counts |>
   mutate(
     period        = as.character(period),
-    total_anglers = angler_count,
-    angler_hours  = total_anglers * shift_hours[period],
-    # expansion_basis is d(angler_count)/d(party_size), so it takes the
-    # same shift length as the count it is the derivative of.
-    expansion_basis = expansion_basis * shift_hours[period]
+    # add_counts() scales the count and the party-size basis together via
+    # period_length_col. Multiplying the count here instead would leave
+    # expansion_basis in the old units and understate the party-size term.
+    shift_length = shift_hours[period]
   ) |>
   select(
-    reservoir, date, day_type, period, section, count_time, angler_hours,
-    expansion_basis, expansion_se, expansion_group
+    reservoir, date, day_type, period, section, count_time, angler_count,
+    shift_length, expansion_basis, expansion_se, expansion_group, expansion_of
   )
 
 # Derive per-interview harvest, release, and total catch from catch table
@@ -75,7 +74,11 @@ suppressMessages({
     date     = "date",
     strata   = "day_type"
   ) |>
-    add_counts(harlan_counts_effort, count_time_col = "count_time") |>
+    add_counts(
+      harlan_counts_effort,
+      count_time_col    = "count_time",
+      period_length_col = "shift_length"
+    ) |>
     add_interviews(
       interviews     = harlan_int2,
       catch          = "total_catch",
@@ -284,7 +287,7 @@ shift_hours
 # Sample of preprocessed count records for one sampled day
 harlan_counts_effort |>
   filter(date == as.Date("2022-07-15")) |>
-  select(date, day_type, period, count_time, angler_hours)
+  select(date, day_type, period, count_time, angler_count, shift_length)
 ```
 
 ```{r}
@@ -306,7 +309,11 @@ harlan_design <- creel_design(
   date     = "date",
   strata   = "day_type"
 ) |>
-  add_counts(harlan_counts_effort, count_time_col = "count_time") |>
+  add_counts(
+      harlan_counts_effort,
+      count_time_col    = "count_time",
+      period_length_col = "shift_length"
+    ) |>
   add_interviews(
     interviews     = harlan_int2,
     catch          = "total_catch",
@@ -331,7 +338,7 @@ harlan_design <- creel_design(
 
 ## Effort estimation
 
-Effort at Harlan comes from the same instantaneous count estimator used throughout Part IV: average within-period counts, scale by shift length, expand sampled-day effort to the full stratum. The asymmetric shift lengths are already encoded in `harlan_counts_effort`, so `estimate_effort()` reads the pre-computed `angler_hours` column directly.
+Effort at Harlan comes from the same instantaneous count estimator used throughout Part IV: average within-period counts, scale by shift length, expand sampled-day effort to the full stratum. The asymmetric shift lengths ride alongside the counts in `harlan_counts_effort` and are applied by `add_counts()` through `period_length_col`, so the design's count column is already in angler-hours when `estimate_effort()` reads it.
 
 ```{r}
 #| label: harlan-effort
