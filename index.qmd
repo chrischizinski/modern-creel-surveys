@@ -12,6 +12,35 @@ sections may change as the companion package evolves. Feedback and corrections
 are welcome via the [issue tracker](https://github.com/chrischizinski/modern-creel-surveys/issues).
 :::
 
+::: {.content-visible when-format="html"}
+```{=html}
+<style>
+.cover-motion { width: 100%; max-width: 520px; height: auto; display: block;
+                margin: 0 auto 2rem; border-radius: 6px; }
+.cover-still  { display: none; }
+/* A looping animation is decorative here, so it should not play for readers
+   who have asked the system for reduced motion. They get the still cover. */
+@media (prefers-reduced-motion: reduce) {
+  .cover-motion { display: none; }
+  .cover-still  { display: block; }
+}
+</style>
+<video class="cover-motion" autoplay loop muted playsinline
+       poster="images/tidy_creel_cover.png"
+       aria-label="Animated cover for Modern Creel Survey Analysis in R, showing a stylized glowing fish swimming on a dark background.">
+  <source src="images/cover_swimming_web.mp4" type="video/mp4">
+  <img src="images/tidy_creel_cover.png"
+       alt="Cover image for Modern Creel Survey Analysis in R, showing a stylized glowing fish on a dark background.">
+</video>
+<img class="cover-still" src="images/tidy_creel_cover.png"
+     alt="Cover image for Modern Creel Survey Analysis in R, showing a stylized glowing fish on a dark background.">
+```
+:::
+
+::: {.content-visible unless-format="html"}
+![Cover image for Modern Creel Survey Analysis in R, showing a stylized glowing fish on a dark background.](images/tidy_creel_cover.png){width=60%}
+:::
+
 ::: {.book-hero}
 
 ## Overview
