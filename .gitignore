@@ -3,7 +3,12 @@
 **/.planning/
 **/.ai/
 CLAUDE.md
+.claude/
+**/.claude/
 memory/
+# Lockfile for agent tooling (Netlify skills). Machine state, not part of the
+# book build — kept out for the same reason as everything else in this block.
+skills-lock.json
 graphify-out/
 _book/
 _freeze/
