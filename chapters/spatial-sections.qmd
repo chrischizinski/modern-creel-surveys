@@ -1,0 +1,311 @@
+---
+title: "Spatial Sections"
+---
+
+```{r}
+#| label: setup-sections
+#| include: false
+library(tidycreel)
+suppressPackageStartupMessages(library(dplyr))
+```
+
+## Purpose {#sec-sections-purpose}
+
+@sec-strata-types introduced spatial strata: divide a large waterbody into reaches or basins, sample each one, and let each contribute a separately weighted component to the total. That description is correct as far as the estimator is concerned, and it is where most treatments of the subject stop.
+
+It is not the whole story, because a spatial division of the water usually has to do a second job that a temporal stratum never does. Strata exist to make the total more precise; they are a means, and the reader of the report may never see them. Sections exist because somebody wants to know what is happening in the north basin as distinct from the south — the per-part answer is itself a deliverable, not an intermediate quantity. A management agency that closes one arm of a reservoir to boat traffic needs the estimate for that arm, with its own confidence interval, and it needs the lake-wide total as well.
+
+`tidycreel` treats that second job as a first-class part of the design rather than as post-hoc reporting. `add_sections()` registers the spatial partition, and the estimators then return one row per section plus an aggregated `.lake_total` row. This chapter covers:
+
+- what distinguishes a section from a stratum, and why the two can cross-cut each other;
+- registering sections with `add_sections()` and reading the resulting estimate table;
+- how the lake-wide row is combined from the sections, and when that combination assumes something it should not;
+- how a party-size expansion interacts with the section partition, which is the one place where a plausible-looking standard error can be silently wrong;
+- handling sections that were registered but never sampled.
+
+## A section is not a stratum {#sec-sections-vs-strata}
+
+Both are partitions of something. A stratum partitions the *sampling frame* — the set of days, shifts, or count times from which the sample is drawn. A section partitions the *water*. Nothing forces those two partitions to line up, and in practice they usually do not.
+
+Consider a reservoir sampled on both weekdays and weekend days, divided into a north and a south basin. The day-type stratification and the basin division are independent of one another: every basin is sampled on weekdays and on weekend days. Neither partition is nested inside the other. A quantity defined on one — a weekday mean, say — spans both parts of the other.
+
+This is the property that makes sections worth their own chapter rather than a paragraph in @sec-strat-purpose. Reasoning that is valid for strata is not automatically valid for sections, because a statement of the form "each part carries its own independent estimate" may be true of one partition and false of the other at the same time, in the same design.
+
+::: {.callout-important}
+Sections and strata are different partitions and may cross-cut. A quantity that is confined within each stratum can still span every section, and the reverse. When you reason about whether two parts of an estimate are independent, be explicit about *which* partition you are asking about.
+:::
+
+There is also a practical difference in how the two are supplied. A stratum is a column in the calendar, and the design knows the full population of days in each stratum. A section is registered explicitly from a table of the sections that exist, which is what allows `tidycreel` to distinguish a section that was sampled and found empty from a section that was never visited at all — a distinction the estimator cannot make from the count data alone.
+
+## Registering sections {#sec-sections-registering}
+
+Sections are added to a design with `add_sections()`, before the counts and interviews. The `sections` table lists every section that exists in the fishery, whether or not it was sampled.
+
+```{r}
+#| label: build-sections-design
+sections_df <- data.frame(
+  section = c("North", "Central", "South")
+)
+
+design <- creel_design(
+  example_sections_calendar,
+  date   = date,
+  strata = day_type
+)
+
+design <- add_sections(design, sections_df, section_col = section)
+
+design <- add_counts(design, example_sections_counts)
+
+design <- add_interviews(
+  design,
+  example_sections_interviews,
+  catch         = catch_total,
+  effort        = hours_fished,
+  harvest       = catch_kept,
+  trip_status   = trip_status,
+  trip_duration = trip_duration
+)
+```
+
+The counts and interviews both carry a `section` column, and every registered section is sampled on every one of the twelve survey days. Registering the sections changes what the estimators return: instead of one row for the whole water, the result carries one row per section and an aggregate.
+
+```{r}
+#| label: sections-effort
+estimate_effort(design)$estimates
+```
+
+Four columns are worth reading carefully.
+
+`section` names the part, with the aggregate row labelled `.lake_total`. The leading dot marks it as a value the package inserted rather than one that came from the data, so a section genuinely named "lake total" could never be confused with it.
+
+`prop_of_lake_total` gives each section's share of the total. This is the column most reports actually want, and it is the reason the per-section rows are worth producing even when the headline number is the lake-wide one.
+
+`data_available` distinguishes a section with no fish from a section with no data. A registered section that was never sampled appears as a row of `NA` values with `data_available = FALSE`, rather than being silently dropped from the table or, worse, contributing a zero to the total.
+
+`n` on the aggregate row counts the sections that contributed, not the interviews — the per-section rows carry the interview counts.
+
+The catch total behaves the same way:
+
+```{r}
+#| label: sections-catch
+total_catch <- estimate_total_catch(design)
+total_catch$estimates
+```
+
+## How the lake row is combined {#sec-sections-combining}
+
+The point estimate on the `.lake_total` row is a sum: the sections partition the water, so their totals add. Nothing subtle happens there, and nothing in this chapter changes it.
+
+The standard error is another matter, because combining standard errors requires knowing whether the quantities being combined are independent. For the sampling error the answer is usually yes — separate sections are counted and interviewed separately, so their sampling errors come from disjoint observations — and the sections combine in quadrature:
+
+$$
+\mathrm{SE}(\hat{Y}_{\text{lake}}) = \sqrt{\sum_{i=1}^{S} \mathrm{SE}(\hat{Y}_i)^2}
+$$
+
+You can confirm that this is exactly what the catch total did:
+
+```{r}
+#| label: sections-quadrature-check
+sec_rows  <- total_catch$estimates[total_catch$estimates$section != ".lake_total", ]
+lake_row  <- total_catch$estimates[total_catch$estimates$section == ".lake_total", ]
+
+c(
+  reported   = lake_row$se,
+  quadrature = sqrt(sum(sec_rows$se^2))
+)
+```
+
+The effort estimate does something more careful. Rather than combining per-section standard errors after the fact, it builds the lake-wide contrast inside the survey design object, so the covariance between sections induced by their shared sampling structure is carried rather than assumed away [@lumley2010]. That is why the effort table's `.lake_total` standard error is not the quadrature of its section rows, while the catch table's is.
+
+::: {.callout-note}
+Quadrature is not wrong here — it is a statement that the sections are independent, and for the sampling error of separately observed sections that statement is usually true. The care is needed for quantities that are *not* observed separately, which is the subject of the next section.
+:::
+
+## Sections and the party-size expansion {#sec-sections-expansion}
+
+Many creel designs do not count anglers directly. They count boats and multiply by an estimated mean party size, an approach @pollock1994 and @malvestuto1996 both treat as standard practice. That multiplier is an estimate, with a standard error of its own, and `tidycreel` propagates it into the effort standard error rather than treating the party size as though it were known.
+
+The multiplier introduces a dependency the sampling error does not have. If one party-size estimate is applied to every section, then its error is not a separate accident in each section — it is a single random quantity common to all of them. Push that estimate up and every section's total moves up together. Errors that always move together are perfectly correlated, and perfectly correlated contributions add *before* squaring, not after:
+
+$$
+\text{shared:}\quad \Big(\sum_{i=1}^{S} R_i s_i\Big)^{2}
+\qquad\text{versus}\qquad
+\text{independent:}\quad \sum_{i=1}^{S} \big(R_i s_i\big)^{2}
+$$
+
+where $R_i$ is section $i$'s rate and $s_i$ its share of the party-size term. The first quantity is larger whenever more than one section contributes. Treating a shared multiplier as independent therefore understates the uncertainty of the lake total.
+
+Which of the two applies is a question about geometry: does a party-size estimate stay inside one section, or span several? Three cases arise, and the following example makes each of them concrete. It uses a rotating-section design — each day is sampled in exactly one section, alternating between them — with the sections deliberately cross-cutting the day-type strata, so that each section covers two weekdays and two weekend days.
+
+```{r}
+#| label: rotating-design
+rot_calendar <- data.frame(
+  date     = as.Date("2024-06-01") + 0:7,
+  day_type = rep(c("weekday", "weekday", "weekend", "weekend"), 2)
+)
+
+rot_counts_raw <- data.frame(
+  date         = rot_calendar$date,
+  day_type     = rot_calendar$day_type,
+  section      = rep(c("North", "South"), 4),
+  angler_boats = c(6, 4, 2, 3, 4, 5, 8, 6)
+)
+
+rot_interviews <- data.frame(
+  date        = rep(rot_counts_raw$date, each = 4),
+  day_type    = rep(rot_counts_raw$day_type, each = 4),
+  section     = rep(rot_counts_raw$section, each = 4),
+  catch_total = c(3, 4, 2, 5, 6, 4, 2, 3, 3, 6, 7, 5, 4, 4, 5, 3,
+                  2, 4, 3, 5, 4, 6, 3, 4, 5, 3, 4, 2, 3, 5, 6, 4),
+  hours_fished = 2,
+  status       = "complete",
+  interview_id = seq_len(32)
+)
+
+build_rot <- function(counts) {
+  d <- creel_design(rot_calendar, date = date, strata = day_type)
+  d <- add_sections(
+    d,
+    data.frame(section = c("North", "South")),
+    section_col = section
+  )
+  d <- add_counts(d, counts, count_col = "angler_count")
+  add_interviews(
+    d, rot_interviews,
+    catch       = catch_total,
+    effort      = hours_fished,
+    trip_status = status
+  )
+}
+
+lake_se <- function(result) {
+  result$estimates$se[result$estimates$section == ".lake_total"]
+}
+```
+
+### One estimate for the whole design
+
+The common case. `mean_party_size()` without a `by` argument returns a single multiplier, which is then applied everywhere.
+
+```{r}
+#| label: geometry-shared
+counts_shared <- derive_angler_count(
+  rot_counts_raw,
+  boat_count     = angler_boats,
+  party_size     = 2.5,
+  party_size_se  = 0.1
+)
+
+catch_shared <- estimate_total_catch(build_rot(counts_shared))
+lake_se(catch_shared)
+```
+
+One estimate spans both sections, so the two contributions are perfectly correlated. The component the package reports for each row makes the arithmetic visible: the lake entry is the *sum* of the section entries, not their quadrature.
+
+```{r}
+#| label: geometry-shared-components
+catch_shared$se_expansion
+```
+
+### One estimate per section
+
+Now suppose party size was estimated separately in each section, from that section's own interviews. The two estimates are independent, and their contributions combine in quadrature.
+
+```{r}
+#| label: geometry-nested
+party_by_section <- data.frame(
+  section = c("North", "South"),
+  mps     = c(2.5, 2.5)
+)
+attr(party_by_section, "se") <- c(North = 0.1, South = 0.1)
+
+counts_by_section <- derive_angler_count(
+  rot_counts_raw,
+  boat_count = angler_boats,
+  party_size = party_by_section
+)
+
+catch_by_section <- estimate_total_catch(build_rot(counts_by_section))
+lake_se(catch_by_section)
+```
+
+Every number entering the two designs is identical — the same boat counts, the same interviews, the same party size of 2.5 with the same standard error of 0.1. The *only* difference is whether one estimate produced those values or two did. That difference is real, and it moves the lake-wide standard error:
+
+```{r}
+#| label: geometry-comparison
+c(
+  one_estimate      = lake_se(catch_shared),
+  one_per_section   = lake_se(catch_by_section)
+)
+```
+
+The point estimates are identical. Correlation structure moves uncertainty, never the estimate itself.
+
+::: {.callout-warning}
+A design cannot have a section-specific party-size estimate unless each sampled day belongs to a single section. The primary sampling unit is the day, and one day carries one party-size estimate; a day sampled in two sections at once cannot carry a different multiplier in each. `add_counts()` rejects that configuration rather than picking one. This is why the example above uses a rotating-section design — with all sections sampled every day, only the shared case is reachable.
+:::
+
+### An estimate that straddles the sections
+
+The third case is the one worth knowing about. Suppose party size is estimated by day type — one figure for weekdays, another for weekends. That is a perfectly ordinary thing to do, and with respect to the *strata* it is neatly nested: each estimate stays inside one stratum.
+
+With respect to the *sections* it is neither nested nor shared. Each estimate covers part of both sections, and neither section is covered by a single estimate.
+
+```{r}
+#| label: geometry-partial
+party_by_daytype <- data.frame(
+  day_type = c("weekday", "weekend"),
+  mps      = c(2.5, 2.5)
+)
+attr(party_by_daytype, "se") <- c(weekday = 0.1, weekend = 0.1)
+
+counts_by_daytype <- derive_angler_count(
+  rot_counts_raw,
+  boat_count = angler_boats,
+  party_size = party_by_daytype
+)
+
+catch_by_daytype <- estimate_total_catch(build_rot(counts_by_daytype))
+lake_se(catch_by_daytype)
+```
+
+The lake-wide standard error is `NA`, and a warning explains why. Combining the sections would require knowing how each party-size estimate is divided between them, and a per-section standard error no longer carries that breakdown. Quadrature would understate the result and the linear sum would overstate it; both would be plausible numbers concealing an assumption the data does not support.
+
+Returning `NA` is a deliberate choice, and it is worth being clear about what it means. It does not mean the uncertainty is zero, and it does not mean the estimate failed. It means the standard error of the lake-wide total is *unknown given how the party size was estimated*. The per-section rows are unaffected and still carry their own standard errors, and the point estimate is unchanged.
+
+```{r}
+#| label: geometry-partial-rows
+catch_by_daytype$estimates[, c("section", "estimate", "se")]
+```
+
+If a lake-wide standard error is required from a design in this position, the fix is at the estimation step rather than the reporting step: estimate party size either within sections or once for the whole design, so that the contributions are either cleanly independent or cleanly shared.
+
+::: {.callout-note}
+This is a case where the honest answer is less convenient than the wrong one. Earlier versions of `tidycreel` combined these sections in quadrature and returned a number, which read as a well-behaved standard error while quietly assuming a geometry the design did not have. A missing value that prompts a question is better than a plausible value that prevents one.
+:::
+
+## Registered sections that were never sampled {#sec-sections-missing}
+
+A section can be registered and then not appear in the count or interview data — a reach closed for the season, an arm the crew could not reach. `tidycreel` treats this as a reportable fact rather than an error, because a section missing from the data is exactly the sort of thing that should be visible in the output table.
+
+By default the estimator warns and inserts an `NA` row with `data_available = FALSE`. Passing `missing_sections = "error"` turns it into a hard failure instead, which is the right setting for a production pipeline where an unsampled section means something upstream went wrong.
+
+The aggregate row can also be suppressed with `aggregate_sections = FALSE`, which returns the per-section rows alone. That is useful when the sections are the deliverable and a lake-wide figure would be misleading — for example when the sections were sampled with such different intensity that summing them would imply a coverage the survey did not have.
+
+::: {.callout-important}
+An absent section contributes nothing to the lake-wide total, which means the total is over the sections that were *sampled*, not over the fishery. If a registered section is missing, the aggregate row is a partial total and should be reported as one. Check `data_available` before quoting `.lake_total` as a lake-wide figure.
+:::
+
+## Takeaway {#sec-sections-takeaway}
+
+Sections answer a different question from strata. Strata make the total more precise; sections make the parts reportable. The two partitions can cross-cut, and most of the care this chapter asks for follows from that single fact.
+
+In practical terms:
+
+- Register every section that exists with `add_sections()`, not only the ones you expect to sample — that is what makes an unsampled section visible instead of absent.
+- Read `data_available` before quoting `.lake_total`; with a section missing it is a total over the sampled sections, not over the fishery.
+- Remember that the per-section rows are usually the deliverable. `prop_of_lake_total` is the column most reports are actually asking for.
+- When a party-size expansion is in play, ask which partition the multiplier respects. One estimate for the design and one estimate per section are both well behaved; an estimate keyed to something that cross-cuts the sections is not, and will return `NA` rather than guess.
+- If you need a section-specific party size, the design has to sample each day in a single section. That is a field-scheduling decision, and it has to be made before the season, not at analysis time.
+- Treat an `NA` standard error as a question about the design rather than a defect in the software. It is telling you that the quantity you asked for is not identified by the way the inputs were estimated.

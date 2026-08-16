@@ -78,6 +78,14 @@ In both cases the newer number is the correct one and the older number was
 understated. If your standard errors differ from the book's, check your package
 version before looking for an error in your data.
 
+**3.4.0** made the same correction for a party-size estimate shared across
+*sections*, and changed the mixed case — an estimate that straddles the
+sections unevenly — from a quietly understated number to `NA`. No number
+previously published in this book moved, because until @sec-sections-purpose
+was added the book used no sectioned designs. The behaviour is worth knowing
+about anyway: it is the one place where asking for a lake-wide standard error
+can correctly return nothing at all.
+
 Point estimates are far more stable than standard errors across versions. When
 a release does change a point estimate, it is called out as a breaking change
 in [the package's NEWS file](https://github.com/chrischizinski/tidycreel/blob/main/NEWS.md).
@@ -95,6 +103,30 @@ To install the exact version this book was rendered against rather than the
 current development state:
 
 ```{r}
+#| label: install-pin
+#| echo: false
+#| results: asis
+pinned <- as.character(packageVersion("tidycreel"))
+cat(
+  "``` r\n",
+  "remotes::install_github(\"chrischizinski/tidycreel@v", pinned, "\")\n",
+  "```\n",
+  sep = ""
+)
+```
+
+That version is read from the rendering session for the same reason the table
+above is, so it always names whatever produced the numbers on this page.
+
+One caveat follows from that. Between releases the book may be built against a
+development version whose tag does not exist yet — the version number is
+claimed in `DESCRIPTION` as soon as work on it starts, while the tag is only
+cut when it ships. If the command above fails because the tag is not found,
+that is what has happened, and the fix is to install from the commit the book
+was built from rather than from the tag:
+
+```{r}
 #| eval: false
-remotes::install_github("chrischizinski/tidycreel@v3.3.0")
+# Substitute the commit recorded in the Reproducibility appendix.
+remotes::install_github("chrischizinski/tidycreel@<commit>")
 ```

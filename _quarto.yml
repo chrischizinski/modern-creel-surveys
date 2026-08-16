@@ -34,6 +34,7 @@ book:
         - chapters/05-roving-creel-surveys.qmd
         - chapters/06-aerial-camera-assisted-and-remote-count-designs.qmd
         - chapters/07-stratification-and-allocation.qmd
+        - chapters/spatial-sections.qmd
         - chapters/pre-survey-planning.qmd
         - chapters/08-bias-and-failure-modes.qmd
     - part: From Field to R
