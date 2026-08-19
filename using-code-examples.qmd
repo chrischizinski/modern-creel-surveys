@@ -86,9 +86,25 @@ was added the book used no sectioned designs. The behaviour is worth knowing
 about anyway: it is the one place where asking for a lake-wide standard error
 can correctly return nothing at all.
 
-Point estimates are far more stable than standard errors across versions. When
-a release does change a point estimate, it is called out as a breaking change
-in [the package's NEWS file](https://github.com/chrischizinski/tidycreel/blob/main/NEWS.md).
+**4.0.0** is the first release to move a *point* estimate in this book, and it
+moved one a long way. An aerial count is a raw observer count, and it needs two
+corrections that had no home in the package: a visibility correction for the
+anglers the observer missed, and an angler-to-people ratio for the people who
+were seen but were not fishing. Neither was applied, and neither could be
+stated. @sec-aerial-design now supplies both from @smucker2010, and the aerial
+effort estimate moved from 379 to 673 angler-hours while its 95% confidence
+interval widened from 314–443 to 367–979.
+
+Both parts of that are the point. The estimate moved because two corrections
+that belong in the arithmetic were missing from it. The interval widened
+because those corrections are themselves *estimated* — from paired air-ground
+counts, with standard errors the source paper reports — and a correction
+treated as a known constant contributes no uncertainty at all. The old interval
+was not more precise; it was measuring less than it claimed to.
+
+Point estimates are otherwise far more stable than standard errors across
+versions. When a release does change a point estimate, it is called out as a
+breaking change in [the package's NEWS file](https://github.com/chrischizinski/tidycreel/blob/main/NEWS.md).
 :::
 
 ## Running the code yourself

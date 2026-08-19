@@ -107,12 +107,46 @@ constrained.
 
 ### Building the aerial design {#sec-aerial-design}
 
-An aerial design requires three additions to the standard `creel_design()` call:
+An aerial design requires four additions to the standard `creel_design()` call:
 
 - `design_type = "aerial"` — routes count data to the GLMM estimator
 - `h_open` — total fishing hours per day (daylight hours accessible to anglers)
 - Raw, unaggregated counts passed to `add_counts()` without `count_time_col`,
   so `time_of_flight` is preserved in `design$counts` for the model
+- `visibility_correction` and `angler_ratio` — the two corrections that turn a
+  raw observer count into an angler count
+
+An aerial count is what an observer saw from a moving aircraft, and it is wrong
+in two directions at once. Some anglers were missed, which biases the count
+*down*; some of the people who were seen were not fishing, which biases it *up*.
+@smucker2010 correct both, and `tidycreel` requires you to state both.
+There is deliberately no default. Supplying nothing is not the same claim as
+declaring that no correction applies, and only one of those should be silent —
+so an aerial design that names neither correction raises an error rather than
+quietly assuming perfect detection and an all-angler shoreline.
+
+`visibility_correction` is a **detection probability**: the proportion of
+present anglers the observer saw. Field studies do not report it that way. They
+report a ground-truthing ratio $r = \text{ground} / \text{aerial}$, which
+exceeds 1 exactly when the correction matters, so you pass its reciprocal
+$v = 1/r$. For the shore mode @smucker2010 report $r = 4.421$
+(SE 0.864) — aerial counts caught under a quarter of the shore anglers actually
+present — giving $v = 0.226$. The standard error transforms with the point
+estimate: for a reciprocal, $\mathrm{SE}(1/r) = \mathrm{SE}(r)/r^2 = 0.0442$.
+
+`angler_ratio` is the angler-to-people ratio, and it pushes the other way: only
+about 40% of the people visible along the bank were fishing. The two corrections
+therefore partly cancel, which is precisely why applying one alone is *not* the
+conservative choice — it biases the estimate in the direction of whichever
+correction you kept.
+
+Both arguments accept standard errors, and you should supply them whenever the
+source reports them. A correction estimated from paired counts is not a known
+constant, and an effort estimate that treats it as one reports a standard error
+that is too small. If a correction genuinely does not apply, say so explicitly
+with `visibility_correction = "none"`; the point estimate then uses 1 and the
+reported standard error is `NA` — never `0`, which would be indistinguishable
+from having propagated the uncertainty and found none.
 
 ```{r}
 #| label: aerial-design-build
@@ -128,7 +162,15 @@ design_aerial <- creel_design(
   date        = "date",
   strata      = "day_type",
   design_type = "aerial",
-  h_open      = 14
+  h_open      = 14,
+  # Shore mode, Smucker et al. (2010) table 3: the ground-truthing ratio is
+  # 4.421 (SE 0.864). tidycreel wants the detection probability v = 1/r, and
+  # the SE of a reciprocal is se(r)/r^2 = 0.864 / 4.421^2.
+  visibility_correction = 0.2262,
+  visibility_se         = 0.0442,
+  # Their table 2, May: the angler-to-people ratio is 0.402 (SE 0.0360).
+  angler_ratio          = 0.402,
+  angler_ratio_se       = 0.0360
 ) |>
   add_counts(example_aerial_glmm_counts, count_col = n_anglers) |>
   add_interviews(
