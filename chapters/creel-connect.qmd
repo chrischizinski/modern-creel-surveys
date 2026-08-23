@@ -75,6 +75,7 @@ schema <- creel_schema(
   # Count table
   bank_anglers_col  = "BankAnglers",
   angler_boats_col  = "AnglerBoats",
+  count_time_col    = "CountTime",
   # Catch table
   catch_uid_col     = "CatchUID",
   species_col       = "SpeciesCode",
@@ -104,6 +105,7 @@ tibble::tribble(
   "trip_status",                    "trip_status_col",     "TripStatus",          "interviews",
   "bank_anglers",                   "bank_anglers_col",    "BankAnglers",         "counts",
   "angler_boats",                   "angler_boats_col",    "AnglerBoats",         "counts",
+  "count_time",                     "count_time_col",      "CountTime",           "counts",
   "catch_uid",                      "catch_uid_col",       "CatchUID",            "catch",
   "species",                        "species_col",         "SpeciesCode",         "catch, lengths",
   "catch_count",                    "catch_count_col",     "CatchCount",          "catch",
@@ -146,6 +148,7 @@ agency_interviews <- harlan_interviews |>
 agency_counts <- harlan_counts |>
   rename(
     SurveyDate  = date,
+    CountTime   = count_time,
     BankAnglers = bank_anglers,
     AnglerBoats = angler_boats
   )

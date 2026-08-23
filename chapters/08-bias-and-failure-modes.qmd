@@ -17,6 +17,10 @@ harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 
 # Bank anglers are counted directly; boats are counted and expanded by the
 # mean anglers per boat party measured in the interviews.
+# derive_angler_count() consumes the component columns it reads, so keep a copy
+# of the raw table for the validation checks, which run on data as it arrives.
+harlan_counts_raw <- harlan_counts
+
 harlan_counts <- derive_angler_count(
   harlan_counts,
   bank       = bank_anglers,
@@ -138,7 +142,7 @@ The Harlan schedule was designed to cover the peak activity window for the targe
 #| echo: true
 
 validation_report(
-  counts     = harlan_counts,
+  counts     = harlan_counts_raw,
   interviews = harlan_interviews
 )
 ```

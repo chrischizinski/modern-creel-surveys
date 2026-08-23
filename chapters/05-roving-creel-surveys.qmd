@@ -19,12 +19,19 @@ harlan_catch      <- readRDS(here("data/harlan_catch.rds"))
 
 # Bank anglers are counted directly; boats are counted and expanded by the
 # mean anglers per boat party measured in the interviews.
+# derive_angler_count() consumes the component columns it reads, so keep a copy
+# of the raw table for the displays that report bank and boat counts separately.
+harlan_counts_raw <- harlan_counts
+
 harlan_counts <- derive_angler_count(
   harlan_counts,
   bank       = bank_anglers,
   boat_count = angler_boats,
   party_size = mean_party_size(harlan_interviews, n_anglers, angler_type = angler_type)
-)
+) |>
+  # boat_anglers is not used once boats are expanded by party size, and it varies
+  # between the counts taken on a day, so add_counts() would refuse to average them.
+  select(-boat_anglers)
 
 shift_hours <- c("1" = 8, "2" = 6)
 
@@ -134,7 +141,11 @@ The following code computes effort from the two instantaneous counts taken durin
 
 sample_day <- harlan_counts |>
   filter(date == as.Date("2022-09-02"), period == 1) |>
-  mutate(total_anglers = angler_count)
+  mutate(total_anglers = angler_count) |>
+  left_join(
+    harlan_counts_raw |> select(date, period, count_time, bank_anglers, angler_boats),
+    by = c("date", "period", "count_time")
+  )
 
 sample_day |>
   select(count_time, bank_anglers, angler_boats, total_anglers)

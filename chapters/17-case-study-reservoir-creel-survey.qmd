@@ -21,6 +21,10 @@ cedar_catch      <- readRDS(here("data/cedar_catch.rds"))
 
 # Bank anglers are counted directly; boats are counted and expanded by the
 # mean anglers per boat party measured in the interviews.
+# derive_angler_count() consumes the component columns it reads, so keep a copy
+# of the raw table for the displays that report bank and boat counts separately.
+cedar_counts_raw <- cedar_counts
+
 cedar_counts <- derive_angler_count(
   cedar_counts,
   bank       = bank_anglers,
@@ -28,21 +32,21 @@ cedar_counts <- derive_angler_count(
   party_size = mean_party_size(cedar_interviews, n_anglers, angler_type = angler_type)
 )
 
-# Shift hours: both periods 6 hours (6 am–noon and noon–6 pm)
-shift_hrs <- c("1" = 6L, "2" = 6L)
+# Both periods are sampled on every sampled day, so the counted day runs the
+# full 12 hours the fishery is open (6 am–noon and noon–6 pm).
+open_hours_per_day <- 12L
 
-# Counts: carry the count and its shift length (Ch12 pattern)
+# Counts: carry the count and the hours it represents (Ch12 pattern)
 cedar_counts_effort <- cedar_counts |>
   mutate(
-    period       = as.character(period),
     # add_counts() scales the count and the party-size basis together via
     # period_length_col. Multiplying the count here instead would leave
     # expansion_basis in the old units and understate the party-size term.
-    shift_length = shift_hrs[period]
+    open_hours = open_hours_per_day
   ) |>
   select(
-    reservoir, date, day_type, period, section, count_time, angler_count,
-    shift_length, expansion_basis, expansion_se, expansion_group, expansion_of
+    reservoir, date, day_type, section, count_time, angler_count,
+    open_hours, expansion_basis, expansion_se, expansion_group, expansion_of
   )
 
 # Catch wide: harvested + released columns required by add_interviews()
@@ -68,7 +72,7 @@ suppressMessages({
     add_counts(
       cedar_counts_effort,
       count_time_col    = "count_time",
-      period_length_col = "shift_length"
+      period_length_col = "open_hours"
     ) |>
     add_interviews(
       interviews     = cedar_int2,
@@ -200,7 +204,7 @@ Bank anglers dominate the count record, with only modest month-to-month movement
 #| fig-width: 6.5
 #| fig-height: 3.2
 
-cedar_counts |>
+cedar_counts_raw |>
   mutate(month = factor(format(date, "%b"), levels = month.abb)) |>
   group_by(month) |>
   summarise(
@@ -220,7 +224,7 @@ cedar_counts |>
   theme(legend.position = "bottom")
 ```
 
-Bank anglers account for `r fmt_pct(100 * sum(cedar_counts$bank_anglers) / sum(cedar_counts$angler_count))` of all anglers across the season, so angler-type CPUE is not driven by a large seasonal shift in who is on the water.
+Bank anglers account for `r fmt_pct(100 * sum(cedar_counts_raw$bank_anglers) / sum(cedar_counts$angler_count))` of all anglers across the season, so angler-type CPUE is not driven by a large seasonal shift in who is on the water.
 
 ### Incomplete trips in a roving design
 
@@ -247,16 +251,16 @@ validate_incomplete_trips(
 
 The Cedar Lake pipeline follows the same four-step assembly used throughout Part III and Part IV. Three details differ from the Harlan build:
 
-1. **Both periods have equal shift length.** Harlan's morning shift runs 8 hours; Cedar Lake uses 6 hours for each period (6 am–noon, noon–6 pm). The shift-hours vector reflects that equality.
-2. **Counts carry the angler count and its shift length.** Bank and boat counts are summed into `angler_count`, and the shift length rides alongside as a column named to `add_counts()` through `period_length_col`, which scales the count and the party-size basis together.
+1. **A sampled day is a whole counted day, not one shift.** Harlan assigns each sampled day to a single shift, so its counts represent 8 hours (morning) or 6 (afternoon). Cedar samples both of its 6-hour periods on every sampled day, so the four counts taken that day describe all 12 hours the fishery is open. The hours passed to `period_length_col` are the hours the counts represent — 12 here, not the 6 of either individual period. Naming the individual period instead would expand each sampled day by half the coverage it actually received.
+2. **Counts carry the angler count and the hours it stands for.** Bank and boat counts are summed into `angler_count`, and the open hours ride alongside as a column named to `add_counts()` through `period_length_col`, which scales the count and the party-size basis together.
 3. **Two catch columns required.** `estimate_total_harvest()` requires a dedicated harvest column passed via the `harvest` argument. Total catch (harvested + released) is a separate column passed via `catch`.
 
 ```{r}
 #| label: cedar-counts-prep
-# The count stays untransformed; shift_length rides alongside it
+# The count stays untransformed; open_hours rides alongside it
 cedar_counts_effort |>
   filter(date == as.Date("2023-07-08")) |>
-  select(date, day_type, period, count_time, angler_count, shift_length)
+  select(date, day_type, count_time, angler_count, open_hours)
 ```
 
 ```{r}
@@ -281,7 +285,7 @@ cedar_design <- creel_design(
   add_counts(
       cedar_counts_effort,
       count_time_col    = "count_time",
-      period_length_col = "shift_length"
+      period_length_col = "open_hours"
     ) |>
   add_interviews(
     interviews     = cedar_int2,
@@ -309,7 +313,7 @@ The design object keeps the frame, counts, interviews, and catch together so all
 
 ## Effort estimation
 
-Total angler-hours comes from instantaneous count data. `add_counts()` averages the two replicates within each period, converts counts to day-period effort, and expands sampled-day effort to the full survey period within each stratum.
+Total angler-hours comes from instantaneous count data. `add_counts()` averages the four replicates taken across the counted day, converts that mean to a day's effort over the 12 open hours, and expands sampled-day effort to the full survey period within each stratum.
 
 ```{r}
 #| label: cedar-effort

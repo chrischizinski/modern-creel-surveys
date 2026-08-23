@@ -20,7 +20,10 @@ harlan_counts <- derive_angler_count(
   bank       = bank_anglers,
   boat_count = angler_boats,
   party_size = mean_party_size(harlan_interviews, n_anglers, angler_type = angler_type)
-)
+) |>
+  # boat_anglers is not used once boats are expanded by party size, and it varies
+  # between the counts taken on a day, so add_counts() would refuse to average them.
+  select(-boat_anglers)
 ```
 
 ## What the design object is for {#sec-design-purpose}

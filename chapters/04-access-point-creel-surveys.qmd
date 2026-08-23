@@ -24,7 +24,10 @@ harlan_counts <- derive_angler_count(
   bank       = bank_anglers,
   boat_count = angler_boats,
   party_size = mean_party_size(harlan_interviews, n_anglers, angler_type = angler_type)
-)
+) |>
+  # boat_anglers is not used once boats are expanded by party size, and it varies
+  # between the counts taken on a day, so add_counts() would refuse to average them.
+  select(-boat_anglers)
 ```
 
 ## Why access-point surveys work {#sec-access-point}
@@ -201,11 +204,9 @@ shift_hours <- c("1" = 8, "2" = 6)
 daily_effort <- harlan_counts |>
   group_by(date, day_type, period) |>
   summarise(
-    n_counts          = n(),
-    mean_boat_anglers = mean(boat_anglers),
-    mean_bank_anglers = mean(bank_anglers),
-    mean_total        = mean(angler_count),
-    .groups           = "drop"
+    n_counts   = n(),
+    mean_total = mean(angler_count),
+    .groups    = "drop"
   ) |>
   mutate(
     T_hours    = shift_hours[as.character(period)],

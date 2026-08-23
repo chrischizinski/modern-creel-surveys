@@ -51,7 +51,8 @@ counts <- counts |>
     bank       = bank_anglers,
     boat_count = angler_boats,
     party_size = mean_party_size(interviews, n_anglers, angler_type = angler_type)
-  )
+  ) |>
+  select(-boat_anglers)
 
 # ── 3. Build design object ───────────────────────────────────────────────────
 design <- creel_design(schedule, date = "date", strata = "day_type") |>
@@ -157,10 +158,11 @@ harlan_counts <- derive_angler_count(
   bank       = bank_anglers,
   boat_count = angler_boats,
   party_size = boat_party_size
-)
+) |>
+  select(-boat_anglers)
 ```
 
-`boat_count` and `boat_anglers` are separate arguments in that call, and the distinction is not cosmetic. `angler_boats` counts *boats*. Adding it to a total of people would produce a number that looks entirely plausible and is wrong by however many anglers were aboard. Requiring a `party_size` alongside it makes that mistake impossible to make by accident. Where a survey genuinely counted the people aboard, `boat_anglers = boat_anglers` uses that count directly and no expansion happens.
+`boat_count` and `boat_anglers` are separate arguments in that call, and the distinction is not cosmetic. `angler_boats` counts *boats*. Adding it to a total of people would produce a number that looks entirely plausible and is wrong by however many anglers were aboard. Requiring a `party_size` alongside it makes that mistake impossible to make by accident. Where a survey genuinely counted the people aboard, `boat_anglers = boat_anglers` uses that count directly and no expansion happens. This survey does not use that column, so it is dropped rather than carried along: it differs between the two counts taken on a sampled day, and `add_counts()` refuses to average a day's counts while silently keeping the first value of a column that varies within the day.
 
 `add_counts()` then attaches the observations and identifies the column recording the time of each count. The count time matters because the instantaneous-count estimator weights each observation by its position in the sampling shift; a count at 8:00 AM represents a different portion of the day than one at 14:30.
 

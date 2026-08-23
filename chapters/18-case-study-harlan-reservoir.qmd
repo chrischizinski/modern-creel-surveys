@@ -22,6 +22,11 @@ harlan_lengths    <- readRDS(here("data/harlan_lengths.rds"))
 
 # Bank anglers are counted directly; boats are counted and expanded by the
 # mean anglers per boat party measured in the interviews.
+# derive_angler_count() consumes the component columns it reads, so keep a copy
+# of the raw table for the validation check and the displays that report bank
+# and boat counts separately.
+harlan_counts_raw <- harlan_counts
+
 harlan_counts <- derive_angler_count(
   harlan_counts,
   bank       = bank_anglers,
@@ -121,7 +126,7 @@ n_samp      <- sum(harlan_schedule$sampled)
 n_int       <- nrow(harlan_interviews)
 n_comp      <- sum(harlan_interviews$trip_status == "complete")
 n_incomp    <- sum(harlan_interviews$trip_status == "incomplete")
-pct_boat_cnt <- 100 * (sum(harlan_counts$angler_count) - sum(harlan_counts$bank_anglers)) /
+pct_boat_cnt <- 100 * (sum(harlan_counts$angler_count) - sum(harlan_counts_raw$bank_anglers)) /
   sum(harlan_counts$angler_count)
 
 # Walleye compliance stats (used in narrative and callout)
@@ -190,7 +195,7 @@ All four main tables pass the `validate_creel_data()` check:
 
 ```{r}
 #| label: harlan-validate
-validate_creel_data(counts = harlan_counts, interviews = harlan_interviews)
+validate_creel_data(counts = harlan_counts_raw, interviews = harlan_interviews)
 ```
 
 The `r fmt_pct(100 * n_comp / n_int)` complete-trip rate is expected for a day-end access-point design: most parties are departing for the day, so the clerk records elapsed hours and total catch rather than a mid-trip snapshot. The remaining `r fmt_pct(100 * n_incomp / n_int)` incomplete contacts arise when anglers leave mid-day or when only the lead angler of a multi-party group is interviewed at the access point.
@@ -249,7 +254,7 @@ Harlan Reservoir is overwhelmingly boat-fished. Instantaneous counts record `r f
 #| fig-width: 6.5
 #| fig-height: 3.2
 
-harlan_counts |>
+harlan_counts_raw |>
   mutate(month = factor(format(date, "%b"), levels = month.abb)) |>
   group_by(month) |>
   summarise(
