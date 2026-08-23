@@ -206,7 +206,7 @@ The `conn` object holds the file paths, the schema, and the backend type. It doe
 
 ### fetch_interviews()
 
-`fetch_interviews()` reads the interviews CSV, renames columns using the schema, coerces types, and validates the result. Only columns with a non-NULL schema mapping are kept; all other agency columns are dropped.
+`fetch_interviews()` reads the interviews CSV, renames columns using the schema, coerces types, and validates the result. A column is kept when the schema maps it, and also when the export already names it exactly what tidycreel names it — the fetch reports the ones it took that way. Everything else is dropped, and reported too.
 
 ```{r}
 #| label: fetch-interviews
