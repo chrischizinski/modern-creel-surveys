@@ -90,11 +90,11 @@ schema <- creel_schema(
 schema
 ```
 
-The schema prints as a readable mapping: each canonical name appears on the left with its agency counterpart on the right. Any slot left as `NULL` — such as `angler_type_col` here — means that field is not present in the agency data and will not be available for domain analysis (see @sec-constraints for the estimation consequences of missing fields).
+The schema prints as a readable mapping: each canonical name appears on the left with its agency counterpart on the right. A slot left as `NULL` declares nothing about that field, which has one of two consequences. If the export happens to name the column exactly what tidycreel names it, the fetch takes it anyway and reports which columns it took that way — `n_anglers` and `angler_type` below arrive by that route, undeclared. If the export calls it something else, nothing connects the two names and the column is dropped, leaving it unavailable for domain analysis (see @sec-constraints for the estimation consequences of missing fields). Declaring the mapping states the intent either way, and silences the report.
 
 ```{r}
 #| label: tbl-schema-mapping
-#| tbl-cap: "Column name mapping from agency export format to tidycreel canonical names. The canonical name is the column name returned by fetch functions and expected by tidycreel estimation functions. The schema argument is the creel_schema() parameter that declares the mapping. Only columns with a non-NULL mapping are extracted."
+#| tbl-cap: "Column name mapping from agency export format to tidycreel canonical names. The canonical name is the column name returned by fetch functions and expected by tidycreel estimation functions. The schema argument is the creel_schema() parameter that declares the mapping. A column is extracted when the schema maps it, or when the export already uses the canonical name; anything else is dropped."
 #| echo: false
 tibble::tribble(
   ~`Canonical name (fetch output)`, ~`Schema argument`,    ~`Agency export name`, ~`Table`,
