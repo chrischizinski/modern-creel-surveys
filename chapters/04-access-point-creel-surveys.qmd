@@ -512,7 +512,7 @@ cat("Variance from catch-rate uncertainty:",
 
 The variance decomposition reveals which component limits precision. At Harlan, catch-rate uncertainty accounts for roughly 80% of the total variance in the Walleye harvest estimate. This is not unusual for a species with highly overdispersed catch — most parties catch zero Walleye, and the few parties that catch several drive nearly all the variability in $\hat{R}$. In this situation, more completed-trip interviews with Walleye records would improve precision more effectively than additional sampled days. The balance tips the other way for species with more consistent catch rates or when effort varies substantially day-to-day: then between-period effort variance dominates, and more sampled days is the efficient lever. The decomposition is the diagnostic tool for deciding which investment to make.
 
-## Incomplete trips and catch-rate bias
+## Incomplete trips and catch-rate bias {#sec-access-incomplete}
 
 With 35% of Harlan interviews recorded as incomplete, the choice of whether to include them in the ratio-of-means matters — and the direction of bias is not always obvious.
 

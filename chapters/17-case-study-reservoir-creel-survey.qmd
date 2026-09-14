@@ -1,6 +1,4 @@
----
-title: "Case Study: Cedar Lake Roving Creel Survey"
----
+# Case Study: Cedar Lake Roving Creel Survey {#sec-case-cedar}
 
 ```{r}
 #| label: setup

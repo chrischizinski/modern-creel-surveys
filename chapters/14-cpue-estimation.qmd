@@ -147,8 +147,54 @@ showed that truncating very short trips reduces bias. The `estimator = "mortr"`
 option in `estimate_catch_rate()` applies this truncation automatically.
 
 @pollock1994 recommended using completed trips wherever possible because the ROM
-estimator requires no stationarity assumption. This book follows that convention:
-`estimate_catch_rate()` uses the ROM estimator on completed trips by default.
+estimator requires no stationarity assumption, and this book follows that
+convention wherever the design allows it.
+
+### What you get when you do not choose {#sec-cpue-default}
+
+`estimate_catch_rate()` picks an estimator for you when you do not name one, and
+which one it picks depends on `interview_type`, set when the interviews were
+attached:
+
+| `interview_type` | `use_trips` unspecified | estimator |
+|---|---|---|
+| `"access"` | complete trips | ratio-of-means |
+| `"roving"` | all trips | mean-of-ratios |
+
+An access-point design intercepts anglers as they leave, so nearly every record
+is a finished trip and the ROM is what @pollock1994 recommends.
+
+Roving is the harder case. The clerk meets anglers mid-trip, so most records are
+incomplete, and keeping only the complete ones does more than shrink the sample:
+the trips that happen to be finished when a roving clerk arrives are the long
+ones, so the surviving subset is biased toward anglers who fish longest. The MOR
+estimator @hoenig1997 derived treats each mid-trip contact as its own rate
+observation and keeps them all, which is why the roving design gets it.
+
+Naming either `use_trips` or `estimator` suppresses the selection. The `method`
+field reports which estimator ran, so the routing is always checkable. Harlan is
+access-point, so it reports the ROM:
+
+```{r}
+#| label: cpue-default-method
+estimate_catch_rate(harlan_design_ch14)$method
+```
+
+"Leave it at the default" and "use complete trips" are therefore the same
+instruction only on an access-point design. On Cedar Lake (@sec-case-cedar), which is roving, the
+routed harvest rate is 0.81 fish per angler-hour over all 479 contacts;
+restricting it to complete trips gives 0.76 over 143 — figures from the Cedar
+chapter, not from the Harlan call above.
+
+The complete-trip rate is the lower of the two, which is the direction
+@sec-access-incomplete documents at Harlan and for the same reason: anglers who
+limit out early leave before a clerk can record a finished trip, so the short,
+high-catch sessions sit in the incomplete pile and the complete-trip subset
+under-represents them. Length bias and catch-rate bias pull together here rather
+than cancelling.
+
+Same data, different question, and nothing in the call signature tells you which
+one you asked. If you mean complete trips, say so.
 
 A practical diagnostic compares both estimators on the same dataset. If the
 completed and incomplete estimates are close, the stationarity assumption is

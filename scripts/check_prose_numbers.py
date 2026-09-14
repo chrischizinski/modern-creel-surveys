@@ -60,6 +60,16 @@ ALLOWLIST: dict[str, set[str]] = {
         "19,000",  # hypothetical estimate used to explain domain labelling
         "33,000",  # hypothetical effort figure used to explain units
     },
+    "14-cpue-estimation": {
+        # Cedar Lake's routed vs complete-trip harvest rate, quoted here to show
+        # what the roving default costs. They belong to chapter 17, so they
+        # cannot appear in this chapter's output and this check cannot protect
+        # them. If Cedar's numbers move, these two move by hand -- that is the
+        # price of citing another chapter's results, and the reason to do it
+        # sparingly.
+        "0.81",
+        "0.76",
+    },
     "17-case-study-reservoir-creel-survey": {
         "1.51",  # Harlan's CPUE, quoted as a cross-lake comparison
     },
