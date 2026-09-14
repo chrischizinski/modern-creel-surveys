@@ -1,6 +1,4 @@
----
-title: "Roving Creel Surveys"
----
+# Roving Creel Surveys {#sec-ch-roving-creel-surveys}
 
 ```{r}
 #| label: setup

@@ -1,6 +1,4 @@
----
-title: "Uncertainty, Diagnostics, and Precision"
----
+# Uncertainty, Diagnostics, and Precision {#sec-ch-uncertainty-diagnostics-and-precision}
 
 ```{r}
 #| label: setup-ch15

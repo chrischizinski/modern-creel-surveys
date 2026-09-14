@@ -1,6 +1,4 @@
----
-title: "Case Study: Harlan Reservoir Access-Point Creel Survey"
----
+# Case Study: Harlan Reservoir Access-Point Creel Survey {#sec-ch-case-study-harlan-reservoir}
 
 ```{r}
 #| label: setup-ch18

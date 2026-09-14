@@ -1,6 +1,4 @@
----
-title: "CPUE Estimation"
----
+# CPUE Estimation {#sec-ch-cpue-estimation}
 
 ```{r}
 #| label: setup-ch14

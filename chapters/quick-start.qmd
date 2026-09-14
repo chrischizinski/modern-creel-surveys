@@ -1,6 +1,4 @@
----
-title: "A First Creel Analysis"
----
+# A First Creel Analysis {#sec-ch-quick-start}
 
 ```{r}
 #| label: setup

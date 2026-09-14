@@ -1,6 +1,4 @@
----
-title: "Trend Detection and Multi-Year Comparisons"
----
+# Trend Detection and Multi-Year Comparisons {#sec-ch-trend-detection-and-multi-year-comparisons}
 
 ```{r}
 #| label: setup-trend

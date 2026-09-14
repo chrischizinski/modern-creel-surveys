@@ -1,6 +1,4 @@
----
-title: "Design-Based Logic of Creel Estimation"
----
+# Design-Based Logic of Creel Estimation {#sec-ch-design-based-logic-of-creel-estimation}
 
 ```{r}
 #| label: setup

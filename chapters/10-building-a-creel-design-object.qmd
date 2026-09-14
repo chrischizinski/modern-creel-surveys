@@ -1,6 +1,4 @@
----
-title: "Building a Creel Design Object"
----
+# Building a Creel Design Object {#sec-ch-building-a-creel-design-object}
 
 ```{r}
 #| label: setup-ch10

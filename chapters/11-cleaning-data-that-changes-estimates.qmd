@@ -1,6 +1,4 @@
----
-title: "Cleaning Data That Changes Estimates"
----
+# Cleaning Data That Changes Estimates {#sec-ch-cleaning-data-that-changes-estimates}
 
 ```{r}
 #| label: setup-ch11

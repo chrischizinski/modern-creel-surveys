@@ -1,6 +1,4 @@
----
-title: "Reporting and Interpretation"
----
+# Reporting and Interpretation {#sec-ch-reporting-and-interpretation}
 
 ```{r}
 #| label: setup-ch16

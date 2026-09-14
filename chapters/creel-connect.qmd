@@ -1,6 +1,4 @@
----
-title: "Connecting to Your Data with tidycreel.connect"
----
+# Connecting to Your Data with tidycreel.connect {#sec-ch-creel-connect}
 
 ```{r}
 #| label: setup

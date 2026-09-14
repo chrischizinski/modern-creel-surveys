@@ -1,6 +1,4 @@
----
-title: "Access-Point Creel Surveys"
----
+# Access-Point Creel Surveys {#sec-ch-access-point-creel-surveys}
 
 ```{r}
 #| label: setup

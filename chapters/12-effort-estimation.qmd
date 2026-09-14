@@ -1,6 +1,4 @@
----
-title: "Effort Estimation"
----
+# Effort Estimation {#sec-ch-effort-estimation}
 
 ```{r}
 #| label: setup-ch12

@@ -1,6 +1,4 @@
----
-title: "Spatial Sections"
----
+# Spatial Sections {#sec-ch-spatial-sections}
 
 ```{r}
 #| label: setup-sections

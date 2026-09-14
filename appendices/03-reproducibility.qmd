@@ -1,6 +1,4 @@
----
-title: "Reproducibility and Session Info"
----
+# Reproducibility and Session Info {#sec-ch-reproducibility}
 
 ## Purpose
 

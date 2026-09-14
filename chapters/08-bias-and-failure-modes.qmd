@@ -1,6 +1,4 @@
----
-title: "Bias and Failure Modes"
----
+# Bias and Failure Modes {#sec-ch-bias-and-failure-modes}
 
 ```{r}
 #| label: setup-ch08

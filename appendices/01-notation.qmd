@@ -1,6 +1,4 @@
----
-title: "Notation and Symbols"
----
+# Notation and Symbols {#sec-ch-notation}
 
 ## Purpose
 

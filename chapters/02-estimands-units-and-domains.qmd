@@ -1,6 +1,4 @@
----
-title: "Estimands, Units, and Domains"
----
+# Estimands, Units, and Domains {#sec-ch-estimands-units-and-domains}
 
 ```{r}
 #| label: setup

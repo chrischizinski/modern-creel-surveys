@@ -1,6 +1,4 @@
----
-title: "Visualization Reference for Creel Survey Estimates"
----
+# Visualization Reference for Creel Survey Estimates {#sec-ch-visualization-guide}
 
 ```{r}
 #| label: setup-viz

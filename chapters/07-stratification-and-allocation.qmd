@@ -1,6 +1,4 @@
----
-title: "Stratification and Allocation"
----
+# Stratification and Allocation {#sec-ch-stratification-and-allocation}
 
 ```{r}
 #| label: setup

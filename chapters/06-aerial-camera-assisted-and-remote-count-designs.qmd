@@ -1,6 +1,4 @@
----
-title: "Aerial, Camera-Assisted, and Remote Count Designs"
----
+# Aerial, Camera-Assisted, and Remote Count Designs {#sec-ch-aerial-camera-assisted-and-remote-count-designs}
 
 ```{r}
 #| label: ch06-setup

@@ -1,6 +1,4 @@
----
-title: "Case Study: Harlan Reservoir Walleye Monitoring, 2018–2023"
----
+# Case Study: Harlan Reservoir Walleye Monitoring, 2018–2023 {#sec-ch-case-study-multi-year-monitoring}
 
 ```{r}
 #| label: setup-ch19

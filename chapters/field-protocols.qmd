@@ -1,6 +1,4 @@
----
-title: "Field Protocols and Interview Instrument Design"
----
+# Field Protocols and Interview Instrument Design {#sec-ch-field-protocols}
 
 ```{r}
 #| label: setup

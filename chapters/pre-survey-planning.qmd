@@ -1,6 +1,4 @@
----
-title: "Pre-Survey Planning: Sample Size and Schedule Design"
----
+# Pre-Survey Planning: Sample Size and Schedule Design {#sec-ch-pre-survey-planning}
 
 ```{r}
 #| label: setup-ps

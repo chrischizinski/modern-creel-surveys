@@ -1,6 +1,4 @@
----
-title: "Biological Data from Interviews: Length Distributions and Size Compliance"
----
+# Biological Data from Interviews: Length Distributions and Size Compliance {#sec-ch-biological-data-from-interviews}
 
 ```{r}
 #| label: setup-bio

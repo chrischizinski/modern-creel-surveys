@@ -1,6 +1,4 @@
----
-title: "Catch, Harvest, and Release Estimation"
----
+# Catch, Harvest, and Release Estimation {#sec-ch-catch-harvest-and-release-estimation}
 
 ```{r}
 #| label: setup-ch13

@@ -1,6 +1,4 @@
----
-title: "Why Creel Surveys Matter"
----
+# Why Creel Surveys Matter {#sec-ch-why-creel-surveys-matter}
 
 ```{r}
 #| label: setup

@@ -1,6 +1,4 @@
----
-title: "Creel Data as Linked Tables"
----
+# Creel Data as Linked Tables {#sec-ch-creel-data-as-linked-tables}
 
 ```{r}
 #| label: setup-ch09
