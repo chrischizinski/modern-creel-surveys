@@ -490,7 +490,7 @@ cv_tbl |>
   theme(legend.position = "bottom")
 ```
 
-CPUE has the lowest CV at `r fmt_pct(cv_cpue)` because the mean-of-ratios estimator uses all `r cpue_all$estimates$n` contacts. Effort CV is `r fmt_pct(cv_eff)`, driven by `r n_samp` sampled days. HPUE CV is `r fmt_pct(cv_hpue)`, based on the `r hpue_all$estimates$n` complete trips. Total harvest CV is `r fmt_pct(cv_harv)` (all `r harv_tot$estimates$n` contacts). Total catch CV is `r fmt_pct(cv_catch)`, highest because only the `r n_comp` completed trips contribute.
+CPUE has the lowest CV at `r fmt_pct(cv_cpue)` because the mean-of-ratios estimator uses all `r cpue_all$estimates$n` contacts. Effort CV is `r fmt_pct(cv_eff)`, driven by `r n_samp` sampled days. HPUE CV is `r fmt_pct(cv_hpue)`, based on the same `r hpue_all$estimates$n` contacts: on a roving design the harvest rate is routed to mean-of-ratios alongside the catch rate, not restricted to complete trips. Total harvest CV is `r fmt_pct(cv_harv)` (all `r harv_tot$estimates$n` contacts). Total catch CV is `r fmt_pct(cv_catch)`, highest because only the `r n_comp` completed trips contribute.
 
 Quantities above 20% CV deserve a caveated interpretation. For Cedar Lake 2023, all season-level totals and rates fall within the management-grade range, but the boat-angler CPUE sub-group should still be reported with a strong uncertainty note.
 
@@ -545,7 +545,7 @@ Cedar Lake anglers logged an estimated `r fmt_comma(eff_tot$estimates$estimate)`
 :::
 
 ::: {.callout-note title="Example: technical report footnote"}
-Effort uses ratio-of-means with day-type stratification from instantaneous count data. CPUE uses the mean-of-ratios estimator with all `r cpue_all$estimates$n` contacts (8 trips under 0.5 hours excluded). HPUE uses complete trips only (`r hpue_all$estimates$n` of `r n_int` contacts). Total catch uses only the `r n_comp` completed trips (`r fmt_pct(100 * n_comp / n_int)` of contacts); total harvest and release use the full interview set. Confidence intervals are 95% normal-approximation intervals from the design-based variance estimator. Domain: Cedar Lake shoreline, daylight hours, April 1–October 31, 2023.
+Effort uses ratio-of-means with day-type stratification from instantaneous count data. CPUE uses the mean-of-ratios estimator with all `r cpue_all$estimates$n` contacts (8 trips under 0.5 hours excluded). HPUE uses mean-of-ratios over the same `r hpue_all$estimates$n` of `r n_int` contacts as CPUE, which is the roving default; it is not restricted to complete trips. Total catch uses only the `r n_comp` completed trips (`r fmt_pct(100 * n_comp / n_int)` of contacts); total harvest and release use the full interview set. Confidence intervals are 95% normal-approximation intervals from the design-based variance estimator. Domain: Cedar Lake shoreline, daylight hours, April 1–October 31, 2023.
 :::
 
 ### Species-level CPUE
