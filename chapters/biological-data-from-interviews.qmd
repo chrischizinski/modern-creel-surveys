@@ -102,6 +102,14 @@ design_bio <- creel_design(harlan_schedule, date = "date", strata = "day_type") 
     angler_type    = "angler_type",
     interview_type = "access"
   ) |>
+  add_catch(
+    data          = harlan_catch,
+    catch_uid     = "interview_id",
+    interview_uid = "interview_id",
+    species       = "species",
+    count         = "n_fish",
+    catch_type    = "catch_type"
+  ) |>
   add_lengths(
     data           = harlan_lengths,
     length_uid     = "interview_id",
@@ -115,7 +123,9 @@ design_bio <- creel_design(harlan_schedule, date = "date", strata = "day_type") 
 design_bio
 ```
 
-Printing `design_bio` confirms that the `$lengths` slot is now populated. The design object carries the length column mapping internally — `species`, `length`, `length_type`, and `count` are registered at attachment time so that `summarize_length_freq()` and `est_length_distribution()` can locate the right columns without requiring the analyst to re-specify them.
+Printing `design_bio` confirms that the `$catch` and `$lengths` slots are now populated. The design object carries the length column mapping internally — `species`, `length`, `length_type`, and `count` are registered at attachment time so that `summarize_length_freq()` and `est_length_distribution()` can locate the right columns without requiring the analyst to re-specify them.
+
+`add_catch()` attaches the species-level catch records, and it is not optional here. Lengths are measured on a *subsample* of the harvest, so a bin total means nothing until it is scaled to a reported catch total — and for a per-species distribution that total has to be **that species'** harvest, not the all-species figure. The interview-level `harvested` column supplied to `add_interviews()` above pools every species together, so on its own it cannot scale a Walleye distribution. `est_length_distribution(by = species)` refuses rather than silently scaling Walleye lengths by a harvest that includes White Bass and Channel Catfish.
 
 `add_lengths()` validates that every interview ID in `harlan_lengths` exists in `design_bio$interviews` — interviews with no length records are valid (not every angler's catch is measured), but lengths cannot appear for interviews that are absent from the design. The function registers the column mapping internally so subsequent calls to `summarize_length_freq()` and `est_length_distribution()` know which column holds lengths and which identifies the interview link.
 
@@ -177,6 +187,8 @@ lf_weighted <- est_length_distribution(
 
 lf_weighted |> filter(species == "Walleye")
 ```
+
+The warning is expected and worth reading rather than suppressing. It reports the scaling factor applied — here the weighted measured fish are rescaled up to the reported harvest — and states plainly which columns it affects: `estimate`, `se` and the confidence bounds describe the **reported** catch, estimated from the measured subsample, while the percentage columns are shares and so are untouched. A length distribution that skipped this step would describe only the fish that happened to be measured.
 
 Each row now carries a `se`, `ci_lower`, and `ci_upper` alongside the point estimate. The standard error propagates interview-level variation through the stratified design — bins that appeared inconsistently across sampled interviews have wider intervals, reflecting genuine uncertainty about how common that size class was in the harvested population.
 
@@ -453,11 +465,21 @@ The workflow for length data is: `add_lengths()` → `est_length_distribution()`
 data(example_calendar)
 data(example_interviews)
 data(example_ages)
+data(example_catch)
 
 design_age <- creel_design(example_calendar, date = date, strata = day_type) |>
   add_interviews(example_interviews,
     catch = catch_total, effort = hours_fished, harvest = catch_kept,
     trip_status = trip_status
+  ) |>
+  # Species-level catch, for the same reason as `design_bio` above: an age
+  # distribution grouped by species must be scaled to that species' harvest.
+  add_catch(example_catch,
+    catch_uid     = interview_id,
+    interview_uid = interview_id,
+    species       = species,
+    count         = count,
+    catch_type    = catch_type
   ) |>
   add_ages(example_ages,
     age_uid      = interview_id,

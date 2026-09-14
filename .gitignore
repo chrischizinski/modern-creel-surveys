@@ -30,8 +30,11 @@ chapters/*.expanded.cleaned*
 chapters/*.html
 chapters/*_files/
 
-# Dev tooling — not needed for book on GitHub
-scripts/
+# Dev tooling — not needed for book on GitHub.
+# `scripts/*` rather than `scripts/`: git does not descend into an excluded
+# directory, so a negation under `scripts/` would never be reached.
+scripts/*
+!scripts/check_prose_numbers.py
 tests/
 justfile
 .Rhistory

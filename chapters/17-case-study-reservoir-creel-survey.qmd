@@ -347,7 +347,7 @@ eff_strat$estimates |>
 
 Both strata have overlapping confidence intervals, so this is a reporting display rather than a hypothesis test.
 
-The overall effort CV is `r fmt_pct(100 * eff_tot$estimates$se / eff_tot$estimates$estimate)`, within the 10–20% management-grade range for a stratified open-water creel survey. Between-day variance dominates.
+The overall effort CV is `r fmt_pct(100 * eff_tot$estimates$se / eff_tot$estimates$estimate)`, comfortably below the 20% threshold this book uses for management-grade estimates. Between-day variance dominates.
 
 ## Catch, harvest, and release
 
