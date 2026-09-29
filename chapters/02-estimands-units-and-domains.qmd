@@ -180,7 +180,7 @@ In plain language, counts answer "how long was the fishery active?" and intervie
 
 ### Unit decisions in practice
 
-When setting up a new creel program, the unit decisions above should appear explicitly in the field data entry form and the data dictionary, not just in the analysis protocol. Common practices that create unit ambiguity in legacy datasets:
+When setting up a new creel program, the unit decisions above should appear explicitly in the data-entry form and the data dictionary, not just in the analysis protocol. Common practices that create unit ambiguity in legacy datasets:
 
 - **"Trip hours" without specifying party or individual.** If the form says "hours fished" and three crew members collected data, it is often unclear whether hours were recorded for the whole party or per person. Resolving this ambiguity retrospectively requires re-contacting field clerks or using internal consistency checks (e.g., does `party_size × hours` match the total hours recorded?).
 

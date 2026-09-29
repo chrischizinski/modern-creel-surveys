@@ -51,7 +51,7 @@ Creel surveys occupy a challenging space between field logistics, survey design,
 
 The emphasis is on design-based reasoning, clear estimands, reproducible data structures, transparent uncertainty estimation, and interpretation that stays within the domain actually covered by the survey design. Throughout the book, estimation is framed around a simple question: *what quantity are we trying to estimate, for what population, over what domain, and under what sampling design?*
 
-The book is intended for analysts, managers, students, and reviewers who need to understand how creel estimates are produced and how they should be interpreted. It is especially aimed at readers who need to connect field data to estimates of angler effort, catch, harvest, trip characteristics, catch rates, harvest rates, and related quantities.
+The book is intended for analysts, managers, students, and reviewers who need to understand how creel estimates are produced and how they should be interpreted. It is especially aimed at readers who need to connect the data clerks collect to estimates of angler effort, catch, harvest, trip characteristics, catch rates, harvest rates, and related quantities.
 
 Because this is a methods-first book, examples emphasize workflow, assumptions, diagnostics, and interpretation. Code is included where it helps clarify an analysis, but the goal is not simply to show how to run a function. The goal is to make analytical decisions visible enough that they can be checked, reproduced, revised, and explained.
 

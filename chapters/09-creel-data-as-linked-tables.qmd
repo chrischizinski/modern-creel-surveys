@@ -139,7 +139,7 @@ harlan_interviews
 ```
 
 Two identifier columns coexist in this table and serve different purposes.
-`party_id` is a UUID assigned in the field data system — it is stable across
+`party_id` is a UUID assigned by the data-entry system — it is stable across
 potential data system reloads or imports. `interview_id` is a sequential integer
 assigned at analysis time and is the key used to link this table to the catch
 table. In practice `interview_id` is simpler to work with; `party_id` is the audit
