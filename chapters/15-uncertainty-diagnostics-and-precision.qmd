@@ -377,7 +377,7 @@ bind_rows(
   select(cv_target, weekday, weekend, total)
 ```
 
-The Harlan 2022 design sampled 83 weekdays and 35 weekends, or 118 days total.
+The Harlan 2022 design sampled 82 weekdays and 34 weekends, or 116 days total.
 Hitting a 15% CV requires only 32 weekday days and 14 weekend days under
 Neyman allocation.
 
@@ -427,14 +427,14 @@ to detect.
 # At current sample size, what power to detect a 30% change?
 # Using CV = 0.30 to represent a more variable (e.g., multi-year) context
 creel_power(
-  n             = 118,
+  n             = 116,
   cv_historical = 0.30,
   delta_pct     = 0.30,
   alpha         = 0.05
 )
 ```
 
-With a historical CV of 30% and 118 sampling days per year, power to detect
+With a historical CV of 30% and 116 sampling days per year, power to detect
 a 30% change exceeds 90%.
 
 ```{r}

@@ -398,7 +398,7 @@ The four tables in the Harlan dataset represent four distinct levels of resoluti
 
 ```
 harlan_schedule     one row per calendar day (211 rows)
-  └── harlan_counts     one row per instantaneous count (236 rows)
+  └── harlan_counts     one row per instantaneous count (232 rows)
   └── harlan_interviews one row per angler party per sampled day (600 rows)
         └── harlan_catch    one row per species per party per catch type (987 rows)
 ```

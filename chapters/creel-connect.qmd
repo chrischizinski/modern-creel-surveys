@@ -259,7 +259,7 @@ nrow(harvest_lengths)  # 0 — no length data for Harlan 2022
 ```{r}
 #| label: fig-fetch-summary
 #| fig-cap: "Row counts per table fetched from the Harlan Reservoir 2022 agency export via tidycreel.connect. The 987 catch records link to 600 interviews via interview_uid. Empty length tables reflect that biological measurements were not collected in this survey."
-#| fig-alt: "Horizontal bar chart showing fetched row counts: interviews = 600, counts = 236, catch = 987, harvest lengths = 0, release lengths = 0."
+#| fig-alt: "Horizontal bar chart showing fetched row counts: interviews = 600, counts = 232, catch = 987, harvest lengths = 0, release lengths = 0."
 #| echo: true
 
 tibble(

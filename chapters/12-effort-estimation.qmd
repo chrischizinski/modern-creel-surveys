@@ -234,8 +234,8 @@ For Harlan, the sampling calendar covers 211 days (April 2 to October 29, 2022),
 divided into weekday ($N_{\text{weekday}} = 150$) and weekend
 ($N_{\text{weekend}} = 61$) strata. Of these, 82 weekday days and
 34 weekend days were sampled. Each sampled day is assigned to one shift — either
-morning (period 1, 8 hours) or afternoon (period 2, 6 hours) — giving 118
-period-day records in the count data (83 weekday + 35 weekend).
+morning (period 1, 8 hours) or afternoon (period 2, 6 hours) — giving 116
+period-day records in the count data (82 weekday + 34 weekend).
 
 ```{r}
 #| label: stratum-sizes
@@ -435,7 +435,7 @@ eff_sampled <- estimate_effort(harlan_design_effort, target = "sampled_days")
 eff_sampled
 ```
 
-The 118 sampled period-days produced `r formatC(round(eff_sampled$estimates$estimate), big.mark=",")` observed angler-hours, with a standard error of
+The 116 sampled period-days produced `r formatC(round(eff_sampled$estimates$estimate), big.mark=",")` observed angler-hours, with a standard error of
 `r formatC(round(eff_sampled$estimates$se), big.mark=",")` angler-hours (CV =
 `r round(eff_sampled$estimates$se / eff_sampled$estimates$estimate * 100, 1)`%).
 This is not a seasonal estimate — it covers only the periods that were actually

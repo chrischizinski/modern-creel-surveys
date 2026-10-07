@@ -433,13 +433,19 @@ table passed to `add_counts()`. This is the simplest camera case: the sensor
 gives a daily traffic total, and the analyst reconstructs angler-hours from
 counts and mean trip length.
 
+The calendar's day types have to match the ones on the count records:
+`add_counts()` refuses a count whose stratum disagrees with the calendar for
+its date. The example camera data treat Friday as part of the weekend, as some
+agencies do, so the calendar does too.
+
 ```{r}
 #| label: camera-design-build
 #| echo: true
 camera_calendar <- tibble(
   date     = seq(min(example_camera_counts$date),
                  max(example_camera_counts$date), by = "day"),
-  day_type = if_else(wday(date) %in% c(1L, 7L), "weekend", "weekday")
+  # Friday, Saturday and Sunday are weekend days in this dataset
+  day_type = if_else(wday(date) %in% c(1L, 6L, 7L), "weekend", "weekday")
 )
 
 design_camera <- creel_design(
