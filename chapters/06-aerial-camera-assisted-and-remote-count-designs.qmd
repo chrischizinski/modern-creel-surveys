@@ -228,9 +228,10 @@ of use.
 ### Estimating effort {#sec-aerial-estimate}
 
 `estimate_effort_aerial_glmm()` fits the negative-binomial GLMM, integrates
-the fitted curve across `h_open` hours, and expands to the full season using
-the stratified frame. The result is a total angler-hours estimate for the
-survey period with a delta-method standard error.
+the fitted curve across `h_open` hours, and sums the daily totals. The printed
+result reports its effort target: by default, `sampled_days`, the total over
+the days flown. The result is a total angler-hours estimate with a
+delta-method standard error.
 
 ```{r}
 #| label: aerial-effort-estimate
@@ -254,32 +255,35 @@ prompt installation before the call proceeds.
 
 ### Naive estimate vs GLMM {#sec-aerial-naive}
 
-To see what the time-of-day correction buys, it helps to compare the GLMM
-result against the naive single-flight expansion. `example_aerial_counts`
-contains one count per day — a midmorning flight — that can be treated as a
-standard instantaneous-count design using `estimate_effort()`:
+To see what the time-of-day correction buys, compare the GLMM with the naive
+alternative: fly once per day, multiply that one count by `h_open`. For a fair
+comparison the naive design uses the same days, the same flights' data (only
+the flight nearest 10:00 each day), and the same visibility and angler-ratio
+corrections. Only the time-of-day model differs.
 
 ```{r}
 #| label: aerial-naive-compare
 #| echo: true
-#| warning: false
-# Standard instantaneous design with one flight per day
-# h_open goes into creel_design(), not estimate_effort()
+# One midmorning flight per day, taken from the same flights the GLMM uses
+midmorning_counts <- example_aerial_glmm_counts |>
+  group_by(date) |>
+  slice_min(abs(time_of_flight - 10), n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  select(date, day_type, n_anglers)
+
+# Identical aerial design; each day's count is expanded by h_open
 design_naive <- creel_design(
-  calendar = aerial_calendar,
-  date     = "date",
-  strata   = "day_type",
-  h_open   = 14
+  calendar    = aerial_calendar,
+  date        = "date",
+  strata      = "day_type",
+  design_type = "aerial",
+  h_open      = 14,
+  visibility_correction = 0.2262,
+  visibility_se         = 0.0442,
+  angler_ratio          = 0.402,
+  angler_ratio_se       = 0.0360
 ) |>
-  add_counts(example_aerial_counts) |>
-  add_interviews(
-    interviews    = example_aerial_interviews,
-    catch         = "walleye_catch",
-    harvest       = "walleye_kept",
-    effort        = "hours_fished",
-    trip_status   = "trip_status",
-    trip_duration = "hours_fished"
-  )
+  add_counts(midmorning_counts, count_col = n_anglers)
 
 effort_naive <- estimate_effort(design_naive)
 effort_naive$estimates
@@ -288,8 +292,8 @@ effort_naive$estimates
 ```{r}
 #| label: fig-aerial-compare
 #| echo: true
-#| fig-cap: "Aerial effort estimates from a naive single-flight expansion versus the GLMM time-of-day model. The naive estimate treats a midmorning count as representative of the full day; the GLMM integrates a fitted density curve. The difference illustrates the timing bias that motivates multi-flight designs."
-#| fig-alt: "Point-and-range plot with two rows, one per method. Both show total angler-hours with 95% confidence intervals. The naive estimate is higher than the GLMM estimate, indicating upward bias from the midmorning flight timing."
+#| fig-cap: "Aerial effort over the sampled days from a naive single-flight expansion versus the GLMM time-of-day model, both with the same corrections. The naive estimate treats a midmorning count as representative of the full day; the GLMM integrates a fitted density curve. The difference is the timing bias that motivates multi-flight designs."
+#| fig-alt: "Point-and-range plot with two rows, one per method, showing total angler-hours over the sampled days with 95% confidence intervals for the naive single-flight expansion and the GLMM."
 bind_rows(
   effort_naive$estimates  |> mutate(method = "Naive (single flight × h_open)"),
   effort_aerial$estimates |> mutate(method = "GLMM (multi-flight, time-of-day model)")
@@ -297,18 +301,26 @@ bind_rows(
   ggplot(aes(estimate, method)) +
   geom_pointrange(aes(xmin = ci_lower, xmax = ci_upper), size = 0.8) +
   labs(
-    x = "Total angler-hours (season estimate)",
+    x = "Total angler-hours (sampled days)",
     y = NULL
   ) +
   theme_bw(base_size = 12)
 ```
 
-The midmorning flight catches anglers near the daily peak, so the naive
-expansion inflates the estimate relative to the GLMM, which integrates the
-full day including early-morning and late-afternoon periods of lower activity.
-The confidence intervals also differ: the naive estimate has wider uncertainty
-because it does not leverage the within-day temporal structure to constrain
-the daily total.
+The naive estimate is
+`r format(round(effort_naive$estimates$estimate), big.mark = ",")` angler-hours
+(95% CI: `r format(round(effort_naive$estimates$ci_lower), big.mark = ",")`–`r format(round(effort_naive$estimates$ci_upper), big.mark = ",")`),
+`r if (effort_naive$estimates$estimate > effort_aerial$estimates$estimate) "higher" else "lower"`
+than the GLMM's `r format(round(effort_aerial$estimates$estimate), big.mark = ",")`. A single count
+multiplied by `h_open` assumes the whole day looks like that moment. Where the
+flight falls on the curve in @fig-aerial-tod decides the direction of the error:
+a flight near the peak overstates the day, an early or late flight understates
+it. The GLMM integrates the fitted curve over the whole day instead. The naive
+interval is
+`r if ((effort_naive$estimates$ci_upper - effort_naive$estimates$ci_lower) > (effort_aerial$estimates$ci_upper - effort_aerial$estimates$ci_lower)) "wider" else "narrower"`
+than the GLMM's here. A narrower interval is not a better estimate: it reflects
+only day-to-day variation in one flight time, and says nothing about the
+timing bias.
 
 ### Catch rate from an aerial design {#sec-aerial-cpue}
 

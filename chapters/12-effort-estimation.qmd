@@ -719,13 +719,14 @@ follows directly from the standard stratified sampling formula [@mccormick2013].
 
 **Not in scope for this chapter:**
 
-- Bus-route effort estimation — handled by `estimate_effort_br()`, covered in
-  @sec-access-point but not demonstrated here
-- Aerial and camera-trap designs — handled by `estimate_effort_aerial()` and
-  `estimate_effort_camera()`, introduced in @sec-remote-why
-- Sample size planning — requires external calculation using variance estimates
-  from this chapter as inputs; `tidycreel` does not currently provide an
-  `optimal_n()` function (see `TIDYCREEL-WISHLIST.md`)
+- Bus-route effort estimation — also `estimate_effort()`, which dispatches on a
+  bus-route design; covered in @sec-access-point but not demonstrated here
+- Aerial and camera-trap designs — aerial effort is also `estimate_effort()`
+  on an aerial design, and camera effort uses `est_effort_camera()`; both are
+  introduced in @sec-remote-why
+- Sample size planning — `creel_n_effort()` and `optimal_n()` take the
+  variance estimates from this chapter as inputs; see
+  @sec-ch-pre-survey-planning
 
 ## Takeaway {#sec-effort-takeaway}
 
