@@ -52,9 +52,8 @@ harv_con <- ba_contrast(before$harvest_est, before$harvest_se,
 ```
 
 Chapter 18 traced a single season of Harlan Reservoir access-point creel data
-from raw field records to final estimates. The 2022 survey yielded roughly
-`r round(harlan_annual$effort_est[harlan_annual$year == 2022])` estimated
-angler-hours of fishing effort, a multi-species catch dominated by White Bass and
+from raw field records to final estimates. The 2022 survey yielded a season
+total of angler effort, a multi-species catch dominated by White Bass and
 Walleye, and a Walleye size-limit compliance rate of 74.1% at the 381 mm
 minimum. Those numbers describe one season well. What they cannot reveal is
 whether 2022 was a typical year or an outlier, whether Walleye catch rates have
@@ -66,6 +65,11 @@ series spanning 2018 through 2023. Rather than rebuilding individual survey
 pipelines for each year, this case study works directly from `harlan_annual_estimates.rds`,
 which contains annual point estimates and standard errors for three key metrics:
 total angling effort, Walleye catch rate (CPUE), and estimated Walleye harvest.
+The series is **simulated** with `simulate_creel_data()` (the same series the
+trend detection chapter builds), and it was generated separately from the
+Chapter 18 data. Its values illustrate the analysis; they are not Harlan's
+monitoring record, and its 2022 values are not a re-estimate of the Chapter 18
+season, so compare patterns across years here, not levels against Chapter 18.
 The emphasis throughout is on answering a specific management question — did the
 2021 size-limit change produce the intended outcome? — rather than demonstrating
 estimation methods, which are covered in Chapters 12–14 and in the trend
@@ -248,9 +252,11 @@ population without immediately replacing it. By 2022, CPUE had recovered to
 `r round(harlan_annual$cpue_est[harlan_annual$year == 2022], 3)` fish/hr, and
 by 2023 to
 `r round(harlan_annual$cpue_est[harlan_annual$year == 2023], 3)` fish/hr.
-The 2022 estimate from the access-point case study (@sec-harlan-takeaway) — produced
-by the full single-year pipeline — falls directly on this trajectory, confirming that the 2022 access-point survey
-results are consistent with the broader monitoring trend.
+Because this series is simulated separately from the Chapter 18 data
+(@sec-harlan-takeaway), the single-season estimates there cannot confirm or
+contradict this trajectory. With real data, placing a fully analysed season
+on the multi-year series is a useful check, provided both use the same design,
+domain, and effort target.
 
 ## Walleye harvest trends {#sec-monitoring-harvest}
 
